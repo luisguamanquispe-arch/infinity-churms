@@ -12,7 +12,7 @@ export function generatePreliquidacionPdf(params: {
   reasonLabel: string;
 }) {
   const doc = new jsPDF();
-  const { cancellation: c, customer, equipment, charges } = params;
+  const { cancellation: c, customer, charges } = params;
   const pageWidth = doc.internal.pageSize.getWidth();
 
   doc.setFontSize(16);
@@ -28,13 +28,24 @@ export function generatePreliquidacionPdf(params: {
   doc.text(`N° Documento: ${params.docNumber}`, 14, 34);
   doc.text(`Fecha emisión: ${new Date().toLocaleDateString("es-VE")}`, 14, 40);
   doc.text(`Fecha solicitud: ${c.requestDate.toLocaleDateString("es-VE")}`, 120, 34);
-  doc.text(`Estado: Pre-liquidación estimada`, 120, 40);
+  doc.text(`Estado: Informativo — valores a pagar`, 120, 40);
+
+  doc.setFontSize(8);
+  doc.setTextColor(80, 80, 80);
+  const aviso = doc.splitTextToSize(
+    "AVISO: Este documento es únicamente informativo sobre los montos a cancelar. " +
+      "En esta etapa el cliente aún no entrega equipos. La recepción de equipos y el acta correspondiente " +
+      "se tramitarán después del pago de esta pre-liquidación.",
+    180
+  );
+  doc.text(aviso, 14, 46);
+  doc.setTextColor(0, 0, 0);
 
   doc.setFontSize(11);
-  doc.text("Datos del cliente", 14, 50);
+  doc.text("Datos del cliente", 14, 58);
 
   autoTable(doc, {
-    startY: 54,
+    startY: 62,
     theme: "plain",
     styles: { fontSize: 9 },
     body: [
@@ -55,8 +66,13 @@ export function generatePreliquidacionPdf(params: {
   let y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
 
   doc.setFontSize(11);
-  doc.text("Valores del servicio a cancelar", 14, y);
-  y += 6;
+  doc.text("Detalle de valores a pagar", 14, y);
+  y += 4;
+  doc.setFontSize(8);
+  doc.setTextColor(100, 100, 100);
+  doc.text("Los equipos prestados no se incluyen en este cálculo.", 14, y + 4);
+  doc.setTextColor(0, 0, 0);
+  y += 10;
 
   autoTable(doc, {
     startY: y,
@@ -82,22 +98,6 @@ export function generatePreliquidacionPdf(params: {
 
   y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
 
-  if (equipment.length > 0) {
-    doc.setFontSize(11);
-    doc.text("Equipos prestados (referencia para fotografía y entrega)", 14, y);
-    y += 4;
-
-    autoTable(doc, {
-      startY: y,
-      head: [["Tipo", "Marca", "Modelo", "Serie"]],
-      body: equipment.map((e) => [e.type, e.brand ?? "—", e.model ?? "—", e.serial ?? "—"]),
-      styles: { fontSize: 8 },
-      headStyles: { fillColor: [0, 169, 181] },
-    });
-
-    y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
-  }
-
   if (y > 220) {
     doc.addPage();
     y = 20;
@@ -122,8 +122,9 @@ export function generatePreliquidacionPdf(params: {
   doc.setFontSize(8);
   doc.setTextColor(100, 100, 100);
   const footer = doc.splitTextToSize(
-    "Este documento es una pre-liquidación estimada. Los montos pueden ajustarse si se registran cargos adicionales antes del pago. " +
-      "Para continuar el proceso, el cliente debe cumplir las políticas indicadas y acercarse a oficina con los equipos y comprobante de pago.",
+    "Pre-liquidación informativa de montos a cancelar. No constituye acta de entrega de equipos. " +
+      "Los valores pueden ajustarse si se registran cargos adicionales antes del pago. " +
+      "Una vez cancelado el total indicado, se coordinará la entrega de equipos en oficina según las políticas vigentes.",
     180
   );
   doc.text(footer, 14, policyY);
@@ -132,7 +133,7 @@ export function generatePreliquidacionPdf(params: {
   doc.setTextColor(0, 0, 0);
   const signY = policyY + footer.length * 4 + 15;
   doc.line(14, signY, 90, signY);
-  doc.text("Firma cliente (conforme pre-liquidación)", 14, signY + 6);
+  doc.text("Firma cliente (conforme montos informados)", 14, signY + 6);
   doc.text("_______________________________", 14, signY + 12);
 
   doc.line(110, signY, 190, signY);

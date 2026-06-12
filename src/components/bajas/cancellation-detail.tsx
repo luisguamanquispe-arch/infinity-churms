@@ -216,7 +216,8 @@ export function CancellationDetail({
 
       <Card title="Pre-liquidación para el cliente">
         <p className="text-sm text-slate-600">
-          Documento PDF con valores del servicio y políticas de suspensión para enviar al cliente.
+          Documento <strong>informativo de valores a pagar</strong>. En esta etapa el cliente aún no entrega equipos;
+          la recepción y el acta se tramitan después del pago.
         </p>
         <ul className="mt-3 list-inside list-disc space-y-1 text-xs text-amber-800">
           {SUSPENSION_POLICIES.map((p) => (
