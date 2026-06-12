@@ -7,7 +7,7 @@ services:
     plan: starter
     region: oregon
     healthCheckPath: /api/health
-    buildCommand: npm ci && npx prisma db push && npm run db:seed && npm run render:build
+    buildCommand: npm ci && npm run render:deploy
     startCommand: npm start
     envVars:
       - key: NODE_VERSION

@@ -5,7 +5,9 @@
   "scripts": {
     "dev": "next dev",
     "build": "prisma generate && next build",
+    "db:deploy": "prisma db push --accept-data-loss",
     "render:build": "prisma generate && next build",
+    "render:deploy": "npm run db:deploy && npm run db:seed && npm run render:build",
     "start": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",

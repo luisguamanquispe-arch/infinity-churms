@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
@@ -174,7 +175,7 @@ export function CancellationDetail({
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <p className="text-xs text-slate-500">← <a href="/bajas">Bajas</a></p>
+          <p className="text-xs text-slate-500">← <Link href="/bajas">Bajas</Link></p>
           <h1 className="text-2xl font-bold text-[#0B1F3A]">{data.customer.name}</h1>
           <p className="text-sm text-slate-500">Contrato {data.customer.contract}</p>
           <p className="text-xs text-slate-500">{REASON_LABELS[data.reason] ?? data.reason}</p>

@@ -6,7 +6,7 @@ const prisma = new PrismaClient();
 async function main() {
   const hash = await bcrypt.hash("admin123", 10);
 
-  const admin = await prisma.user.upsert({
+  await prisma.user.upsert({
     where: { email: "admin@infinity.net" },
     update: {},
     create: {
@@ -79,7 +79,12 @@ async function main() {
 
   const customer = await prisma.customer.upsert({
     where: { contract: "CTR-1001" },
-    update: {},
+    update: {
+      name: "Juan Pérez García",
+      planName: "Fibra 100 Mbps",
+      hasTvStreaming: true,
+      pendingBalance: 60,
+    },
     create: {
       contract: "CTR-1001",
       name: "Juan Pérez García",
@@ -111,9 +116,12 @@ async function main() {
     }
   }
 
-  console.log("Seed OK — admin:", admin.email);
+  console.log("Seed OK");
 }
 
 main()
-  .catch(console.error)
+  .catch((err) => {
+    console.error("Seed error:", err);
+    process.exit(1);
+  })
   .finally(() => prisma.$disconnect());

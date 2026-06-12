@@ -6,7 +6,7 @@ import type { EquipmentCondition } from "@prisma/client";
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: Promise<{ id: string }> }
+  _ctx: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requirePermission("cancellations:equipment");

@@ -107,7 +107,7 @@ model EquipmentTariff {
 model Cancellation {
   id               String             @id @default(cuid())
   customerId       String
-  reason           CancellationReason
+  reason           CancellationReason   @default(DECISION_VOLUNTARIA)
   requestDate      DateTime           @default(now())
   closeDate        DateTime?
   monthsCompleted  Int                @default(0)

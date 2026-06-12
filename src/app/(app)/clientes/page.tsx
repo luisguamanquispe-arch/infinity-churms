@@ -44,7 +44,15 @@ export default function ClientesPage() {
   }
 
   useEffect(() => {
-    load();
+    let active = true;
+    fetch("/api/customers?all=1")
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (active) setCustomers(data);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   async function createCustomer(e: React.FormEvent) {
