@@ -33,6 +33,21 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    if (body.action === "save_signature") {
+      const session = await requireSession();
+      await prisma.cancellation.update({
+        where: { id },
+        data: { clientSignature: body.clientSignature?.trim() || null },
+      });
+      await audit({
+        userId: session.userId,
+        action: "SIGNATURE",
+        entity: "Cancellation",
+        entityId: id,
+      });
+      return NextResponse.json({ ok: true });
+    }
+
     if (body.action === "add_charge") {
       const session = await requirePermission("cancellations:charges");
       await prisma.cancellationCharge.create({

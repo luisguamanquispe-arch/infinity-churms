@@ -21,6 +21,19 @@ export const ROLE_LABELS: Record<string, string> = {
   SUPERVISOR: "Supervisor",
 };
 
+export const CANCELLATION_REASONS = [
+  { value: "FALLAS_CONTINUAS", label: "Indisponibilidad o fallas continuas" },
+  { value: "INCUMPLIMIENTO_CONTRATO", label: "Incumplimiento del contrato" },
+  { value: "MUDANZA", label: "Mudanza o cambio de domicilio" },
+  { value: "PROBLEMAS_ATENCION", label: "Problemas de atención al cliente" },
+  { value: "MEJOR_OFERTA", label: "Mejor oferta comercial" },
+  { value: "DECISION_VOLUNTARIA", label: "Decisión voluntaria" },
+] as const;
+
+export const REASON_LABELS: Record<string, string> = Object.fromEntries(
+  CANCELLATION_REASONS.map((r) => [r.value, r.label])
+);
+
 export const PAYMENT_METHODS = ["Efectivo", "Transferencia", "Tarjeta", "Depósito"] as const;
 
 export const EQUIPMENT_TYPES = ["ONU", "ROUTER", "STB", "ANTENA", "OTRO"] as const;

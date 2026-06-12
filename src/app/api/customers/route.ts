@@ -14,16 +14,26 @@ export async function GET(request: NextRequest) {
         ? {
             OR: [
               { name: { contains: q, mode: "insensitive" } },
-              { code: { contains: q, mode: "insensitive" } },
+              { contract: { contains: q, mode: "insensitive" } },
               { cedula: { contains: q, mode: "insensitive" } },
             ],
           }
         : {},
-      include: { equipment: true },
+      include: {
+        equipment: true,
+        cancellations: { select: { id: true, status: true } },
+      },
       orderBy: { name: "asc" },
       take: all ? 100 : 20,
     });
-    return NextResponse.json(customers);
+
+    return NextResponse.json(
+      customers.map((c) => ({
+        ...c,
+        hasCancellation: c.cancellations.length > 0,
+        cancellations: undefined,
+      }))
+    );
   } catch {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -34,9 +44,16 @@ export async function POST(request: NextRequest) {
     const session = await requirePermission("customers:manage");
     const body = await request.json();
 
+    if (body.hasTvStreaming && !body.tvStreamingSince) {
+      return NextResponse.json(
+        { error: "Indique la fecha de inicio del servicio TV Streams" },
+        { status: 400 }
+      );
+    }
+
     const customer = await prisma.customer.create({
       data: {
-        code: body.code,
+        contract: body.contract,
         name: body.name,
         cedula: body.cedula,
         address: body.address,
@@ -44,16 +61,20 @@ export async function POST(request: NextRequest) {
         serviceStartDate: new Date(body.serviceStartDate),
         planName: body.planName,
         hasTvStreaming: Boolean(body.hasTvStreaming),
-        tvStreamingSince: body.hasTvStreaming && body.tvStreamingSince
-          ? new Date(body.tvStreamingSince)
-          : null,
+        tvStreamingSince:
+          body.hasTvStreaming && body.tvStreamingSince
+            ? new Date(body.tvStreamingSince)
+            : null,
         pendingBalance: body.pendingBalance ?? 0,
         equipment: {
-          create: (body.equipment ?? []).map((eq: { type: EquipmentType; serial?: string; brand?: string }) => ({
-            type: eq.type,
-            serial: eq.serial ?? null,
-            brand: eq.brand ?? null,
-          })),
+          create: (body.equipment ?? []).map(
+            (eq: { type: EquipmentType; serial?: string; brand?: string; model?: string }) => ({
+              type: eq.type,
+              serial: eq.serial ?? null,
+              brand: eq.brand ?? null,
+              model: eq.model ?? null,
+            })
+          ),
         },
       },
       include: { equipment: true },
@@ -64,7 +85,7 @@ export async function POST(request: NextRequest) {
       action: "CREATE",
       entity: "Customer",
       entityId: customer.id,
-      detail: customer.code,
+      detail: customer.contract,
     });
 
     return NextResponse.json(customer);

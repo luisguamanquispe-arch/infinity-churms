@@ -2,7 +2,7 @@ import { getSession } from "@/lib/auth";
 import { getCancellation } from "@/lib/services/cancellations";
 import { CancellationDetail } from "@/components/bajas/cancellation-detail";
 import { AppShell } from "@/components/layout/app-shell";
-import { STATUS_LABELS } from "@/lib/constants";
+import { STATUS_LABELS, REASON_LABELS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { getCancellationPermissions } from "@/lib/cancellation-permissions";
 import { hasPermission, NAV_ITEMS } from "@/lib/permissions";
@@ -38,11 +38,9 @@ export default async function BajaPage({ params }: Props) {
         ...row.customer,
         serviceStartDate: row.customer.serviceStartDate.toISOString(),
         pendingBalance: String(row.customer.pendingBalance),
+        tvStreamingSince: row.customer.tvStreamingSince?.toISOString() ?? null,
       },
-      equipment: row.equipment.map((e) => ({
-        ...e,
-        chargeAmount: String(e.chargeAmount),
-      })),
+      equipment: row.equipment,
       charges: row.charges.map((c) => ({ ...c, amount: String(c.amount) })),
       payments: row.payments.map((p) => ({
         ...p,
@@ -69,7 +67,8 @@ export default async function BajaPage({ params }: Props) {
       <div className="rounded-xl border bg-white p-6 shadow-sm">
         <p className="text-xs font-semibold uppercase text-teal-600">Verificación Infinity</p>
         <h1 className="mt-2 text-xl font-bold">{row.customer.name}</h1>
-        <p className="text-sm text-slate-500">{row.customer.code} · {row.customer.cedula}</p>
+        <p className="text-sm text-slate-500">Contrato {row.customer.contract} · {row.customer.cedula}</p>
+        <p className="text-xs text-slate-500">{REASON_LABELS[row.reason] ?? row.reason}</p>
 
         <dl className="mt-6 space-y-2 text-sm">
           <Row label="Estado" value={STATUS_LABELS[row.status] ?? row.status} />
@@ -81,9 +80,9 @@ export default async function BajaPage({ params }: Props) {
         <h2 className="mt-6 font-semibold text-sm">Equipos recuperados</h2>
         <ul className="mt-2 space-y-1 text-sm">
           {row.equipment.map((e) => (
-            <li key={e.id} className="flex justify-between border-t py-1">
-              <span>{e.type} {e.serial}</span>
-              <span>{e.delivered ? (e.condition ?? "BUENO") : "No entregado"}</span>
+            <li key={e.id} className="border-t py-2">
+              <p className="font-medium">{e.type} — {e.brand ?? ""} {e.model ?? ""}</p>
+              <p className="text-slate-500">Serie: {e.serial ?? "—"} · {e.delivered ? (e.condition ?? "BUENO") : "No entregado"}</p>
             </li>
           ))}
         </ul>

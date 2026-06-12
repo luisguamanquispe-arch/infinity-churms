@@ -2,6 +2,11 @@ import { prisma } from "@/lib/prisma";
 import { calculateLiquidation } from "@/lib/liquidation";
 import type { CancellationStatus, EquipmentCondition } from "@prisma/client";
 
+export async function customerHasCancellation(customerId: string) {
+  const count = await prisma.cancellation.count({ where: { customerId } });
+  return count > 0;
+}
+
 export async function getDashboardKpis() {
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -79,10 +84,21 @@ export async function listCancellations(filters?: {
         : {}),
     },
     include: {
-      customer: { select: { code: true, name: true } },
+      customer: { select: { contract: true, name: true } },
       createdBy: { select: { name: true } },
     },
     orderBy: { requestDate: "desc" },
+  });
+}
+
+export async function listClosedForAnalysis() {
+  return prisma.cancellation.findMany({
+    where: { status: "BAJA_COMPLETADA" },
+    include: {
+      customer: { select: { contract: true, name: true, cedula: true, planName: true } },
+      createdBy: { select: { name: true } },
+    },
+    orderBy: { closeDate: "desc" },
   });
 }
 
@@ -91,11 +107,6 @@ export async function recalculateCancellation(cancellationId: string) {
   if (!row) throw new Error("NOT_FOUND");
 
   const config = await prisma.tariffConfig.findFirst();
-  const tariffs = await prisma.equipmentTariff.findMany();
-  const tariffMap = Object.fromEntries(
-    tariffs.map((t) => [t.type, { damagedUsd: Number(t.damagedUsd), notReturnedUsd: Number(t.notReturnedUsd) }])
-  );
-
   const liq = calculateLiquidation({
     serviceStartDate: row.customer.serviceStartDate,
     requestDate: row.requestDate,
@@ -107,12 +118,6 @@ export async function recalculateCancellation(cancellationId: string) {
       installCostUsd: Number(config?.installCostUsd ?? 200),
       tvMonthlyUsd: Number(config?.tvMonthlyUsd ?? 2),
     },
-    equipment: row.equipment.map((e) => ({
-      type: e.type,
-      delivered: e.delivered,
-      condition: e.condition,
-    })),
-    tariffs: tariffMap,
     extraCharges: row.charges.map((c) => ({ concept: c.concept, amount: Number(c.amount) })),
   });
 
@@ -123,7 +128,7 @@ export async function recalculateCancellation(cancellationId: string) {
       permanenceAmount: liq.permanenceAmount,
       tvAmount: liq.tvAmount,
       monthlyAmount: liq.monthlyAmount,
-      equipmentAmount: liq.equipmentAmount,
+      equipmentAmount: 0,
       otherAmount: liq.otherAmount,
       totalAmount: liq.totalAmount,
     },
@@ -143,6 +148,8 @@ export async function initEquipmentChecklist(cancellationId: string, customerId:
           equipmentId: eq.id,
           type: eq.type,
           serial: eq.serial,
+          brand: eq.brand,
+          model: eq.model,
           delivered: false,
         },
       });
@@ -152,7 +159,13 @@ export async function initEquipmentChecklist(cancellationId: string, customerId:
 
 export async function updateEquipmentItem(
   id: string,
-  data: { delivered?: boolean; condition?: EquipmentCondition | null; notes?: string }
+  data: {
+    delivered?: boolean;
+    condition?: EquipmentCondition | null;
+    notes?: string;
+    brand?: string;
+    model?: string;
+  }
 ) {
   const item = await prisma.cancellationEquipment.update({
     where: { id },
@@ -174,6 +187,5 @@ export async function updateEquipmentItem(
     data: { chargeAmount: charge },
   });
 
-  await recalculateCancellation(item.cancellationId);
   return item;
 }

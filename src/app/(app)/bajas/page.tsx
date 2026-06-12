@@ -53,7 +53,7 @@ export default async function BajasPage() {
                 <tr key={r.id} className="border-t hover:bg-slate-50">
                   <td className="px-4 py-3">
                     <p className="font-medium">{r.customer.name}</p>
-                    <p className="text-xs text-slate-500">{r.customer.code}</p>
+                    <p className="text-xs text-slate-500">{r.customer.contract}</p>
                   </td>
                   <td className="px-4 py-3">{r.requestDate.toLocaleDateString("es-VE")}</td>
                   <td className="px-4 py-3">{formatUsd(Number(r.totalAmount))}</td>

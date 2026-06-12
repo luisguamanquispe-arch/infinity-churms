@@ -6,7 +6,7 @@ import { formatUsd } from "@/lib/liquidation";
 
 interface Customer {
   id: string;
-  code: string;
+  contract: string;
   name: string;
   cedula: string;
   address: string;
@@ -14,11 +14,12 @@ interface Customer {
   status: string;
   pendingBalance: string;
   hasTvStreaming: boolean;
-  equipment: { type: string; serial: string | null }[];
+  tvStreamingSince: string | null;
+  equipment: { type: string; serial: string | null; brand: string | null; model: string | null }[];
 }
 
 const emptyForm = {
-  code: "",
+  contract: "",
   name: "",
   cedula: "",
   address: "",
@@ -26,7 +27,8 @@ const emptyForm = {
   serviceStartDate: new Date().toISOString().slice(0, 10),
   pendingBalance: "0",
   hasTvStreaming: false,
-  equipment: [{ type: "ONU", serial: "" }],
+  tvStreamingSince: "",
+  equipment: [{ type: "ONU", serial: "", brand: "", model: "" }],
 };
 
 export default function ClientesPage() {
@@ -47,12 +49,17 @@ export default function ClientesPage() {
 
   async function createCustomer(e: React.FormEvent) {
     e.preventDefault();
+    if (form.hasTvStreaming && !form.tvStreamingSince) {
+      setMsg("Indique la fecha de inicio del servicio TV Streams");
+      return;
+    }
     const res = await fetch("/api/customers", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         ...form,
         pendingBalance: parseFloat(form.pendingBalance),
+        tvStreamingSince: form.hasTvStreaming ? form.tvStreamingSince : null,
         equipment: form.equipment.filter((eq) => eq.type),
       }),
     });
@@ -75,7 +82,7 @@ export default function ClientesPage() {
       body: JSON.stringify({ pendingBalance: parseFloat(editingBalance.value) }),
     });
     if (res.ok) {
-      setMsg("Saldo actualizado (cartera sincronizada)");
+      setMsg("Saldo actualizado");
       setEditingBalance(null);
       await load();
     }
@@ -86,7 +93,7 @@ export default function ClientesPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#0B1F3A]">Clientes</h1>
-          <p className="text-sm text-slate-500">Maestro de clientes y saldo pendiente (cartera)</p>
+          <p className="text-sm text-slate-500">Maestro por contrato y saldo pendiente</p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -103,26 +110,35 @@ export default function ClientesPage() {
         <form onSubmit={createCustomer} className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
           <h2 className="font-semibold">Nuevo cliente</h2>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Código" value={form.code} onChange={(v) => setForm({ ...form, code: v })} required />
-            <Input label="Nombre" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-            <Input label="Cédula" value={form.cedula} onChange={(v) => setForm({ ...form, cedula: v })} required />
-            <Input label="Plan" value={form.planName} onChange={(v) => setForm({ ...form, planName: v })} required />
-            <Input label="Dirección" value={form.address} onChange={(v) => setForm({ ...form, address: v })} required />
-            <Input label="Fecha alta" type="date" value={form.serviceStartDate} onChange={(v) => setForm({ ...form, serviceStartDate: v })} required />
+            <Input label="Contrato *" value={form.contract} onChange={(v) => setForm({ ...form, contract: v })} required />
+            <Input label="Nombre *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
+            <Input label="Cédula *" value={form.cedula} onChange={(v) => setForm({ ...form, cedula: v })} required />
+            <Input label="Plan *" value={form.planName} onChange={(v) => setForm({ ...form, planName: v })} required />
+            <Input label="Dirección *" value={form.address} onChange={(v) => setForm({ ...form, address: v })} required />
+            <Input label="Fecha alta *" type="date" value={form.serviceStartDate} onChange={(v) => setForm({ ...form, serviceStartDate: v })} required />
             <Input label="Saldo pendiente" type="number" value={form.pendingBalance} onChange={(v) => setForm({ ...form, pendingBalance: v })} />
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
               checked={form.hasTvStreaming}
-              onChange={(e) => setForm({ ...form, hasTvStreaming: e.target.checked })}
+              onChange={(e) => setForm({ ...form, hasTvStreaming: e.target.checked, tvStreamingSince: e.target.checked ? form.tvStreamingSince : "" })}
             />
             Tiene TV Streams
           </label>
+          {form.hasTvStreaming && (
+            <Input
+              label="TV Streams desde *"
+              type="date"
+              value={form.tvStreamingSince}
+              onChange={(v) => setForm({ ...form, tvStreamingSince: v })}
+              required
+            />
+          )}
           <div className="space-y-2">
             <p className="text-sm font-medium">Equipos</p>
             {form.equipment.map((eq, i) => (
-              <div key={i} className="flex gap-2">
+              <div key={i} className="grid gap-2 sm:grid-cols-4">
                 <select
                   value={eq.type}
                   onChange={(e) => {
@@ -136,21 +152,26 @@ export default function ClientesPage() {
                     <option key={t} value={t}>{t}</option>
                   ))}
                 </select>
-                <input
-                  placeholder="Serie"
-                  value={eq.serial}
-                  onChange={(e) => {
-                    const equipment = [...form.equipment];
-                    equipment[i] = { ...eq, serial: e.target.value };
-                    setForm({ ...form, equipment });
-                  }}
-                  className="flex-1 rounded border px-2 py-1 text-sm"
-                />
+                <input placeholder="Marca" value={eq.brand} onChange={(e) => {
+                  const equipment = [...form.equipment];
+                  equipment[i] = { ...eq, brand: e.target.value };
+                  setForm({ ...form, equipment });
+                }} className="rounded border px-2 py-1 text-sm" />
+                <input placeholder="Modelo" value={eq.model} onChange={(e) => {
+                  const equipment = [...form.equipment];
+                  equipment[i] = { ...eq, model: e.target.value };
+                  setForm({ ...form, equipment });
+                }} className="rounded border px-2 py-1 text-sm" />
+                <input placeholder="Serie" value={eq.serial} onChange={(e) => {
+                  const equipment = [...form.equipment];
+                  equipment[i] = { ...eq, serial: e.target.value };
+                  setForm({ ...form, equipment });
+                }} className="rounded border px-2 py-1 text-sm" />
               </div>
             ))}
             <button
               type="button"
-              onClick={() => setForm({ ...form, equipment: [...form.equipment, { type: "ROUTER", serial: "" }] })}
+              onClick={() => setForm({ ...form, equipment: [...form.equipment, { type: "ROUTER", serial: "", brand: "", model: "" }] })}
               className="text-xs text-teal-700"
             >
               + Equipo
@@ -166,10 +187,11 @@ export default function ClientesPage() {
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left">
             <tr>
-              <th className="px-4 py-3">Código</th>
+              <th className="px-4 py-3">Contrato</th>
               <th className="px-4 py-3">Nombre</th>
               <th className="px-4 py-3">Plan</th>
-              <th className="px-4 py-3">Saldo pendiente</th>
+              <th className="px-4 py-3">TV desde</th>
+              <th className="px-4 py-3">Saldo</th>
               <th className="px-4 py-3">Equipos</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -177,18 +199,18 @@ export default function ClientesPage() {
           <tbody>
             {customers.map((c) => (
               <tr key={c.id} className="border-t">
-                <td className="px-4 py-3 font-medium">{c.code}</td>
+                <td className="px-4 py-3 font-medium">{c.contract}</td>
                 <td className="px-4 py-3">{c.name}</td>
                 <td className="px-4 py-3">{c.planName}</td>
+                <td className="px-4 py-3 text-slate-500">
+                  {c.hasTvStreaming && c.tvStreamingSince
+                    ? new Date(c.tvStreamingSince).toLocaleDateString("es-VE")
+                    : "—"}
+                </td>
                 <td className="px-4 py-3">
                   {editingBalance?.id === c.id ? (
                     <div className="flex gap-1">
-                      <input
-                        type="number"
-                        value={editingBalance.value}
-                        onChange={(e) => setEditingBalance({ id: c.id, value: e.target.value })}
-                        className="w-24 rounded border px-2 py-1"
-                      />
+                      <input type="number" value={editingBalance.value} onChange={(e) => setEditingBalance({ id: c.id, value: e.target.value })} className="w-24 rounded border px-2 py-1" />
                       <button onClick={saveBalance} className="text-xs text-teal-700">OK</button>
                     </div>
                   ) : (
@@ -196,13 +218,10 @@ export default function ClientesPage() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-slate-500">
-                  {c.equipment.map((e) => e.type).join(", ")}
+                  {c.equipment.map((e) => `${e.type}${e.brand ? ` (${e.brand})` : ""}`).join(", ")}
                 </td>
                 <td className="px-4 py-3">
-                  <button
-                    onClick={() => setEditingBalance({ id: c.id, value: String(c.pendingBalance) })}
-                    className="text-xs text-teal-700 hover:underline"
-                  >
+                  <button onClick={() => setEditingBalance({ id: c.id, value: String(c.pendingBalance) })} className="text-xs text-teal-700 hover:underline">
                     Editar saldo
                   </button>
                 </td>

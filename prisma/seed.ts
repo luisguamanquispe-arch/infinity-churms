@@ -78,10 +78,10 @@ async function main() {
   }
 
   const customer = await prisma.customer.upsert({
-    where: { code: "CLI-1001" },
+    where: { contract: "CTR-1001" },
     update: {},
     create: {
-      code: "CLI-1001",
+      contract: "CTR-1001",
       name: "Juan Pérez García",
       cedula: "V-12345678",
       address: "Av. Principal #45, Sector Norte",
@@ -95,9 +95,9 @@ async function main() {
   });
 
   const equip = [
-    { type: "ONU" as const, serial: "HWTC12345678", brand: "Huawei" },
-    { type: "ROUTER" as const, serial: "TPL98765432", brand: "TP-Link" },
-    { type: "STB" as const, serial: "STB44556677", brand: "Infomir" },
+    { type: "ONU" as const, serial: "HWTC12345678", brand: "Huawei", model: "HG8546M" },
+    { type: "ROUTER" as const, serial: "TPL98765432", brand: "TP-Link", model: "Archer C6" },
+    { type: "STB" as const, serial: "STB44556677", brand: "Infomir", model: "MAG322" },
   ];
 
   for (const e of equip) {

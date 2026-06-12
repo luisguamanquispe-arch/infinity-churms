@@ -10,12 +10,14 @@ export async function PATCH(
 ) {
   try {
     const session = await requirePermission("cancellations:equipment");
-    const { equipmentId, delivered, condition, notes } = await request.json();
+    const { equipmentId, delivered, condition, notes, brand, model } = await request.json();
 
     await updateEquipmentItem(equipmentId, {
       delivered,
       condition: condition as EquipmentCondition | null,
       notes,
+      brand,
+      model,
     });
 
     await audit({

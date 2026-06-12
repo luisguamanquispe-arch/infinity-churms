@@ -1,9 +1,4 @@
 import { differenceInMonths } from "date-fns";
-import type { EquipmentCondition, EquipmentType } from "@prisma/client";
-
-export interface TariffMap {
-  [key: string]: { damagedUsd: number; notReturnedUsd: number };
-}
 
 export interface LiquidationInput {
   serviceStartDate: Date;
@@ -12,12 +7,6 @@ export interface LiquidationInput {
   tvStreamingSince: Date | null;
   pendingBalance: number;
   config: { permanenceMonths: number; installCostUsd: number; tvMonthlyUsd: number };
-  equipment: {
-    type: EquipmentType;
-    delivered: boolean;
-    condition: EquipmentCondition | null;
-  }[];
-  tariffs: TariffMap;
   extraCharges: { concept: string; amount: number }[];
 }
 
@@ -29,7 +18,6 @@ export interface LiquidationResult {
   equipmentAmount: number;
   otherAmount: number;
   totalAmount: number;
-  equipmentBreakdown: { type: string; amount: number; reason: string }[];
 }
 
 export function calculateLiquidation(input: LiquidationInput): LiquidationResult {
@@ -48,34 +36,10 @@ export function calculateLiquidation(input: LiquidationInput): LiquidationResult
   }
 
   const monthlyAmount = input.pendingBalance;
-
-  const equipmentBreakdown: LiquidationResult["equipmentBreakdown"] = [];
-  let equipmentAmount = 0;
-
-  for (const eq of input.equipment) {
-    const tariff = input.tariffs[eq.type] ?? { damagedUsd: 0, notReturnedUsd: 0 };
-    if (!eq.delivered || eq.condition === "NO_ENTREGADO") {
-      equipmentAmount += tariff.notReturnedUsd;
-      equipmentBreakdown.push({
-        type: eq.type,
-        amount: tariff.notReturnedUsd,
-        reason: "No entregado",
-      });
-    } else if (eq.condition === "DANADO") {
-      equipmentAmount += tariff.damagedUsd;
-      equipmentBreakdown.push({
-        type: eq.type,
-        amount: tariff.damagedUsd,
-        reason: "Dañado",
-      });
-    }
-  }
-
+  const equipmentAmount = 0;
   const otherAmount = input.extraCharges.reduce((s, c) => s + c.amount, 0);
   const totalAmount =
-    Math.round(
-      (permanenceAmount + tvAmount + monthlyAmount + equipmentAmount + otherAmount) * 100
-    ) / 100;
+    Math.round((permanenceAmount + tvAmount + monthlyAmount + otherAmount) * 100) / 100;
 
   return {
     monthsCompleted,
@@ -85,7 +49,6 @@ export function calculateLiquidation(input: LiquidationInput): LiquidationResult
     equipmentAmount,
     otherAmount,
     totalAmount,
-    equipmentBreakdown,
   };
 }
 
