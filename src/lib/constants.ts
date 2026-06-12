@@ -43,3 +43,10 @@ export const EQUIPMENT_CONDITIONS = [
   { value: "DANADO", label: "Dañado" },
   { value: "NO_ENTREGADO", label: "No entregado" },
 ] as const;
+
+export const SUSPENSION_POLICIES = [
+  "Las solicitudes de cancelación de servicio se receptan únicamente hasta el día 15 de cada mes.",
+  "El cliente debe enviar fotografía de los equipos prestados (ONU, router, decodificador u otros) al momento de solicitar la baja.",
+  "Debe cancelar todos los valores pendientes previo a la entrega de equipos prestados en oficina.",
+  "La entrega física de equipos se realiza únicamente en oficina, una vez verificado el pago de la pre-liquidación.",
+] as const;

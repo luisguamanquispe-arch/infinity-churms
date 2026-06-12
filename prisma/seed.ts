@@ -6,8 +6,9 @@ const prisma = new PrismaClient();
 async function main() {
   const hash = await bcrypt.hash("admin2010", 10);
 
-  await prisma.user.deleteMany({
+  await prisma.user.updateMany({
     where: { email: { notIn: ["admin@infinity.net", "supervisor@infinity.net"] } },
+    data: { active: false },
   });
 
   await prisma.user.upsert({

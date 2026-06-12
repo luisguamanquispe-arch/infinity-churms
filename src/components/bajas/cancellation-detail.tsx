@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS } from "@/lib/constants";
+import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, SUSPENSION_POLICIES } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 
 interface Detail {
@@ -68,6 +68,7 @@ const ACTION_LABELS: Record<string, string> = {
   EQUIPMENT: "Equipo actualizado",
   STATUS: "Cambio de estado",
   SIGNATURE: "Firma registrada",
+  PDF_PRELIQUIDACION: "Pre-liquidación PDF generada",
 };
 
 export function CancellationDetail({
@@ -212,6 +213,25 @@ export function CancellationDetail({
           </div>
         </Card>
       </div>
+
+      <Card title="Pre-liquidación para el cliente">
+        <p className="text-sm text-slate-600">
+          Documento PDF con valores del servicio y políticas de suspensión para enviar al cliente.
+        </p>
+        <ul className="mt-3 list-inside list-disc space-y-1 text-xs text-amber-800">
+          {SUSPENSION_POLICIES.map((p) => (
+            <li key={p}>{p}</li>
+          ))}
+        </ul>
+        <a
+          href={`/api/cancellations/${data.id}/preliquidacion`}
+          target="_blank"
+          className="mt-4 inline-block rounded-lg px-4 py-2 text-sm font-semibold text-white"
+          style={{ backgroundColor: COLORS.brand }}
+        >
+          Descargar pre-liquidación PDF
+        </a>
+      </Card>
 
       {!closed && permissions.charges && (
         <Card title="Otros valores">
