@@ -1,0 +1,172 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  ADMIN
+  COBRANZAS
+  TECNICO
+  SUPERVISOR
+}
+
+enum CancellationStatus {
+  SOLICITADA
+  EN_REVISION
+  PENDIENTE_DE_PAGO
+  PAGADA
+  EQUIPOS_RECUPERADOS
+  BAJA_COMPLETADA
+}
+
+enum EquipmentType {
+  ONU
+  ROUTER
+  STB
+  ANTENA
+  OTRO
+}
+
+enum EquipmentCondition {
+  BUENO
+  DANADO
+  NO_ENTREGADO
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(COBRANZAS)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  cancellations Cancellation[] @relation("CreatedBy")
+  auditLogs     AuditLog[]
+}
+
+model Customer {
+  id               String   @id @default(cuid())
+  code             String   @unique
+  name             String
+  cedula           String
+  address          String
+  phone            String?
+  serviceStartDate DateTime
+  planName         String
+  status           String   @default("ACTIVO")
+  hasTvStreaming   Boolean  @default(false)
+  tvStreamingSince DateTime?
+  pendingBalance   Decimal  @default(0) @db.Decimal(10, 2)
+  createdAt        DateTime @default(now())
+
+  equipment     CustomerEquipment[]
+  cancellations Cancellation[]
+}
+
+model CustomerEquipment {
+  id         String        @id @default(cuid())
+  customerId String
+  type       EquipmentType
+  serial     String?
+  brand      String?
+
+  customer            Customer               @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  cancellationItems   CancellationEquipment[]
+}
+
+model TariffConfig {
+  id                    String @id @default(cuid())
+  permanenceMonths      Int    @default(18)
+  installCostUsd        Decimal @default(200) @db.Decimal(10, 2)
+  tvMonthlyUsd          Decimal @default(2) @db.Decimal(10, 2)
+}
+
+model EquipmentTariff {
+  id              String        @id @default(cuid())
+  type            EquipmentType @unique
+  damagedUsd      Decimal       @db.Decimal(10, 2)
+  notReturnedUsd  Decimal       @db.Decimal(10, 2)
+}
+
+model Cancellation {
+  id                 String             @id @default(cuid())
+  customerId         String
+  requestDate        DateTime           @default(now())
+  closeDate          DateTime?
+  monthsCompleted    Int                @default(0)
+  permanenceAmount   Decimal            @default(0) @db.Decimal(10, 2)
+  tvAmount           Decimal            @default(0) @db.Decimal(10, 2)
+  monthlyAmount      Decimal            @default(0) @db.Decimal(10, 2)
+  equipmentAmount    Decimal            @default(0) @db.Decimal(10, 2)
+  otherAmount        Decimal            @default(0) @db.Decimal(10, 2)
+  totalAmount        Decimal            @default(0) @db.Decimal(10, 2)
+  invoiceNumber      String?
+  status             CancellationStatus @default(SOLICITADA)
+  notes              String?
+  qrCode             String?            @unique
+  actaNumber         String?            @unique
+  createdById        String
+  createdAt          DateTime           @default(now())
+  updatedAt          DateTime           @updatedAt
+
+  customer   Customer                @relation(fields: [customerId], references: [id])
+  createdBy  User                    @relation("CreatedBy", fields: [createdById], references: [id])
+  equipment  CancellationEquipment[]
+  charges    CancellationCharge[]
+  payments   CancellationPayment[]
+}
+
+model CancellationEquipment {
+  id           String             @id @default(cuid())
+  cancellationId String
+  equipmentId  String?
+  type         EquipmentType
+  serial       String?
+  delivered    Boolean            @default(false)
+  condition    EquipmentCondition?
+  chargeAmount Decimal            @default(0) @db.Decimal(10, 2)
+  notes        String?
+
+  cancellation Cancellation      @relation(fields: [cancellationId], references: [id], onDelete: Cascade)
+  equipment    CustomerEquipment? @relation(fields: [equipmentId], references: [id])
+}
+
+model CancellationCharge {
+  id             String   @id @default(cuid())
+  cancellationId String
+  concept        String
+  amount         Decimal  @db.Decimal(10, 2)
+
+  cancellation Cancellation @relation(fields: [cancellationId], references: [id], onDelete: Cascade)
+}
+
+model CancellationPayment {
+  id             String   @id @default(cuid())
+  cancellationId String
+  paymentDate    DateTime
+  method         String
+  invoiceNumber  String
+  amountPaid     Decimal  @db.Decimal(10, 2)
+  notes          String?
+  createdAt      DateTime @default(now())
+
+  cancellation Cancellation @relation(fields: [cancellationId], references: [id], onDelete: Cascade)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  detail    String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+}
