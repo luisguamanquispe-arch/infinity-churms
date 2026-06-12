@@ -23,7 +23,8 @@ services:
 
 databases:
   - name: infinity-bajas
-    plan: starter
+    plan: basic-256mb
+    diskSizeGB: 15
     region: oregon
     databaseName: infinity_bajas
     user: infinity
