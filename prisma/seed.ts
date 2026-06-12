@@ -4,11 +4,11 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  const hash = await bcrypt.hash("admin123", 10);
+  const hash = await bcrypt.hash("admin2010", 10);
 
   await prisma.user.upsert({
     where: { email: "admin@infinity.net" },
-    update: {},
+    update: { password: hash, name: "Administrador", role: "ADMIN", active: true },
     create: {
       email: "admin@infinity.net",
       password: hash,
@@ -18,30 +18,8 @@ async function main() {
   });
 
   await prisma.user.upsert({
-    where: { email: "cobranzas@infinity.net" },
-    update: {},
-    create: {
-      email: "cobranzas@infinity.net",
-      password: hash,
-      name: "Cobranzas",
-      role: "COBRANZAS",
-    },
-  });
-
-  await prisma.user.upsert({
-    where: { email: "tecnico@infinity.net" },
-    update: {},
-    create: {
-      email: "tecnico@infinity.net",
-      password: hash,
-      name: "Técnico Campo",
-      role: "TECNICO",
-    },
-  });
-
-  await prisma.user.upsert({
     where: { email: "supervisor@infinity.net" },
-    update: {},
+    update: { password: hash, name: "Supervisor", role: "SUPERVISOR", active: true },
     create: {
       email: "supervisor@infinity.net",
       password: hash,
@@ -116,7 +94,7 @@ async function main() {
     }
   }
 
-  console.log("Seed OK");
+  console.log("Seed OK — usuarios: admin@infinity.net, supervisor@infinity.net");
 }
 
 main()
