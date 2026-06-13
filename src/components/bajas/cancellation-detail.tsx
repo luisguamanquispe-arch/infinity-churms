@@ -25,6 +25,7 @@ interface Detail {
     name: string;
     cedula: string;
     address: string;
+    zone?: string;
     serviceStartDate: string;
     planName: string;
     pendingBalance: string;
@@ -214,6 +215,7 @@ export function CancellationDetail({
         <Card title="Cliente">
           <Info label="Contrato" value={data.customer.contract} />
           <Info label="Cédula" value={data.customer.cedula} />
+          <Info label="Zona" value={data.customer.zone ?? "—"} />
           <Info label="Dirección" value={data.customer.address} />
           <Info label="Plan" value={data.customer.planName} />
           <Info label="Alta" value={new Date(data.customer.serviceStartDate).toLocaleDateString("es-VE")} />

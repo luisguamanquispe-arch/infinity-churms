@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
+import { formatCustomerPayload, validateCustomerInput } from "@/lib/customer-form";
 import type { EquipmentType } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
@@ -51,15 +52,22 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const formatted = formatCustomerPayload(body);
+    const validationError = validateCustomerInput(formatted);
+    if (validationError) {
+      return NextResponse.json({ error: validationError }, { status: 400 });
+    }
+
     const customer = await prisma.customer.create({
       data: {
-        contract: body.contract,
-        name: body.name,
-        cedula: body.cedula,
-        address: body.address,
-        phone: body.phone ?? null,
+        contract: formatted.contract,
+        name: formatted.name,
+        cedula: formatted.cedula,
+        address: formatted.address,
+        zone: formatted.zone,
+        phone: formatted.phone,
         serviceStartDate: new Date(body.serviceStartDate),
-        planName: body.planName,
+        planName: formatted.planName,
         hasTvStreaming: Boolean(body.hasTvStreaming),
         tvStreamingSince:
           body.hasTvStreaming && body.tvStreamingSince
@@ -68,11 +76,11 @@ export async function POST(request: NextRequest) {
         pendingBalance: body.pendingBalance ?? 0,
         equipment: {
           create: (body.equipment ?? []).map(
-            (eq: { type: EquipmentType; serial?: string; brand?: string; model?: string }) => ({
+            (eq: { type: EquipmentType; serial?: string; brand?: string; model?: string }, i: number) => ({
               type: eq.type,
-              serial: eq.serial ?? null,
-              brand: eq.brand ?? null,
-              model: eq.model ?? null,
+              serial: formatted.equipment[i]?.serial ?? null,
+              brand: formatted.equipment[i]?.brand ?? null,
+              model: formatted.equipment[i]?.model ?? null,
             })
           ),
         },

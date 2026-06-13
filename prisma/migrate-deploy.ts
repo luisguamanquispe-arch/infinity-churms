@@ -105,6 +105,20 @@ async function main() {
     END $$;
   `);
 
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'Customer'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Customer' AND column_name = 'zone'
+      ) THEN
+        ALTER TABLE "Customer" ADD COLUMN "zone" TEXT NOT NULL DEFAULT 'CENTRO';
+      END IF;
+    END $$;
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 

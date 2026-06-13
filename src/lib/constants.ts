@@ -38,6 +38,41 @@ export const PAYMENT_METHODS = ["Efectivo", "Transferencia", "Tarjeta", "Depósi
 
 export const EQUIPMENT_TYPES = ["ONU", "ROUTER", "STB", "ANTENA", "OTRO"] as const;
 
+export const CUSTOMER_ZONES = [
+  "PASA",
+  "UNAMUNCHO",
+  "CHIQUICHA",
+  "JB.VELA",
+  "IZAMBA",
+  "CENTRO",
+  "SAN FERNANDO",
+  "AMBATILLO",
+  "QUISAPINCHA",
+  "HUACHI",
+  "TOTORAS",
+  "SANTA ROSA",
+  "CUNCHIBAMBA",
+  "CASHAPAMBA",
+  "LA PENINSULA",
+  "TRES JUANES",
+  "LA CONCEPCION",
+  "MARTINEZ",
+  "ATAHUALPA",
+  "PINLLO",
+  "SALASACA",
+  "RUMICHACA",
+  "NITON",
+  "TECHO PROPIO",
+  "PICAIHUA",
+  "HUACHI LORETO",
+] as const;
+
+export type CustomerZone = (typeof CUSTOMER_ZONES)[number];
+
+export function toUpperInput(value: string): string {
+  return value.toUpperCase();
+}
+
 export const INSTALLATION_PRORATION_LABEL = "Prorrateo por instalación de servicio";
 
 export function installationProrationDetail(monthsCompleted: number) {

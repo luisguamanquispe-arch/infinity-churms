@@ -65,6 +65,7 @@ model Customer {
   name             String
   cedula           String
   address          String
+  zone             String   @default("CENTRO")
   phone            String?
   serviceStartDate DateTime
   planName         String

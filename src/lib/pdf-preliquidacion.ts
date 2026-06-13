@@ -52,6 +52,7 @@ export function generatePreliquidacionPdf(params: {
       ["Contrato", customer.contract],
       ["Cliente", customer.name],
       ["Cédula", customer.cedula],
+      ["Zona", customer.zone ?? "—"],
       ["Dirección", customer.address],
       ["Plan", customer.planName],
       ["Alta servicio", customer.serviceStartDate.toLocaleDateString("es-VE")],

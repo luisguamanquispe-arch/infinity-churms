@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { COLORS, EQUIPMENT_TYPES } from "@/lib/constants";
+import { COLORS, CUSTOMER_ZONES, EQUIPMENT_TYPES, toUpperInput } from "@/lib/constants";
+import { normalizeCedula, validateEcuadorianCedula } from "@/lib/cedula";
 import { formatUsd } from "@/lib/liquidation";
 
 interface Customer {
@@ -10,6 +11,7 @@ interface Customer {
   name: string;
   cedula: string;
   address: string;
+  zone: string;
   planName: string;
   status: string;
   pendingBalance: string;
@@ -23,6 +25,7 @@ const emptyForm = {
   name: "",
   cedula: "",
   address: "",
+  zone: "",
   planName: "",
   serviceStartDate: new Date().toISOString().slice(0, 10),
   pendingBalance: "0",
@@ -37,6 +40,7 @@ export default function ClientesPage() {
   const [editingBalance, setEditingBalance] = useState<{ id: string; value: string } | null>(null);
   const [msg, setMsg] = useState("");
   const [showForm, setShowForm] = useState(false);
+  const [cedulaError, setCedulaError] = useState("");
 
   async function load() {
     const res = await fetch("/api/customers?all=1");
@@ -55,10 +59,32 @@ export default function ClientesPage() {
     };
   }, []);
 
+  function updateUpper<K extends keyof typeof form>(key: K, value: string) {
+    setForm((prev) => ({ ...prev, [key]: toUpperInput(value) }));
+  }
+
+  function updateCedula(value: string) {
+    const cedula = normalizeCedula(value);
+    setForm((prev) => ({ ...prev, cedula }));
+    if (cedula.length === 10) {
+      setCedulaError(validateEcuadorianCedula(cedula) ? "" : "Cédula inválida: revise el dígito verificador");
+    } else {
+      setCedulaError(cedula.length > 0 ? "La cédula debe tener 10 dígitos" : "");
+    }
+  }
+
   async function createCustomer(e: React.FormEvent) {
     e.preventDefault();
     if (form.hasTvStreaming && !form.tvStreamingSince) {
       setMsg("Indique la fecha de inicio del servicio TV Streams");
+      return;
+    }
+    if (!form.zone) {
+      setMsg("Seleccione la zona del cliente");
+      return;
+    }
+    if (!validateEcuadorianCedula(form.cedula)) {
+      setMsg("Cédula ecuatoriana inválida. Verifique los 10 dígitos y el dígito verificador");
       return;
     }
     const res = await fetch("/api/customers", {
@@ -74,6 +100,7 @@ export default function ClientesPage() {
     if (res.ok) {
       setMsg("Cliente creado");
       setForm(emptyForm);
+      setCedulaError("");
       setShowForm(false);
       await load();
     } else {
@@ -118,11 +145,31 @@ export default function ClientesPage() {
         <form onSubmit={createCustomer} className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
           <h2 className="font-semibold">Nuevo cliente</h2>
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Contrato *" value={form.contract} onChange={(v) => setForm({ ...form, contract: v })} required />
-            <Input label="Nombre *" value={form.name} onChange={(v) => setForm({ ...form, name: v })} required />
-            <Input label="Cédula *" value={form.cedula} onChange={(v) => setForm({ ...form, cedula: v })} required />
-            <Input label="Plan *" value={form.planName} onChange={(v) => setForm({ ...form, planName: v })} required />
-            <Input label="Dirección *" value={form.address} onChange={(v) => setForm({ ...form, address: v })} required />
+            <Input label="Contrato *" value={form.contract} onChange={(v) => updateUpper("contract", v)} uppercase required />
+            <Input label="Nombre *" value={form.name} onChange={(v) => updateUpper("name", v)} uppercase required />
+            <CedulaInput
+              label="Cédula *"
+              value={form.cedula}
+              onChange={updateCedula}
+              error={cedulaError}
+              required
+            />
+            <div>
+              <label className="text-xs text-slate-600">Zona *</label>
+              <select
+                value={form.zone}
+                required
+                onChange={(e) => setForm({ ...form, zone: e.target.value })}
+                className="mt-1 w-full rounded border px-2 py-1.5 text-sm uppercase"
+              >
+                <option value="">Seleccione zona</option>
+                {CUSTOMER_ZONES.map((z) => (
+                  <option key={z} value={z}>{z}</option>
+                ))}
+              </select>
+            </div>
+            <Input label="Plan *" value={form.planName} onChange={(v) => updateUpper("planName", v)} uppercase required />
+            <Input label="Dirección *" value={form.address} onChange={(v) => updateUpper("address", v)} uppercase required />
             <Input label="Fecha alta *" type="date" value={form.serviceStartDate} onChange={(v) => setForm({ ...form, serviceStartDate: v })} required />
             <Input label="Saldo pendiente" type="number" value={form.pendingBalance} onChange={(v) => setForm({ ...form, pendingBalance: v })} />
           </div>
@@ -165,19 +212,19 @@ export default function ClientesPage() {
                 </select>
                 <input placeholder="Marca" value={eq.brand} onChange={(e) => {
                   const equipment = [...form.equipment];
-                  equipment[i] = { ...eq, brand: e.target.value };
+                  equipment[i] = { ...eq, brand: toUpperInput(e.target.value) };
                   setForm({ ...form, equipment });
-                }} className="rounded border px-2 py-1 text-sm" />
+                }} className="rounded border px-2 py-1 text-sm uppercase" />
                 <input placeholder="Modelo" value={eq.model} onChange={(e) => {
                   const equipment = [...form.equipment];
-                  equipment[i] = { ...eq, model: e.target.value };
+                  equipment[i] = { ...eq, model: toUpperInput(e.target.value) };
                   setForm({ ...form, equipment });
-                }} className="rounded border px-2 py-1 text-sm" />
+                }} className="rounded border px-2 py-1 text-sm uppercase" />
                 <input placeholder="Serie" value={eq.serial} onChange={(e) => {
                   const equipment = [...form.equipment];
-                  equipment[i] = { ...eq, serial: e.target.value };
+                  equipment[i] = { ...eq, serial: toUpperInput(e.target.value) };
                   setForm({ ...form, equipment });
-                }} className="rounded border px-2 py-1 text-sm" />
+                }} className="rounded border px-2 py-1 text-sm uppercase" />
                 <button
                   type="button"
                   onClick={() => setForm({ ...form, equipment: form.equipment.filter((_, j) => j !== i) })}
@@ -207,6 +254,7 @@ export default function ClientesPage() {
             <tr>
               <th className="px-4 py-3">Contrato</th>
               <th className="px-4 py-3">Nombre</th>
+              <th className="px-4 py-3">Zona</th>
               <th className="px-4 py-3">Plan</th>
               <th className="px-4 py-3">TV desde</th>
               <th className="px-4 py-3">Saldo</th>
@@ -219,6 +267,7 @@ export default function ClientesPage() {
               <tr key={c.id} className="border-t">
                 <td className="px-4 py-3 font-medium">{c.contract}</td>
                 <td className="px-4 py-3">{c.name}</td>
+                <td className="px-4 py-3 text-slate-500">{c.zone ?? "—"}</td>
                 <td className="px-4 py-3">{c.planName}</td>
                 <td className="px-4 py-3 text-slate-500">
                   {c.hasTvStreaming && c.tvStreamingSince
@@ -260,12 +309,14 @@ function Input({
   onChange,
   type = "text",
   required,
+  uppercase,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   type?: string;
   required?: boolean;
+  uppercase?: boolean;
 }) {
   return (
     <div>
@@ -275,8 +326,39 @@ function Input({
         value={value}
         required={required}
         onChange={(e) => onChange(e.target.value)}
-        className="mt-1 w-full rounded border px-2 py-1.5 text-sm"
+        className={`mt-1 w-full rounded border px-2 py-1.5 text-sm${uppercase ? " uppercase" : ""}`}
       />
+    </div>
+  );
+}
+
+function CedulaInput({
+  label,
+  value,
+  onChange,
+  error,
+  required,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  error?: string;
+  required?: boolean;
+}) {
+  return (
+    <div>
+      <label className="text-xs text-slate-600">{label}</label>
+      <input
+        type="text"
+        inputMode="numeric"
+        maxLength={10}
+        value={value}
+        required={required}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="10 dígitos"
+        className={`mt-1 w-full rounded border px-2 py-1.5 text-sm ${error ? "border-red-400" : ""}`}
+      />
+      {error && <p className="mt-1 text-xs text-red-600">{error}</p>}
     </div>
   );
 }
