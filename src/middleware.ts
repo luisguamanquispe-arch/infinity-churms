@@ -3,13 +3,19 @@ import type { NextRequest } from "next/server";
 import { verifyToken, AUTH_COOKIE } from "@/lib/auth";
 import { canAccessRoute } from "@/lib/permissions";
 
-const PUBLIC = ["/login", "/api/auth/login", "/bajas", "/api/health"];
+const PUBLIC = ["/login", "/api/auth/login", "/api/health"];
+
+function isPublicPath(pathname: string) {
+  if (PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return true;
+  if (pathname.startsWith("/bajas/verificar/")) return true;
+  return false;
+}
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (
-    PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`)) ||
+    isPublicPath(pathname) ||
     pathname.startsWith("/_next") ||
     pathname.startsWith("/favicon")
   ) {

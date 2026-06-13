@@ -22,7 +22,7 @@ export async function GET(
     const baseUrl = getAppBaseUrl(request);
     const qrCode = row.qrCode ?? `BAJA-${id.slice(-8).toUpperCase()}`;
     const actaNumber = row.actaNumber ?? (await nextActaNumber());
-    const verifyUrl = `${baseUrl}/bajas/${id}`;
+    const verifyUrl = `${baseUrl}/bajas/verificar/${id}`;
 
     if (!row.qrCode || !row.actaNumber) {
       await prisma.cancellation.update({

@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { calculateLiquidation } from "@/lib/liquidation";
-import type { CancellationStatus, EquipmentCondition } from "@prisma/client";
+import type { CancellationStatus, EquipmentCondition, EquipmentType } from "@prisma/client";
 
 export async function customerHasCancellation(customerId: string) {
   const count = await prisma.cancellation.count({ where: { customerId } });
@@ -157,6 +157,42 @@ export async function initEquipmentChecklist(cancellationId: string, customerId:
   }
 }
 
+export async function addCancellationEquipment(
+  cancellationId: string,
+  data: { type: EquipmentType; serial?: string; brand?: string; model?: string }
+) {
+  const cancellation = await prisma.cancellation.findUnique({
+    where: { id: cancellationId },
+    select: { id: true, customerId: true, status: true },
+  });
+  if (!cancellation) throw new Error("NOT_FOUND");
+  if (["EQUIPOS_RECUPERADOS", "BAJA_COMPLETADA"].includes(cancellation.status)) {
+    throw new Error("CLOSED");
+  }
+
+  const customerEq = await prisma.customerEquipment.create({
+    data: {
+      customerId: cancellation.customerId,
+      type: data.type,
+      serial: data.serial?.trim() || null,
+      brand: data.brand?.trim() || null,
+      model: data.model?.trim() || null,
+    },
+  });
+
+  return prisma.cancellationEquipment.create({
+    data: {
+      cancellationId,
+      equipmentId: customerEq.id,
+      type: data.type,
+      serial: data.serial?.trim() || null,
+      brand: data.brand?.trim() || null,
+      model: data.model?.trim() || null,
+      delivered: false,
+    },
+  });
+}
+
 export async function updateEquipmentItem(
   id: string,
   data: {
@@ -165,6 +201,7 @@ export async function updateEquipmentItem(
     notes?: string;
     brand?: string;
     model?: string;
+    serial?: string;
   }
 ) {
   const item = await prisma.cancellationEquipment.update({
@@ -172,6 +209,17 @@ export async function updateEquipmentItem(
     data,
     include: { cancellation: true },
   });
+
+  if (item.equipmentId && (data.brand !== undefined || data.model !== undefined || data.serial !== undefined)) {
+    await prisma.customerEquipment.update({
+      where: { id: item.equipmentId },
+      data: {
+        ...(data.brand !== undefined ? { brand: data.brand?.trim() || null } : {}),
+        ...(data.model !== undefined ? { model: data.model?.trim() || null } : {}),
+        ...(data.serial !== undefined ? { serial: data.serial?.trim() || null } : {}),
+      },
+    });
+  }
 
   const tariffs = await prisma.equipmentTariff.findMany();
   const tariff = tariffs.find((t) => t.type === item.type);

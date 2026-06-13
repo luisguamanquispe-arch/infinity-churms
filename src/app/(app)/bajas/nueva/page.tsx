@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { COLORS, CANCELLATION_REASONS } from "@/lib/constants";
+import { COLORS, CANCELLATION_REASONS, INSTALLATION_PRORATION_LABEL } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { differenceInMonths } from "date-fns";
 
@@ -156,7 +156,7 @@ export default function NuevaBajaPage() {
           <section className="rounded-xl border bg-slate-50 p-5">
             <h2 className="font-semibold text-sm">Vista previa liquidación</h2>
             <p className="mt-2 text-sm">Meses cumplidos: {months} / 18</p>
-            <p className="text-sm">Permanencia estimada: {formatUsd(permanencePreview)}</p>
+            <p className="text-sm">{INSTALLATION_PRORATION_LABEL} estimado: {formatUsd(permanencePreview)}</p>
             {selected.hasTvStreaming && selected.tvStreamingSince && (
               <p className="text-sm">
                 TV Streams ({tvMonths} meses × $2): {formatUsd(tvMonths * 2)}

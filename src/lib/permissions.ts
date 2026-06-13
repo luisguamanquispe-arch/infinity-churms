@@ -36,6 +36,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "cancellations:create",
     "cancellations:charges",
     "cancellations:payment",
+    "cancellations:equipment",
     "customers:manage",
     "reports:view",
   ],

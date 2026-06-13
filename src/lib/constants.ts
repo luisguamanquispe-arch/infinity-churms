@@ -38,6 +38,12 @@ export const PAYMENT_METHODS = ["Efectivo", "Transferencia", "Tarjeta", "Depósi
 
 export const EQUIPMENT_TYPES = ["ONU", "ROUTER", "STB", "ANTENA", "OTRO"] as const;
 
+export const INSTALLATION_PRORATION_LABEL = "Prorrateo por instalación de servicio";
+
+export function installationProrationDetail(monthsCompleted: number) {
+  return `${INSTALLATION_PRORATION_LABEL} (${monthsCompleted} meses cumplidos)`;
+}
+
 export const EQUIPMENT_CONDITIONS = [
   { value: "BUENO", label: "Bueno" },
   { value: "DANADO", label: "Dañado" },

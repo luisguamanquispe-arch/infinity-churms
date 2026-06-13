@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { APP_NAME, SUSPENSION_POLICIES } from "@/lib/constants";
+import { APP_NAME, SUSPENSION_POLICIES, INSTALLATION_PRORATION_LABEL, installationProrationDetail } from "@/lib/constants";
 import type { Cancellation, CancellationCharge, CancellationEquipment, Customer } from "@prisma/client";
 
 export function generatePreliquidacionPdf(params: {
@@ -79,8 +79,8 @@ export function generatePreliquidacionPdf(params: {
     head: [["Concepto", "Detalle", "Valor USD"]],
     body: [
       [
-        "Permanencia",
-        `Penalidad por incumplimiento de permanencia (${c.monthsCompleted} meses cumplidos)`,
+        INSTALLATION_PRORATION_LABEL,
+        installationProrationDetail(c.monthsCompleted),
         Number(c.permanenceAmount).toFixed(2),
       ],
       [

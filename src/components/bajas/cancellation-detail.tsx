@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, SUSPENSION_POLICIES } from "@/lib/constants";
+import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, SUSPENSION_POLICIES, EQUIPMENT_TYPES, INSTALLATION_PRORATION_LABEL } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 
 interface Detail {
@@ -51,6 +51,7 @@ interface Permissions {
   equipment: boolean;
   advanceEquipment: boolean;
   close: boolean;
+  manageEquipment: boolean;
 }
 
 interface AuditEntry {
@@ -66,6 +67,7 @@ const ACTION_LABELS: Record<string, string> = {
   ADD_CHARGE: "Cargo agregado",
   PAYMENT: "Pago registrado",
   EQUIPMENT: "Equipo actualizado",
+  ADD_EQUIPMENT: "Equipo agregado a la baja",
   STATUS: "Cambio de estado",
   SIGNATURE: "Firma registrada",
   PDF_PRELIQUIDACION: "Pre-liquidación PDF generada",
@@ -84,6 +86,7 @@ export function CancellationDetail({
   const [audit, setAudit] = useState<AuditEntry[]>([]);
   const [signature, setSignature] = useState(initial.clientSignature ?? "");
   const [charge, setCharge] = useState({ concept: "", amount: "" });
+  const [newEquipment, setNewEquipment] = useState({ type: "ONU", serial: "", brand: "", model: "" });
   const [payment, setPayment] = useState({
     paymentDate: new Date().toISOString().slice(0, 10),
     method: PAYMENT_METHODS[0] as string,
@@ -139,6 +142,22 @@ export function CancellationDetail({
     await refresh();
   }
 
+  async function addEquipment() {
+    const res = await fetch(`/api/cancellations/${data.id}/equipment`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(newEquipment),
+    });
+    if (res.ok) {
+      setNewEquipment({ type: "ONU", serial: "", brand: "", model: "" });
+      setMsg("Equipo registrado");
+      await refresh();
+    } else {
+      const err = await res.json();
+      setMsg(err.error ?? "Error al agregar equipo");
+    }
+  }
+
   async function registerPayment() {
     if (!payment.invoiceNumber.trim()) {
       setMsg("Número de factura obligatorio");
@@ -170,7 +189,10 @@ export function CancellationDetail({
   }
 
   const closed = data.status === "BAJA_COMPLETADA";
-  const canEditEquipment = permissions.equipment && !closed && data.status === "PAGADA";
+  const equipmentPhaseOpen = !["EQUIPOS_RECUPERADOS", "BAJA_COMPLETADA"].includes(data.status);
+  const canAddEquipment = permissions.manageEquipment && !closed && equipmentPhaseOpen;
+  const canEditEquipmentDetails = canAddEquipment && data.status === "PENDIENTE_DE_PAGO";
+  const canReceiveEquipment = permissions.equipment && !closed && data.status === "PAGADA";
 
   return (
     <div className="space-y-6">
@@ -203,7 +225,7 @@ export function CancellationDetail({
         </Card>
 
         <Card title="Resumen de liquidación">
-          <Line label="Permanencia" value={formatUsd(Number(data.permanenceAmount))} />
+          <Line label={INSTALLATION_PRORATION_LABEL} value={formatUsd(Number(data.permanenceAmount))} />
           <Line label="TV Streams" value={formatUsd(Number(data.tvAmount))} />
           <Line label="Mensualidades" value={formatUsd(Number(data.monthlyAmount))} />
           <Line label="Otros" value={formatUsd(Number(data.otherAmount))} />
@@ -252,17 +274,33 @@ export function CancellationDetail({
         </Card>
       )}
 
-      <Card title="Recepción de equipos">
-        <div className="space-y-4">
+      <Card title="Recepción de equipos a devolver">
+        <p className="text-sm text-slate-600">
+          Registre los equipos que el cliente debe devolver. Seleccione el tipo de equipo y complete marca, modelo y serie.
+        </p>
+        {data.equipment.length === 0 && (
+          <p className="mt-2 text-sm text-amber-700">
+            No hay equipos registrados. Use las opciones de abajo para ingresar cada equipo a devolver.
+          </p>
+        )}
+        <div className="mt-4 space-y-4">
           {data.equipment.map((eq) => (
             <div key={eq.id} className="rounded-lg border p-3 text-sm">
               <p className="font-medium">{eq.type}</p>
               <p className="text-slate-600">{eq.brand ?? "—"} / {eq.model ?? "—"} · Serie: {eq.serial ?? "—"}</p>
-              {canEditEquipment && (
+              {canEditEquipmentDetails && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  <input placeholder="Marca" defaultValue={eq.brand ?? ""} onBlur={(e) => saveEquipment(eq.id, { brand: e.target.value })} className="rounded border px-2 py-1 text-xs" />
+                  <input placeholder="Modelo" defaultValue={eq.model ?? ""} onBlur={(e) => saveEquipment(eq.id, { model: e.target.value })} className="rounded border px-2 py-1 text-xs" />
+                  <input placeholder="Serie" defaultValue={eq.serial ?? ""} onBlur={(e) => saveEquipment(eq.id, { serial: e.target.value })} className="rounded border px-2 py-1 text-xs" />
+                </div>
+              )}
+              {canReceiveEquipment && (
                 <div className="mt-2 space-y-2">
                   <div className="flex flex-wrap gap-2">
                     <input placeholder="Marca" defaultValue={eq.brand ?? ""} onBlur={(e) => saveEquipment(eq.id, { brand: e.target.value })} className="rounded border px-2 py-1 text-xs" />
                     <input placeholder="Modelo" defaultValue={eq.model ?? ""} onBlur={(e) => saveEquipment(eq.id, { model: e.target.value })} className="rounded border px-2 py-1 text-xs" />
+                    <input placeholder="Serie" defaultValue={eq.serial ?? ""} onBlur={(e) => saveEquipment(eq.id, { serial: e.target.value })} className="rounded border px-2 py-1 text-xs" />
                   </div>
                   <div className="flex flex-wrap gap-3">
                     <label className="flex items-center gap-1">
@@ -278,11 +316,70 @@ export function CancellationDetail({
                   </div>
                 </div>
               )}
-              {!canEditEquipment && (
+              {!canEditEquipmentDetails && !canReceiveEquipment && (
                 <p className="mt-1 text-slate-500">{eq.delivered ? eq.condition : "Pendiente de recepción"}</p>
               )}
             </div>
           ))}
+        </div>
+        <div className="mt-4 rounded-lg border border-dashed border-teal-200 bg-teal-50/40 p-4">
+          <p className="text-sm font-semibold text-[#0B1F3A]">Ingresar equipo a devolver</p>
+          <p className="mt-1 text-xs text-slate-600">Seleccione el tipo de equipo:</p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {EQUIPMENT_TYPES.map((t) => (
+              <button
+                key={t}
+                type="button"
+                disabled={!canAddEquipment}
+                onClick={() => setNewEquipment({ ...newEquipment, type: t })}
+                className={`rounded-lg border px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50 ${
+                  newEquipment.type === t
+                    ? "border-[#00A9B5] bg-[#00A9B5] text-white shadow-sm"
+                    : "border-slate-300 bg-white text-slate-700 hover:border-[#00A9B5]"
+                }`}
+              >
+                {t}
+              </button>
+            ))}
+          </div>
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            <input
+              placeholder="Marca"
+              disabled={!canAddEquipment}
+              value={newEquipment.brand}
+              onChange={(e) => setNewEquipment({ ...newEquipment, brand: e.target.value })}
+              className="rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100"
+            />
+            <input
+              placeholder="Modelo"
+              disabled={!canAddEquipment}
+              value={newEquipment.model}
+              onChange={(e) => setNewEquipment({ ...newEquipment, model: e.target.value })}
+              className="rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100"
+            />
+            <input
+              placeholder="Serie"
+              disabled={!canAddEquipment}
+              value={newEquipment.serial}
+              onChange={(e) => setNewEquipment({ ...newEquipment, serial: e.target.value })}
+              className="rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100"
+            />
+          </div>
+          {canAddEquipment ? (
+            <button
+              onClick={addEquipment}
+              className="mt-4 rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm"
+              style={{ backgroundColor: COLORS.brand }}
+            >
+              + Agregar {newEquipment.type}
+            </button>
+          ) : (
+            <p className="mt-3 text-xs text-amber-700">
+              {closed || !equipmentPhaseOpen
+                ? "Esta baja ya no admite nuevos equipos."
+                : "Sin permiso para registrar equipos en esta baja."}
+            </p>
+          )}
         </div>
         {data.status === "PAGADA" && permissions.advanceEquipment && (
           <button onClick={advance} className="mt-4 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: COLORS.brand }}>
@@ -341,7 +438,7 @@ export function CancellationDetail({
             Cerrar baja (requiere factura)
           </button>
         )}
-        <a href={`/bajas/${data.id}`} target="_blank" className="rounded-lg border px-4 py-2 text-sm text-slate-600">Ver página QR</a>
+        <a href={`/bajas/verificar/${data.id}`} target="_blank" className="rounded-lg border px-4 py-2 text-sm text-slate-600">Ver página QR</a>
       </div>
 
       {audit.length > 0 && (

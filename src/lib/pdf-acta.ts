@@ -1,5 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { INSTALLATION_PRORATION_LABEL } from "@/lib/constants";
 import type {
   Cancellation,
   CancellationEquipment,
@@ -57,7 +58,7 @@ export async function generateActaPdf(params: {
     startY: y1,
     head: [["Concepto liquidación", "Valor USD"]],
     body: [
-      ["Permanencia", Number(c.permanenceAmount).toFixed(2)],
+      [INSTALLATION_PRORATION_LABEL, Number(c.permanenceAmount).toFixed(2)],
       ["TV Streams", Number(c.tvAmount).toFixed(2)],
       ["Mensualidades", Number(c.monthlyAmount).toFixed(2)],
       ...charges.map((ch) => [ch.concept, Number(ch.amount).toFixed(2)]),

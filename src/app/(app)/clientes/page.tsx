@@ -28,7 +28,7 @@ const emptyForm = {
   pendingBalance: "0",
   hasTvStreaming: false,
   tvStreamingSince: "",
-  equipment: [{ type: "ONU", serial: "", brand: "", model: "" }],
+  equipment: [] as { type: string; serial: string; brand: string; model: string }[],
 };
 
 export default function ClientesPage() {
@@ -68,7 +68,7 @@ export default function ClientesPage() {
         ...form,
         pendingBalance: parseFloat(form.pendingBalance),
         tvStreamingSince: form.hasTvStreaming ? form.tvStreamingSince : null,
-        equipment: form.equipment.filter((eq) => eq.type),
+        equipment: form.equipment.filter((eq) => eq.type && (eq.serial || eq.brand || eq.model)),
       }),
     });
     if (res.ok) {
@@ -144,9 +144,12 @@ export default function ClientesPage() {
             />
           )}
           <div className="space-y-2">
-            <p className="text-sm font-medium">Equipos</p>
+            <p className="text-sm font-medium">Equipos <span className="font-normal text-slate-500">(opcional)</span></p>
+            {form.equipment.length === 0 && (
+              <p className="text-xs text-slate-500">Puede omitir equipos y registrarlos después en la baja.</p>
+            )}
             {form.equipment.map((eq, i) => (
-              <div key={i} className="grid gap-2 sm:grid-cols-4">
+              <div key={i} className="grid gap-2 sm:grid-cols-5">
                 <select
                   value={eq.type}
                   onChange={(e) => {
@@ -175,11 +178,18 @@ export default function ClientesPage() {
                   equipment[i] = { ...eq, serial: e.target.value };
                   setForm({ ...form, equipment });
                 }} className="rounded border px-2 py-1 text-sm" />
+                <button
+                  type="button"
+                  onClick={() => setForm({ ...form, equipment: form.equipment.filter((_, j) => j !== i) })}
+                  className="text-xs text-red-600"
+                >
+                  Quitar
+                </button>
               </div>
             ))}
             <button
               type="button"
-              onClick={() => setForm({ ...form, equipment: [...form.equipment, { type: "ROUTER", serial: "", brand: "", model: "" }] })}
+              onClick={() => setForm({ ...form, equipment: [...form.equipment, { type: "ONU", serial: "", brand: "", model: "" }] })}
               className="text-xs text-teal-700"
             >
               + Equipo
@@ -226,7 +236,9 @@ export default function ClientesPage() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-slate-500">
-                  {c.equipment.map((e) => `${e.type}${e.brand ? ` (${e.brand})` : ""}`).join(", ")}
+                  {c.equipment.length > 0
+                    ? c.equipment.map((e) => `${e.type}${e.brand ? ` (${e.brand})` : ""}`).join(", ")
+                    : "Sin registrar"}
                 </td>
                 <td className="px-4 py-3">
                   <button onClick={() => setEditingBalance({ id: c.id, value: String(c.pendingBalance) })} className="text-xs text-teal-700 hover:underline">
