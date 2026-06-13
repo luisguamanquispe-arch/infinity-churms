@@ -29,7 +29,7 @@ const ALL: Permission[] = [
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ADMIN: ALL,
-  SUPERVISOR: ALL.filter((p) => p !== "config:manage"),
+  SUPERVISOR: ALL.filter((p) => p !== "config:manage" && p !== "reports:view"),
   COBRANZAS: [
     "dashboard:view",
     "cancellations:list",
