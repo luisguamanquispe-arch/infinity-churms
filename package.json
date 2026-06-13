@@ -15,6 +15,7 @@
     "db:generate": "prisma generate",
     "db:push": "prisma db push",
     "db:seed": "tsx prisma/seed.ts",
+    "db:clear-data": "tsx prisma/run-clear-business-data.ts",
     "db:studio": "prisma studio"
   },
   "engines": {

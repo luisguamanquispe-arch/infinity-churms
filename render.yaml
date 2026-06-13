@@ -20,6 +20,8 @@ services:
         generateValue: true
       - key: NEXT_PUBLIC_APP_URL
         sync: false
+      - key: CLEAR_BUSINESS_DATA
+        value: "1"
 
 databases:
   - name: infinity-bajas

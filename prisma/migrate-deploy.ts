@@ -1,4 +1,5 @@
 import { PrismaClient } from "@prisma/client";
+import { clearBusinessData } from "./clear-business-data";
 
 const prisma = new PrismaClient();
 
@@ -118,6 +119,12 @@ async function main() {
       END IF;
     END $$;
   `);
+
+  if (process.env.CLEAR_BUSINESS_DATA === "1") {
+    console.log("CLEAR_BUSINESS_DATA=1 — eliminando datos de prueba...");
+    const deleted = await clearBusinessData(prisma);
+    console.log("Datos eliminados:", deleted);
+  }
 
   console.log("Pre-deploy migrations OK");
 }

@@ -60,48 +60,6 @@ async function main() {
     });
   }
 
-  const customer = await prisma.customer.upsert({
-    where: { contract: "CTR-1001" },
-    update: {
-      name: "JUAN PEREZ GARCIA",
-      planName: "FIBRA 100 MBPS",
-      zone: "CENTRO",
-      cedula: "1713175071",
-      hasTvStreaming: true,
-      pendingBalance: 60,
-    },
-    create: {
-      contract: "CTR-1001",
-      name: "JUAN PEREZ GARCIA",
-      cedula: "1713175071",
-      address: "AV. PRINCIPAL #45, SECTOR NORTE",
-      zone: "CENTRO",
-      phone: "0414-5551234",
-      serviceStartDate: new Date(Date.now() - 8 * 30 * 24 * 60 * 60 * 1000),
-      planName: "FIBRA 100 MBPS",
-      hasTvStreaming: true,
-      tvStreamingSince: new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000),
-      pendingBalance: 60,
-    },
-  });
-
-  const equip = [
-    { type: "ONU" as const, serial: "HWTC12345678", brand: "Huawei", model: "HG8546M" },
-    { type: "ROUTER" as const, serial: "TPL98765432", brand: "TP-Link", model: "Archer C6" },
-    { type: "STB" as const, serial: "STB44556677", brand: "Infomir", model: "MAG322" },
-  ];
-
-  for (const e of equip) {
-    const exists = await prisma.customerEquipment.findFirst({
-      where: { customerId: customer.id, serial: e.serial },
-    });
-    if (!exists) {
-      await prisma.customerEquipment.create({
-        data: { customerId: customer.id, ...e },
-      });
-    }
-  }
-
   console.log("Seed OK — usuarios: admin@infinity.net, supervisor@infinity.net");
 }
 
