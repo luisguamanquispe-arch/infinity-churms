@@ -4,15 +4,22 @@ import { STATUS_LABELS, COLORS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
+import { isDatabaseConnected } from "@/lib/db-status";
 
 export default async function BajasPage() {
   const session = await getSession();
   const canCreate = session ? hasPermission(session.role, "cancellations:create") : false;
+
+  const dbOk = await isDatabaseConnected();
   let rows: Awaited<ReturnType<typeof listCancellations>> = [];
-  try {
-    rows = await listCancellations();
-  } catch {
-    rows = [];
+  let loadError = false;
+
+  if (dbOk) {
+    try {
+      rows = await listCancellations();
+    } catch {
+      loadError = true;
+    }
   }
 
   return (
@@ -30,6 +37,21 @@ export default async function BajasPage() {
         )}
       </header>
 
+      {!dbOk && (
+        <p className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+          No hay conexión con PostgreSQL. Verifique que DATABASE_URL esté configurada en el servidor y ejecute{" "}
+          <code className="rounded bg-red-100 px-1">npm run render:deploy</code> o{" "}
+          <code className="rounded bg-red-100 px-1">npm run db:seed</code>.
+        </p>
+      )}
+
+      {loadError && dbOk && (
+        <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          Error al cargar las bajas. Es posible que falte una migración de base de datos. Vuelva a desplegar la
+          aplicación o contacte al administrador.
+        </p>
+      )}
+
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
         <table className="w-full text-sm">
           <thead className="bg-slate-50 text-left">
@@ -45,7 +67,30 @@ export default async function BajasPage() {
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
-                  Sin solicitudes — conecte PostgreSQL y ejecute npm run db:seed
+                  {dbOk && !loadError ? (
+                    <span>
+                      No hay solicitudes de baja registradas.
+                      <br />
+                      <span className="mt-2 inline-block text-sm">
+                        Primero cree un cliente en{" "}
+                        <Link href="/clientes" className="font-semibold text-teal-600 hover:underline">
+                          Clientes
+                        </Link>
+                        {canCreate && (
+                          <>
+                            {" "}
+                            y luego registre una{" "}
+                            <Link href="/bajas/nueva" className="font-semibold text-teal-600 hover:underline">
+                              nueva baja
+                            </Link>
+                          </>
+                        )}
+                        .
+                      </span>
+                    </span>
+                  ) : (
+                    "No se pudieron cargar las solicitudes."
+                  )}
                 </td>
               </tr>
             ) : (
