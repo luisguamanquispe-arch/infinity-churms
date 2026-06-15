@@ -21,10 +21,21 @@ export async function POST(
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }
     const { id } = await ctx.params;
-    const { type, serial, brand, model } = await request.json();
+    const body = await request.json();
+    const { type } = body;
 
     if (!type || !VALID_TYPES.includes(type)) {
       return NextResponse.json({ error: "Tipo de equipo obligatorio" }, { status: 400 });
+    }
+
+    const brand = String(body.brand ?? "").trim();
+    const model = String(body.model ?? "").trim();
+    const serial = String(body.serial ?? "").trim();
+    if (!brand || !model || !serial) {
+      return NextResponse.json(
+        { error: "Marca, modelo y serie son obligatorios para registrar el equipo como entregado" },
+        { status: 400 }
+      );
     }
 
     const item = await addCancellationEquipment(id, {
@@ -59,7 +70,14 @@ export async function PATCH(
   _ctx: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requirePermission("cancellations:equipment");
+    const session = await requireSession();
+    if (
+      !hasPermission(session.role, "cancellations:equipment") &&
+      !hasPermission(session.role, "cancellations:charges") &&
+      !hasPermission(session.role, "cancellations:create")
+    ) {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
     const { equipmentId, delivered, condition, notes, brand, model, serial } = await request.json();
 
     await updateEquipmentItem(equipmentId, {

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { calculateLiquidation } from "@/lib/liquidation";
 import type { CancellationStatus, EquipmentCondition, EquipmentType } from "@prisma/client";
+import { deliveryStateForEquipment, isEquipmentReceptionComplete } from "@/lib/equipment-reception";
 
 export async function customerHasCancellation(customerId: string) {
   const count = await prisma.cancellation.count({ where: { customerId } });
@@ -170,27 +171,36 @@ export async function addCancellationEquipment(
     throw new Error("CLOSED");
   }
 
+  const brand = data.brand?.trim() || null;
+  const model = data.model?.trim() || null;
+  const serial = data.serial?.trim() || null;
+  const delivery = deliveryStateForEquipment(brand, model, serial);
+
   const customerEq = await prisma.customerEquipment.create({
     data: {
       customerId: cancellation.customerId,
       type: data.type,
-      serial: data.serial?.trim() || null,
-      brand: data.brand?.trim() || null,
-      model: data.model?.trim() || null,
+      serial,
+      brand,
+      model,
     },
   });
 
-  return prisma.cancellationEquipment.create({
+  const item = await prisma.cancellationEquipment.create({
     data: {
       cancellationId,
       equipmentId: customerEq.id,
       type: data.type,
-      serial: data.serial?.trim() || null,
-      brand: data.brand?.trim() || null,
-      model: data.model?.trim() || null,
-      delivered: false,
+      serial,
+      brand,
+      model,
+      delivered: delivery.delivered,
+      condition: delivery.condition,
+      chargeAmount: 0,
     },
   });
+
+  return item;
 }
 
 export async function updateEquipmentItem(
@@ -204,7 +214,29 @@ export async function updateEquipmentItem(
     serial?: string;
   }
 ) {
-  const patch = { ...data };
+  const current = await prisma.cancellationEquipment.findUnique({ where: { id } });
+  if (!current) throw new Error("NOT_FOUND");
+
+  const brand = data.brand !== undefined ? data.brand?.trim() || null : current.brand;
+  const model = data.model !== undefined ? data.model?.trim() || null : current.model;
+  const serial = data.serial !== undefined ? data.serial?.trim() || null : current.serial;
+
+  const patch: typeof data = {
+    ...data,
+    ...(data.brand !== undefined ? { brand: brand ?? undefined } : {}),
+    ...(data.model !== undefined ? { model: model ?? undefined } : {}),
+    ...(data.serial !== undefined ? { serial: serial ?? undefined } : {}),
+  };
+
+  if (isEquipmentReceptionComplete(brand, model, serial)) {
+    if (patch.delivered === undefined) {
+      patch.delivered = true;
+    }
+    if (patch.delivered && !patch.condition) {
+      patch.condition = "BUENO";
+    }
+  }
+
   if (patch.delivered === true && !patch.condition) {
     patch.condition = "BUENO";
   }
@@ -218,14 +250,10 @@ export async function updateEquipmentItem(
     include: { cancellation: true },
   });
 
-  if (item.equipmentId && (data.brand !== undefined || data.model !== undefined || data.serial !== undefined)) {
+  if (item.equipmentId) {
     await prisma.customerEquipment.update({
       where: { id: item.equipmentId },
-      data: {
-        ...(data.brand !== undefined ? { brand: data.brand?.trim() || null } : {}),
-        ...(data.model !== undefined ? { model: data.model?.trim() || null } : {}),
-        ...(data.serial !== undefined ? { serial: data.serial?.trim() || null } : {}),
-      },
+      data: { brand, model, serial },
     });
   }
 

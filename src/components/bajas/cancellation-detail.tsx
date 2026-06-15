@@ -3,7 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, SUSPENSION_POLICIES, EQUIPMENT_TYPES, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL } from "@/lib/constants";
+import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, SUSPENSION_POLICIES, EQUIPMENT_TYPES, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL, getEquipmentReportStatus } from "@/lib/constants";
+import { isEquipmentReceptionComplete } from "@/lib/equipment-reception";
 import { formatUsd } from "@/lib/liquidation";
 
 interface Detail {
@@ -145,6 +146,10 @@ export function CancellationDetail({
   }
 
   async function addEquipment() {
+    if (!isEquipmentReceptionComplete(newEquipment.brand, newEquipment.model, newEquipment.serial)) {
+      setMsg("Complete marca, modelo y serie para registrar el equipo como entregado");
+      return;
+    }
     const res = await fetch(`/api/cancellations/${data.id}/equipment`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -152,7 +157,7 @@ export function CancellationDetail({
     });
     if (res.ok) {
       setNewEquipment({ type: "ONU", serial: "", brand: "", model: "" });
-      setMsg("Equipo registrado");
+      setMsg("Equipo registrado como entregado");
       await refresh();
     } else {
       const err = await res.json();
@@ -279,7 +284,7 @@ export function CancellationDetail({
 
       <Card title="Recepción de equipos a devolver">
         <p className="text-sm text-slate-600">
-          Registre los equipos que el cliente debe devolver. Seleccione el tipo de equipo y complete marca, modelo y serie.
+          Registre los equipos devueltos con marca, modelo y serie. Al completar los datos se marcan automáticamente como entregados y aparecen en el acta.
         </p>
         {data.equipment.length === 0 && (
           <p className="mt-2 text-sm text-amber-700">
@@ -291,6 +296,9 @@ export function CancellationDetail({
             <div key={eq.id} className="rounded-lg border p-3 text-sm">
               <p className="font-medium">{eq.type}</p>
               <p className="text-slate-600">{eq.brand ?? "—"} / {eq.model ?? "—"} · Serie: {eq.serial ?? "—"}</p>
+              <p className={`mt-1 text-xs ${eq.delivered ? "font-medium text-teal-700" : "text-slate-500"}`}>
+                {getEquipmentReportStatus(eq.delivered, eq.condition)}
+              </p>
               {canEditEquipmentDetails && (
                 <div className="mt-2 flex flex-wrap gap-2">
                   <input placeholder="Marca" defaultValue={eq.brand ?? ""} onBlur={(e) => saveEquipment(eq.id, { brand: e.target.value })} className="rounded border px-2 py-1 text-xs" />
@@ -319,15 +327,14 @@ export function CancellationDetail({
                   </div>
                 </div>
               )}
-              {!canEditEquipmentDetails && !canReceiveEquipment && (
-                <p className="mt-1 text-slate-500">{eq.delivered ? eq.condition : "Pendiente de recepción"}</p>
-              )}
             </div>
           ))}
         </div>
         <div className="mt-4 rounded-lg border border-dashed border-teal-200 bg-teal-50/40 p-4">
           <p className="text-sm font-semibold text-[#0B1F3A]">Ingresar equipo a devolver</p>
-          <p className="mt-1 text-xs text-slate-600">Seleccione el tipo de equipo:</p>
+            <p className="mt-1 text-xs text-slate-600">
+              Seleccione el tipo de equipo. Marca, modelo y serie son obligatorios; al completarlos se registra como entregado.
+            </p>
           <div className="mt-3 flex flex-wrap gap-2">
             {EQUIPMENT_TYPES.map((t) => (
               <button
@@ -345,36 +352,39 @@ export function CancellationDetail({
               </button>
             ))}
           </div>
-          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            <input
-              placeholder="Marca"
-              disabled={!canAddEquipment}
-              value={newEquipment.brand}
-              onChange={(e) => setNewEquipment({ ...newEquipment, brand: e.target.value })}
-              className="rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100"
-            />
-            <input
-              placeholder="Modelo"
-              disabled={!canAddEquipment}
-              value={newEquipment.model}
-              onChange={(e) => setNewEquipment({ ...newEquipment, model: e.target.value })}
-              className="rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100"
-            />
-            <input
-              placeholder="Serie"
-              disabled={!canAddEquipment}
-              value={newEquipment.serial}
-              onChange={(e) => setNewEquipment({ ...newEquipment, serial: e.target.value })}
-              className="rounded-lg border px-3 py-2 text-sm disabled:bg-slate-100"
-            />
-          </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-3">
+              <input
+                placeholder="Marca *"
+                required
+                disabled={!canAddEquipment}
+                value={newEquipment.brand}
+                onChange={(e) => setNewEquipment({ ...newEquipment, brand: e.target.value })}
+                className="rounded-lg border px-3 py-2 text-sm uppercase disabled:bg-slate-100"
+              />
+              <input
+                placeholder="Modelo *"
+                required
+                disabled={!canAddEquipment}
+                value={newEquipment.model}
+                onChange={(e) => setNewEquipment({ ...newEquipment, model: e.target.value })}
+                className="rounded-lg border px-3 py-2 text-sm uppercase disabled:bg-slate-100"
+              />
+              <input
+                placeholder="Serie *"
+                required
+                disabled={!canAddEquipment}
+                value={newEquipment.serial}
+                onChange={(e) => setNewEquipment({ ...newEquipment, serial: e.target.value })}
+                className="rounded-lg border px-3 py-2 text-sm uppercase disabled:bg-slate-100"
+              />
+            </div>
           {canAddEquipment ? (
             <button
               onClick={addEquipment}
               className="mt-4 rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm"
               style={{ backgroundColor: COLORS.brand }}
             >
-              + Agregar {newEquipment.type}
+              + Agregar {newEquipment.type} como entregado
             </button>
           ) : (
             <p className="mt-3 text-xs text-amber-700">
