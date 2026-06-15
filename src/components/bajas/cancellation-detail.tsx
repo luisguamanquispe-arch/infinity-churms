@@ -137,11 +137,16 @@ export function CancellationDetail({
   }
 
   async function saveEquipment(eqId: string, patch: Record<string, unknown>) {
-    await fetch(`/api/cancellations/${data.id}/equipment`, {
+    const res = await fetch(`/api/cancellations/${data.id}/equipment`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ equipmentId: eqId, ...patch }),
     });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      setMsg((err as { error?: string }).error ?? "Error al guardar equipo");
+      return;
+    }
     await refresh();
   }
 
@@ -293,7 +298,10 @@ export function CancellationDetail({
         )}
         <div className="mt-4 space-y-4">
           {data.equipment.map((eq) => (
-            <div key={eq.id} className="rounded-lg border p-3 text-sm">
+            <div
+              key={`${eq.id}-${eq.brand ?? ""}-${eq.model ?? ""}-${eq.serial ?? ""}-${eq.delivered}-${eq.condition ?? ""}`}
+              className="rounded-lg border p-3 text-sm"
+            >
               <p className="font-medium">{eq.type}</p>
               <p className="text-slate-600">{eq.brand ?? "—"} / {eq.model ?? "—"} · Serie: {eq.serial ?? "—"}</p>
               <p className={`mt-1 text-xs ${eq.delivered ? "font-medium text-teal-700" : "text-slate-500"}`}>

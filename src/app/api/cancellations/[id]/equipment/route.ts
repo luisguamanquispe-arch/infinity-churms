@@ -80,7 +80,11 @@ export async function PATCH(
     }
     const { equipmentId, delivered, condition, notes, brand, model, serial } = await request.json();
 
-    await updateEquipmentItem(equipmentId, {
+    if (!equipmentId || typeof equipmentId !== "string") {
+      return NextResponse.json({ error: "equipmentId obligatorio" }, { status: 400 });
+    }
+
+    const item = await updateEquipmentItem(equipmentId, {
       delivered,
       condition: condition as EquipmentCondition | null,
       notes,
@@ -96,8 +100,11 @@ export async function PATCH(
       entityId: equipmentId,
     });
 
-    return NextResponse.json({ ok: true });
-  } catch {
+    return NextResponse.json(item);
+  } catch (e) {
+    if (e instanceof Error && e.message === "NOT_FOUND") {
+      return NextResponse.json({ error: "Equipo no encontrado" }, { status: 404 });
+    }
     return NextResponse.json({ error: "Error" }, { status: 500 });
   }
 }

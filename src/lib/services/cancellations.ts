@@ -221,32 +221,44 @@ export async function updateEquipmentItem(
   const model = data.model !== undefined ? data.model?.trim() || null : current.model;
   const serial = data.serial !== undefined ? data.serial?.trim() || null : current.serial;
 
-  const patch: typeof data = {
-    ...data,
-    ...(data.brand !== undefined ? { brand: brand ?? undefined } : {}),
-    ...(data.model !== undefined ? { model: model ?? undefined } : {}),
-    ...(data.serial !== undefined ? { serial: serial ?? undefined } : {}),
-  };
+  let delivered = data.delivered !== undefined ? data.delivered : current.delivered;
+  let condition = data.condition !== undefined ? data.condition : current.condition;
 
   if (isEquipmentReceptionComplete(brand, model, serial)) {
-    if (patch.delivered === undefined) {
-      patch.delivered = true;
+    if (data.delivered === undefined) {
+      delivered = true;
     }
-    if (patch.delivered && !patch.condition) {
-      patch.condition = "BUENO";
+    if (delivered && !condition) {
+      condition = "BUENO";
     }
   }
 
-  if (patch.delivered === true && !patch.condition) {
-    patch.condition = "BUENO";
+  if (data.delivered === true && !condition) {
+    condition = "BUENO";
   }
-  if (patch.delivered === false) {
-    patch.condition = null;
+  if (data.delivered === false) {
+    condition = null;
   }
+
+  const updateData: {
+    brand?: string | null;
+    model?: string | null;
+    serial?: string | null;
+    notes?: string | null;
+    delivered: boolean;
+    condition: EquipmentCondition | null;
+  } = {
+    delivered,
+    condition,
+    ...(data.brand !== undefined ? { brand } : {}),
+    ...(data.model !== undefined ? { model } : {}),
+    ...(data.serial !== undefined ? { serial } : {}),
+    ...(data.notes !== undefined ? { notes: data.notes?.trim() || null } : {}),
+  };
 
   const item = await prisma.cancellationEquipment.update({
     where: { id },
-    data: patch,
+    data: updateData,
     include: { cancellation: true },
   });
 
