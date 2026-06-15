@@ -204,9 +204,17 @@ export async function updateEquipmentItem(
     serial?: string;
   }
 ) {
+  const patch = { ...data };
+  if (patch.delivered === true && !patch.condition) {
+    patch.condition = "BUENO";
+  }
+  if (patch.delivered === false) {
+    patch.condition = null;
+  }
+
   const item = await prisma.cancellationEquipment.update({
     where: { id },
-    data,
+    data: patch,
     include: { cancellation: true },
   });
 

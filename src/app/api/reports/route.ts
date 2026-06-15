@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { listClosedForAnalysis } from "@/lib/services/cancellations";
-import { REASON_LABELS } from "@/lib/constants";
+import { REASON_LABELS, getEquipmentReportStatus } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
@@ -51,12 +51,14 @@ export async function GET(request: NextRequest) {
         orderBy: { cancellation: { requestDate: "desc" } },
       });
 
-      const recovered = items.filter((i) => i.delivered && i.condition === "BUENO").length;
-      const damaged = items.filter((i) => i.condition === "DANADO").length;
+      const entregados = items.filter((i) => i.delivered && i.condition !== "NO_ENTREGADO").length;
+      const recuperados = items.filter((i) => i.delivered && (i.condition === "BUENO" || !i.condition)).length;
+      const damaged = items.filter((i) => i.delivered && i.condition === "DANADO").length;
       const lost = items.filter((i) => !i.delivered || i.condition === "NO_ENTREGADO").length;
 
       return NextResponse.json({
-        recovered,
+        entregados,
+        recovered: recuperados,
         damaged,
         lost,
         items: items.map((i) => ({
@@ -72,6 +74,7 @@ export async function GET(request: NextRequest) {
           model: i.model,
           delivered: i.delivered,
           condition: i.condition,
+          statusLabel: getEquipmentReportStatus(i.delivered, i.condition),
           notes: i.notes,
         })),
       });

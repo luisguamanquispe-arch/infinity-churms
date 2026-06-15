@@ -14,6 +14,7 @@ interface EquipoRow {
   serial: string | null;
   delivered: boolean;
   condition: string | null;
+  statusLabel: string;
   cancellationStatus: string;
 }
 
@@ -29,7 +30,7 @@ interface CausaRow {
 
 export default function ReportesPage() {
   const [bajas, setBajas] = useState<unknown[]>([]);
-  const [equipos, setEquipos] = useState<{ recovered: number; damaged: number; lost: number; items: EquipoRow[] }>({ recovered: 0, damaged: 0, lost: 0, items: [] });
+  const [equipos, setEquipos] = useState<{ entregados: number; recovered: number; damaged: number; lost: number; items: EquipoRow[] }>({ entregados: 0, recovered: 0, damaged: 0, lost: 0, items: [] });
   const [valores, setValores] = useState<Record<string, number>>({});
   const [causas, setCausas] = useState<{ rows: CausaRow[]; byReason: { label: string; count: number }[] } | null>(null);
   const [role, setRole] = useState("");
@@ -92,9 +93,10 @@ export default function ReportesPage() {
 
       <section className="rounded-xl border bg-white p-5">
         <h2 className="font-semibold">Equipos recuperados por contrato / cliente</h2>
-        <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
-          <Kpi label="Recuperados (bueno)" value={equipos.recovered ?? 0} />
-          <Kpi label="Dañados" value={equipos.damaged ?? 0} />
+        <div className="mt-3 grid grid-cols-2 gap-3 text-sm sm:grid-cols-4">
+          <Kpi label="Entregados" value={equipos.entregados ?? 0} />
+          <Kpi label="Buen estado" value={equipos.recovered ?? 0} />
+          <Kpi label="Entregados (dañado)" value={equipos.damaged ?? 0} />
           <Kpi label="No entregados" value={equipos.lost ?? 0} />
         </div>
         <div className="mt-4 overflow-x-auto">
@@ -108,7 +110,7 @@ export default function ReportesPage() {
                 <th>Marca</th>
                 <th>Modelo</th>
                 <th>Serie</th>
-                <th>Estado</th>
+                <th>Estado equipo</th>
                 <th>Baja</th>
               </tr>
             </thead>
@@ -122,7 +124,11 @@ export default function ReportesPage() {
                   <td>{i.brand ?? "—"}</td>
                   <td>{i.model ?? "—"}</td>
                   <td>{i.serial ?? "—"}</td>
-                  <td>{i.delivered ? (i.condition ?? "BUENO") : "NO ENTREGADO"}</td>
+                  <td>
+                    <span className={i.delivered && i.condition !== "NO_ENTREGADO" ? "font-medium text-teal-700" : "text-slate-500"}>
+                      {i.statusLabel ?? (i.delivered ? "Entregado" : "No entregado")}
+                    </span>
+                  </td>
                   <td>{STATUS_LABELS[i.cancellationStatus] ?? i.cancellationStatus}</td>
                 </tr>
               ))}

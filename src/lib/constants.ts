@@ -89,6 +89,16 @@ export const EQUIPMENT_CONDITIONS = [
   { value: "NO_ENTREGADO", label: "No entregado" },
 ] as const;
 
+export const EQUIPMENT_CONDITION_LABELS: Record<string, string> = Object.fromEntries(
+  EQUIPMENT_CONDITIONS.map((c) => [c.value, c.label])
+);
+
+export function getEquipmentReportStatus(delivered: boolean, condition: string | null) {
+  if (!delivered || condition === "NO_ENTREGADO") return "No entregado";
+  if (condition === "DANADO") return "Entregado (dañado)";
+  return "Entregado";
+}
+
 export const SUSPENSION_POLICIES = [
   "Las solicitudes de cancelación de servicio se receptan únicamente hasta el día 15 de cada mes.",
   "El cliente debe enviar fotografía de los equipos prestados (ONU, router, decodificador u otros) al momento de solicitar la baja.",
