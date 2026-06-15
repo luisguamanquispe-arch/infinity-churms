@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { formatUsd } from "@/lib/liquidation";
-import { STATUS_LABELS, INSTALLATION_PRORATION_LABEL } from "@/lib/constants";
+import { STATUS_LABELS, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL } from "@/lib/constants";
 
 interface EquipoRow {
   contract: string;
@@ -135,7 +135,7 @@ export default function ReportesPage() {
         <h2 className="font-semibold">Valores recuperados</h2>
         <div className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
           <Line label={INSTALLATION_PRORATION_LABEL} value={formatUsd(valores.permanence ?? 0)} />
-          <Line label="TV" value={formatUsd(valores.tv ?? 0)} />
+          <Line label={STREAMS_SUPPORT_LABEL} value={formatUsd(valores.tv ?? 0)} />
           <Line label="Mensualidades" value={formatUsd(valores.monthly ?? 0)} />
           <Line label="Total" value={formatUsd(valores.total ?? 0)} />
         </div>

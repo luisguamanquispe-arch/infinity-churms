@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { APP_NAME, SUSPENSION_POLICIES, INSTALLATION_PRORATION_LABEL, installationProrationDetail } from "@/lib/constants";
+import { APP_NAME, SUSPENSION_POLICIES, INSTALLATION_PRORATION_LABEL, installationProrationDetail, STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL } from "@/lib/constants";
 import type { Cancellation, CancellationCharge, CancellationEquipment, Customer } from "@prisma/client";
 
 export function generatePreliquidacionPdf(params: {
@@ -59,7 +59,7 @@ export function generatePreliquidacionPdf(params: {
       ["Meses cumplidos", `${c.monthsCompleted} meses`],
       ["Motivo de baja", params.reasonLabel],
       ...(customer.hasTvStreaming && customer.tvStreamingSince
-        ? [["TV Streams desde", customer.tvStreamingSince.toLocaleDateString("es-VE")]]
+        ? [[STREAMS_SUPPORT_SINCE_LABEL, customer.tvStreamingSince.toLocaleDateString("es-VE")]]
         : []),
     ],
   });
@@ -85,8 +85,8 @@ export function generatePreliquidacionPdf(params: {
         Number(c.permanenceAmount).toFixed(2),
       ],
       [
-        "TV Streams",
-        customer.hasTvStreaming ? "Servicio de TV activo" : "No aplica",
+        STREAMS_SUPPORT_LABEL,
+        customer.hasTvStreaming ? "Soporte de Streams activo" : "No aplica",
         Number(c.tvAmount).toFixed(2),
       ],
       ["Mensualidades pendientes", "Saldo de facturación pendiente", Number(c.monthlyAmount).toFixed(2)],

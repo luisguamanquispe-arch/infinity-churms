@@ -79,6 +79,10 @@ export function installationProrationDetail(monthsCompleted: number) {
   return `${INSTALLATION_PRORATION_LABEL} (${monthsCompleted} meses cumplidos)`;
 }
 
+export const STREAMS_SUPPORT_LABEL = "Soporte de Streams";
+export const HAS_STREAMS_SUPPORT_LABEL = "Tiene soporte de Streams";
+export const STREAMS_SUPPORT_SINCE_LABEL = "Soporte de Streams desde";
+
 export const EQUIPMENT_CONDITIONS = [
   { value: "BUENO", label: "Bueno" },
   { value: "DANADO", label: "Dañado" },

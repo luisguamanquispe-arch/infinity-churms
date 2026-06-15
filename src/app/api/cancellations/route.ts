@@ -50,7 +50,7 @@ export async function POST(request: NextRequest) {
 
     if (customer.hasTvStreaming && !customer.tvStreamingSince) {
       return NextResponse.json(
-        { error: "Cliente con TV Streams debe tener fecha de inicio del servicio TV" },
+        { error: "Cliente con soporte de Streams debe tener fecha de inicio del servicio" },
         { status: 400 }
       );
     }

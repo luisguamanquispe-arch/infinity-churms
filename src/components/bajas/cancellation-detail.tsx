@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, SUSPENSION_POLICIES, EQUIPMENT_TYPES, INSTALLATION_PRORATION_LABEL } from "@/lib/constants";
+import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, SUSPENSION_POLICIES, EQUIPMENT_TYPES, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 
 interface Detail {
@@ -222,13 +222,13 @@ export function CancellationDetail({
           <Info label="Meses cumplidos" value={String(data.monthsCompleted)} />
           <Info label="Saldo pendiente" value={formatUsd(Number(data.customer.pendingBalance))} />
           {data.customer.hasTvStreaming && data.customer.tvStreamingSince && (
-            <Info label="TV Streams desde" value={new Date(data.customer.tvStreamingSince).toLocaleDateString("es-VE")} />
+            <Info label={STREAMS_SUPPORT_SINCE_LABEL} value={new Date(data.customer.tvStreamingSince).toLocaleDateString("es-VE")} />
           )}
         </Card>
 
         <Card title="Resumen de liquidación">
           <Line label={INSTALLATION_PRORATION_LABEL} value={formatUsd(Number(data.permanenceAmount))} />
-          <Line label="TV Streams" value={formatUsd(Number(data.tvAmount))} />
+          <Line label={STREAMS_SUPPORT_LABEL} value={formatUsd(Number(data.tvAmount))} />
           <Line label="Mensualidades" value={formatUsd(Number(data.monthlyAmount))} />
           <Line label="Otros" value={formatUsd(Number(data.otherAmount))} />
           <p className="text-xs text-slate-500">Equipos no incluidos en liquidación</p>

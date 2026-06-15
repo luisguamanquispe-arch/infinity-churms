@@ -80,7 +80,7 @@ export default function ConfiguracionPage() {
 
       {tariff && (
         <section className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
-          <h2 className="font-semibold">Permanencia y TV</h2>
+          <h2 className="font-semibold">Permanencia y Streams</h2>
           <div className="grid gap-3 sm:grid-cols-3">
             <Field
               label="Meses permanencia"
@@ -95,7 +95,7 @@ export default function ConfiguracionPage() {
               onChange={(v) => setTariff({ ...tariff, installCostUsd: v })}
             />
             <Field
-              label="TV Streams / mes (USD)"
+              label="Soporte de Streams / mes (USD)"
               type="number"
               value={tariff.tvMonthlyUsd}
               onChange={(v) => setTariff({ ...tariff, tvMonthlyUsd: v })}

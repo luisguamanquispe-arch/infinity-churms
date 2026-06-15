@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { COLORS, CANCELLATION_REASONS, INSTALLATION_PRORATION_LABEL } from "@/lib/constants";
+import { COLORS, CANCELLATION_REASONS, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_SINCE_LABEL, STREAMS_SUPPORT_LABEL } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { differenceInMonths } from "date-fns";
 
@@ -142,7 +142,7 @@ export default function NuevaBajaPage() {
               <Row label="Mensualidades pend." value={formatUsd(Number(selected.pendingBalance))} />
               {selected.hasTvStreaming && (
                 <Row
-                  label="TV Streams desde"
+                  label={STREAMS_SUPPORT_SINCE_LABEL}
                   value={
                     selected.tvStreamingSince
                       ? new Date(selected.tvStreamingSince).toLocaleDateString("es-VE")
@@ -159,7 +159,7 @@ export default function NuevaBajaPage() {
             <p className="text-sm">{INSTALLATION_PRORATION_LABEL} estimado: {formatUsd(permanencePreview)}</p>
             {selected.hasTvStreaming && selected.tvStreamingSince && (
               <p className="text-sm">
-                TV Streams ({tvMonths} meses × $2): {formatUsd(tvMonths * 2)}
+                {STREAMS_SUPPORT_LABEL} ({tvMonths} meses × $2): {formatUsd(tvMonths * 2)}
               </p>
             )}
             <p className="mt-1 text-xs text-slate-500">Equipos no se incluyen en la liquidación</p>

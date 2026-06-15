@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { COLORS, CUSTOMER_ZONES, EQUIPMENT_TYPES, toUpperInput } from "@/lib/constants";
+import { COLORS, CUSTOMER_ZONES, EQUIPMENT_TYPES, toUpperInput, HAS_STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL } from "@/lib/constants";
 import { normalizeCedula, validateEcuadorianCedula } from "@/lib/cedula";
 import { formatUsd } from "@/lib/liquidation";
 
@@ -76,7 +76,7 @@ export default function ClientesPage() {
   async function createCustomer(e: React.FormEvent) {
     e.preventDefault();
     if (form.hasTvStreaming && !form.tvStreamingSince) {
-      setMsg("Indique la fecha de inicio del servicio TV Streams");
+      setMsg("Indique la fecha de inicio del soporte de Streams");
       return;
     }
     if (!form.zone) {
@@ -179,11 +179,11 @@ export default function ClientesPage() {
               checked={form.hasTvStreaming}
               onChange={(e) => setForm({ ...form, hasTvStreaming: e.target.checked, tvStreamingSince: e.target.checked ? form.tvStreamingSince : "" })}
             />
-            Tiene TV Streams
+            {HAS_STREAMS_SUPPORT_LABEL}
           </label>
           {form.hasTvStreaming && (
             <Input
-              label="TV Streams desde *"
+              label={`${STREAMS_SUPPORT_SINCE_LABEL} *`}
               type="date"
               value={form.tvStreamingSince}
               onChange={(v) => setForm({ ...form, tvStreamingSince: v })}
@@ -256,7 +256,7 @@ export default function ClientesPage() {
               <th className="px-4 py-3">Nombre</th>
               <th className="px-4 py-3">Zona</th>
               <th className="px-4 py-3">Plan</th>
-              <th className="px-4 py-3">TV desde</th>
+              <th className="px-4 py-3">Streams desde</th>
               <th className="px-4 py-3">Saldo</th>
               <th className="px-4 py-3">Equipos</th>
               <th className="px-4 py-3"></th>

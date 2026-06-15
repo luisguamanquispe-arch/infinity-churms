@@ -47,7 +47,7 @@ export async function POST(request: NextRequest) {
 
     if (body.hasTvStreaming && !body.tvStreamingSince) {
       return NextResponse.json(
-        { error: "Indique la fecha de inicio del servicio TV Streams" },
+        { error: "Indique la fecha de inicio del soporte de Streams" },
         { status: 400 }
       );
     }
