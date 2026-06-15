@@ -120,8 +120,6 @@ async function main() {
     END $$;
   `);
 
-  `);
-
   await run(`
     DO $$ BEGIN
       IF EXISTS (
