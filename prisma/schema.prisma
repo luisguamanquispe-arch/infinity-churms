@@ -124,6 +124,7 @@ model Cancellation {
   clientSignature  String?
   qrCode           String?            @unique
   actaNumber       String?            @unique
+  actaPhysicalCode String?            @unique
   createdById      String
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt

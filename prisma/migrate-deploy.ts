@@ -120,6 +120,24 @@ async function main() {
     END $$;
   `);
 
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'Cancellation'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Cancellation' AND column_name = 'actaPhysicalCode'
+      ) THEN
+        ALTER TABLE "Cancellation" ADD COLUMN "actaPhysicalCode" TEXT;
+        CREATE UNIQUE INDEX IF NOT EXISTS "Cancellation_actaPhysicalCode_key"
+          ON "Cancellation"("actaPhysicalCode");
+      END IF;
+    END $$;
+  `);
+
   if (process.env.CLEAR_BUSINESS_DATA === "1") {
     console.log("CLEAR_BUSINESS_DATA=1 — eliminando datos de prueba...");
     const deleted = await clearBusinessData(prisma);

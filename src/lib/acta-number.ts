@@ -17,6 +17,12 @@ export async function nextActaNumber(): Promise<string> {
   return `ACTA-${year}-${String(seq).padStart(6, "0")}`;
 }
 
+export async function nextActaPhysicalCode(): Promise<string> {
+  const year = new Date().getFullYear();
+  const seq = await nextSequence(`acta-physical-${year}`);
+  return `IDF-${year}-${String(seq).padStart(6, "0")}`;
+}
+
 export async function nextPreliquidacionNumber(): Promise<string> {
   const year = new Date().getFullYear();
   const seq = await nextSequence(`preliq-${year}`);

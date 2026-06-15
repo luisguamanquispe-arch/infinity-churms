@@ -11,6 +11,7 @@ interface Detail {
   status: string;
   reason: string;
   actaNumber: string | null;
+  actaPhysicalCode: string | null;
   clientSignature: string | null;
   requestDate: string;
   monthsCompleted: number;
@@ -393,6 +394,12 @@ export function CancellationDetail({
       <Card title="Acta de recepción">
         <p className="text-sm text-slate-600">
           N° Acta: {data.actaNumber ?? "Se asignará al generar PDF (formato ACTA-AAAA-000001)"}
+        </p>
+        <p className="mt-1 text-sm text-slate-600">
+          Código identificación física:{" "}
+          <span className="font-mono font-semibold text-[#0B1F3A]">
+            {data.actaPhysicalCode ?? "Se asignará al generar PDF (formato IDF-AAAA-000001)"}
+          </span>
         </p>
         <div className="mt-3">
           <label className="text-xs text-slate-600">Firma del cliente (nombre completo)</label>

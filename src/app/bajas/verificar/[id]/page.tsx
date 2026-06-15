@@ -30,7 +30,17 @@ export default async function VerificarBajaPage({ params }: Props) {
         </p>
         <p className="text-xs text-slate-500">{REASON_LABELS[row.reason] ?? row.reason}</p>
 
+        {row.actaPhysicalCode && (
+          <div className="mt-4 rounded-lg border border-[#0B1F3A] bg-slate-50 px-4 py-3 text-center">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+              Código identificación física
+            </p>
+            <p className="mt-1 font-mono text-lg font-bold text-[#0B1F3A]">{row.actaPhysicalCode}</p>
+          </div>
+        )}
+
         <dl className="mt-6 space-y-2 text-sm">
+          <Row label="N° Acta" value={row.actaNumber ?? "—"} />
           <Row label="Estado" value={STATUS_LABELS[row.status] ?? row.status} />
           <Row label="Fecha solicitud" value={row.requestDate.toLocaleDateString("es-VE")} />
           <Row label="Total" value={formatUsd(Number(row.totalAmount))} />

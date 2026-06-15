@@ -3,7 +3,7 @@ import QRCode from "qrcode";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
-import { nextActaNumber } from "@/lib/acta-number";
+import { nextActaNumber, nextActaPhysicalCode } from "@/lib/acta-number";
 import { getCancellation } from "@/lib/services/cancellations";
 import { generateActaPdf } from "@/lib/pdf-acta";
 import { getAppBaseUrl } from "@/lib/app-url";
@@ -22,12 +22,13 @@ export async function GET(
     const baseUrl = getAppBaseUrl(request);
     const qrCode = row.qrCode ?? `BAJA-${id.slice(-8).toUpperCase()}`;
     const actaNumber = row.actaNumber ?? (await nextActaNumber());
+    const actaPhysicalCode = row.actaPhysicalCode ?? (await nextActaPhysicalCode());
     const verifyUrl = `${baseUrl}/bajas/verificar/${id}`;
 
-    if (!row.qrCode || !row.actaNumber) {
+    if (!row.qrCode || !row.actaNumber || !row.actaPhysicalCode) {
       await prisma.cancellation.update({
         where: { id },
-        data: { qrCode, actaNumber },
+        data: { qrCode, actaNumber, actaPhysicalCode },
       });
     }
 
@@ -35,7 +36,7 @@ export async function GET(
     const payment = row.payments[0] ?? null;
 
     const pdf = await generateActaPdf({
-      cancellation: { ...row, actaNumber },
+      cancellation: { ...row, actaNumber, actaPhysicalCode },
       customer: row.customer,
       equipment: row.equipment,
       charges: row.charges,

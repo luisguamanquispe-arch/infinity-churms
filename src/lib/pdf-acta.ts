@@ -1,6 +1,6 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL } from "@/lib/constants";
+import { INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, getEquipmentReportStatus } from "@/lib/constants";
 import type {
   Cancellation,
   CancellationEquipment,
@@ -21,32 +21,42 @@ export async function generateActaPdf(params: {
 }) {
   const doc = new jsPDF();
   const { cancellation: c, customer, equipment, charges, payment } = params;
+  const physicalCode = c.actaPhysicalCode ?? "—";
 
-  doc.setFontSize(16);
-  doc.text("ACTA DE RECEPCIÓN DE EQUIPOS", 14, 18);
-  doc.setFontSize(11);
-  doc.text(`N° Acta: ${c.actaNumber ?? "—"}`, 14, 26);
+  doc.setFillColor(11, 31, 58);
+  doc.rect(14, 12, 182, 22, "F");
+  doc.setTextColor(255, 255, 255);
+  doc.setFontSize(14);
+  doc.text("ACTA DE RECEPCIÓN DE EQUIPOS", 105, 20, { align: "center" });
+  doc.setFontSize(8);
+  doc.text("CÓDIGO IDENTIFICACIÓN FÍSICA", 105, 27, { align: "center" });
+  doc.setFontSize(13);
+  doc.text(physicalCode, 105, 33, { align: "center" });
+
+  doc.setTextColor(0, 0, 0);
+  doc.setFontSize(10);
+  doc.text(`N° Acta: ${c.actaNumber ?? "—"}`, 14, 42);
   doc.setFontSize(9);
-  doc.text(`Fecha: ${new Date().toLocaleDateString("es-VE")}`, 14, 32);
+  doc.text(`Fecha emisión: ${new Date().toLocaleDateString("es-VE")}`, 14, 48);
+  doc.text(`Contrato: ${customer.contract}`, 120, 42);
+  doc.text(`Cédula: ${customer.cedula}`, 120, 48);
 
   doc.setFontSize(10);
-  doc.text(`Contrato: ${customer.contract}`, 14, 42);
-  doc.text(`Cliente: ${customer.name}`, 14, 48);
-  doc.text(`Cédula: ${customer.cedula}`, 14, 54);
-  doc.text(`Dirección: ${customer.address}`, 14, 60);
-  doc.text(`Plan: ${customer.planName}`, 14, 66);
-  doc.text(`Motivo baja: ${params.reasonLabel}`, 14, 72);
-  doc.text(`Fecha solicitud: ${c.requestDate.toLocaleDateString("es-VE")}`, 14, 78);
+  doc.text(`Cliente: ${customer.name}`, 14, 56);
+  doc.text(`Dirección: ${customer.address}`, 14, 62);
+  doc.text(`Plan: ${customer.planName}`, 14, 68);
+  doc.text(`Motivo baja: ${params.reasonLabel}`, 14, 74);
+  doc.text(`Fecha solicitud: ${c.requestDate.toLocaleDateString("es-VE")}`, 14, 80);
 
   autoTable(doc, {
-    startY: 84,
+    startY: 86,
     head: [["Tipo", "Marca", "Modelo", "Serie", "Estado", "Observaciones"]],
     body: equipment.map((e) => [
       e.type,
       e.brand ?? "—",
       e.model ?? "—",
       e.serial ?? "—",
-      e.delivered ? (e.condition ?? "BUENO") : "NO ENTREGADO",
+      getEquipmentReportStatus(e.delivered, e.condition),
       e.notes ?? "—",
     ]),
     styles: { fontSize: 8 },
@@ -86,7 +96,16 @@ export async function generateActaPdf(params: {
     doc.addImage(params.qrDataUrl, "PNG", 150, sigY + 22, 35, 35);
     doc.setFontSize(7);
     doc.text("Verificación QR", 150, sigY + 60);
+    doc.text(physicalCode, 150, sigY + 65, { maxWidth: 35 });
   }
+
+  doc.setFontSize(7);
+  doc.setTextColor(100, 100, 100);
+  doc.text(
+    "Conserve este código en el documento físico entregado al cliente para identificación y verificación.",
+    14,
+    285
+  );
 
   return Buffer.from(doc.output("arraybuffer"));
 }
