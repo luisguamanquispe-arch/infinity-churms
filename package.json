@@ -8,6 +8,7 @@
     "db:migrate": "tsx prisma/migrate-deploy.ts",
     "db:deploy": "npm run db:migrate && prisma db push --accept-data-loss",
     "render:build": "prisma generate && next build",
+    "render:start": "npm run db:deploy && npm run db:seed && next start -H 0.0.0.0",
     "render:deploy": "npm run db:deploy && npm run db:seed && npm run render:build",
     "start": "next start -H 0.0.0.0",
     "lint": "eslint",
@@ -34,6 +35,7 @@
     "qrcode": "^1.5.4",
     "react": "19.2.4",
     "react-dom": "19.2.4",
+    "prisma": "^6.19.3",
     "tsx": "^4.22.4",
     "zod": "^4.4.3"
   },
@@ -46,7 +48,6 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.2.9",
-    "prisma": "^6.19.3",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
