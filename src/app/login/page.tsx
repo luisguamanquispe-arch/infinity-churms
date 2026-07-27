@@ -6,8 +6,8 @@ import { COLORS } from "@/lib/constants";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [email, setEmail] = useState("cobranzas@infinity.net");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("admin@infinity.net");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   async function submit(e: React.FormEvent) {
@@ -54,7 +54,7 @@ export default function LoginPage() {
             Ingresar
           </button>
         </div>
-        <p className="mt-4 text-xs text-slate-400">admin / cobranzas / tecnico / supervisor — admin123</p>
+        <p className="mt-4 text-xs text-slate-400">admin@infinity.net / admin2010 · supervisor@infinity.net / admin2010</p>
       </form>
     </div>
   );

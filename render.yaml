@@ -7,7 +7,8 @@ services:
     plan: starter
     region: oregon
     healthCheckPath: /api/health
-    buildCommand: npm ci && npm run render:deploy
+    buildCommand: npm ci && npm run render:build
+    preDeployCommand: npm run db:deploy && npm run db:seed
     startCommand: npm start
     envVars:
       - key: NODE_VERSION
