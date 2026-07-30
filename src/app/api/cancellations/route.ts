@@ -8,6 +8,8 @@ import {
   listCancellations,
   recalculateCancellation,
 } from "@/lib/services/cancellations";
+import { getBajaEligibility } from "@/lib/services/collections";
+import { getClientIp } from "@/lib/request-ip";
 import type { CancellationReason } from "@prisma/client";
 
 const VALID_REASONS: CancellationReason[] = [
@@ -62,6 +64,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const eligibility = await getBajaEligibility(customerId);
+    if (!eligibility.allowed) {
+      return NextResponse.json(
+        { error: eligibility.blockers.join(". ") },
+        { status: 400 }
+      );
+    }
+
     const cancellation = await prisma.cancellation.create({
       data: {
         customerId,
@@ -92,6 +102,7 @@ export async function POST(request: NextRequest) {
       entity: "Cancellation",
       entityId: cancellation.id,
       detail: `Baja ${customer.contract}`,
+      ipAddress: getClientIp(request),
     });
 
     return NextResponse.json({ id: cancellation.id });

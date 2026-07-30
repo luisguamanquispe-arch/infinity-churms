@@ -6,6 +6,7 @@ export async function audit(params: {
   entity: string;
   entityId?: string;
   detail?: string;
+  ipAddress?: string;
 }) {
   try {
     await prisma.auditLog.create({ data: params });

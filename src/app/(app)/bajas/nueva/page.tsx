@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { COLORS, CANCELLATION_REASONS, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_SINCE_LABEL, STREAMS_SUPPORT_LABEL } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { differenceInMonths } from "date-fns";
@@ -24,6 +24,8 @@ interface Customer {
 
 export default function NuevaBajaPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const prefillCustomerId = searchParams.get("customerId");
   const [q, setQ] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
@@ -38,6 +40,18 @@ export default function NuevaBajaPage() {
       .then(setCustomers);
   }, [q]);
 
+  useEffect(() => {
+    if (!prefillCustomerId) return;
+    fetch(`/api/customers/${prefillCustomerId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((c) => {
+        if (c) {
+          setSelected(c);
+          setQ(c.contract);
+        }
+      });
+  }, [prefillCustomerId]);
+
   async function submit() {
     if (!selected || !reason) {
       setError("Seleccione cliente y motivo de baja");
@@ -46,6 +60,14 @@ export default function NuevaBajaPage() {
     if (selected.hasCancellation) {
       setError("Este cliente ya tiene una baja registrada");
       return;
+    }
+    const eligRes = await fetch(`/api/customers/${selected.id}/collections`);
+    if (eligRes.ok) {
+      const { eligibility } = await eligRes.json();
+      if (!eligibility.allowed) {
+        setError(eligibility.blockers.join(". "));
+        return;
+      }
     }
     setLoading(true);
     setError("");

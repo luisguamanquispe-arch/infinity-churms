@@ -136,6 +136,101 @@ async function main() {
     END $$;
   `);
 
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'Customer'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Customer' AND column_name = 'openTechnicalClaim'
+      ) THEN
+        ALTER TABLE "Customer" ADD COLUMN "openTechnicalClaim" BOOLEAN NOT NULL DEFAULT false;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'AuditLog'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'AuditLog' AND column_name = 'ipAddress'
+      ) THEN
+        ALTER TABLE "AuditLog" ADD COLUMN "ipAddress" TEXT;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CollectionManagementType') THEN
+        CREATE TYPE "CollectionManagementType" AS ENUM (
+          'LLAMADA', 'WHATSAPP', 'VISITA', 'CORREO', 'SMS', 'OTRO'
+        );
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CollectionResult') THEN
+        CREATE TYPE "CollectionResult" AS ENUM (
+          'CONTESTO', 'NO_CONTESTO', 'PROMESA_DE_PAGO', 'PAGO', 'CONVENIO',
+          'SE_NIEGA_A_PAGAR', 'CLIENTE_NO_UBICADO'
+        );
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "CollectionAction" (
+      "id" TEXT NOT NULL,
+      "customerId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "actionDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "managementType" "CollectionManagementType" NOT NULL,
+      "result" "CollectionResult" NOT NULL,
+      "notes" TEXT,
+      "nextFollowUpDate" TIMESTAMP(3),
+      "promiseDate" TIMESTAMP(3),
+      "promiseAmount" DECIMAL(10,2),
+      "promiseNotes" TEXT,
+      "attachmentName" TEXT,
+      "attachmentData" TEXT,
+      "photoName" TEXT,
+      "photoData" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "CollectionAction_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CollectionAction_customerId_fkey'
+      ) THEN
+        ALTER TABLE "CollectionAction"
+          ADD CONSTRAINT "CollectionAction_customerId_fkey"
+          FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CollectionAction_userId_fkey'
+      ) THEN
+        ALTER TABLE "CollectionAction"
+          ADD CONSTRAINT "CollectionAction_userId_fkey"
+          FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
   if (process.env.CLEAR_BUSINESS_DATA === "1") {
     console.log("CLEAR_BUSINESS_DATA=1 — eliminando datos de prueba...");
     const deleted = await clearBusinessData(prisma);

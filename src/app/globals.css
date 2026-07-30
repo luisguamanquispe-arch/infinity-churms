@@ -7,8 +7,23 @@
   --brand: #00a9b5;
 }
 
+html {
+  color-scheme: light;
+}
+
+@keyframes app-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.animate-spin {
+  animation: app-spin 1s linear infinite;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: system-ui, sans-serif;
+  min-height: 100vh;
 }

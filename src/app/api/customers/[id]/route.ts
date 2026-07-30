@@ -2,6 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
+import { getClientIp } from "@/lib/request-ip";
+import { customerHasCancellation } from "@/lib/services/cancellations";
+import { getBajaEligibility } from "@/lib/services/collections";
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    await requirePermission("customers:manage");
+    const { id } = await params;
+
+    const customer = await prisma.customer.findUnique({
+      where: { id },
+      include: { equipment: true },
+    });
+    if (!customer) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+
+    const hasCancellation = await customerHasCancellation(id);
+    const eligibility = await getBajaEligibility(id);
+
+    return NextResponse.json({ ...customer, hasCancellation, eligibility });
+  } catch (e) {
+    if (e instanceof Error && e.message === "FORBIDDEN") {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
+    return NextResponse.json({ error: "Error" }, { status: 500 });
+  }
+}
 
 export async function PATCH(
   request: NextRequest,
@@ -16,6 +45,7 @@ export async function PATCH(
     if (body.pendingBalance !== undefined) data.pendingBalance = body.pendingBalance;
     if (body.planName !== undefined) data.planName = body.planName;
     if (body.status !== undefined) data.status = body.status;
+    if (body.openTechnicalClaim !== undefined) data.openTechnicalClaim = Boolean(body.openTechnicalClaim);
     if (body.hasTvStreaming !== undefined) {
       data.hasTvStreaming = body.hasTvStreaming;
       if (!body.hasTvStreaming) data.tvStreamingSince = null;
@@ -35,7 +65,12 @@ export async function PATCH(
       action: "UPDATE",
       entity: "Customer",
       entityId: id,
-      detail: body.pendingBalance !== undefined ? `Saldo: ${body.pendingBalance}` : undefined,
+      detail: body.openTechnicalClaim !== undefined
+        ? `Reclamo técnico: ${body.openTechnicalClaim ? "abierto" : "cerrado"}`
+        : body.pendingBalance !== undefined
+          ? `Saldo: ${body.pendingBalance}`
+          : undefined,
+      ipAddress: getClientIp(request),
     });
 
     return NextResponse.json(customer);

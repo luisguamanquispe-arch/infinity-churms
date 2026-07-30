@@ -46,6 +46,25 @@ enum EquipmentCondition {
   NO_ENTREGADO
 }
 
+enum CollectionManagementType {
+  LLAMADA
+  WHATSAPP
+  VISITA
+  CORREO
+  SMS
+  OTRO
+}
+
+enum CollectionResult {
+  CONTESTO
+  NO_CONTESTO
+  PROMESA_DE_PAGO
+  PAGO
+  CONVENIO
+  SE_NIEGA_A_PAGAR
+  CLIENTE_NO_UBICADO
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -57,6 +76,7 @@ model User {
 
   cancellations Cancellation[] @relation("CreatedBy")
   auditLogs     AuditLog[]
+  collectionActions CollectionAction[]
 }
 
 model Customer {
@@ -73,10 +93,12 @@ model Customer {
   hasTvStreaming   Boolean  @default(false)
   tvStreamingSince DateTime?
   pendingBalance   Decimal  @default(0) @db.Decimal(10, 2)
+  openTechnicalClaim Boolean @default(false)
   createdAt        DateTime @default(now())
 
   equipment     CustomerEquipment[]
   cancellations Cancellation[]
+  collectionActions CollectionAction[]
 }
 
 model CustomerEquipment {
@@ -187,7 +209,30 @@ model AuditLog {
   entity    String
   entityId  String?
   detail    String?
+  ipAddress String?
   createdAt DateTime @default(now())
 
   user User? @relation(fields: [userId], references: [id])
+}
+
+model CollectionAction {
+  id               String                   @id @default(cuid())
+  customerId       String
+  userId           String
+  actionDate       DateTime                 @default(now())
+  managementType   CollectionManagementType
+  result           CollectionResult
+  notes            String?
+  nextFollowUpDate DateTime?
+  promiseDate      DateTime?
+  promiseAmount    Decimal?                 @db.Decimal(10, 2)
+  promiseNotes     String?
+  attachmentName   String?
+  attachmentData   String?
+  photoName        String?
+  photoData        String?
+  createdAt        DateTime                 @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
 }

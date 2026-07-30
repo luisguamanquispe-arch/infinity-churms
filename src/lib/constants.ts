@@ -105,3 +105,30 @@ export const SUSPENSION_POLICIES = [
   "Debe cancelar todos los valores pendientes previo a la entrega de equipos prestados en oficina.",
   "La entrega física de equipos se realiza únicamente en oficina, una vez verificado el pago de la pre-liquidación.",
 ] as const;
+
+export const COLLECTION_MANAGEMENT_TYPES = [
+  { value: "LLAMADA", label: "Llamada" },
+  { value: "WHATSAPP", label: "WhatsApp" },
+  { value: "VISITA", label: "Visita" },
+  { value: "CORREO", label: "Correo" },
+  { value: "SMS", label: "Mensaje SMS" },
+  { value: "OTRO", label: "Otro" },
+] as const;
+
+export const COLLECTION_RESULTS = [
+  { value: "CONTESTO", label: "Contestó" },
+  { value: "NO_CONTESTO", label: "No contestó" },
+  { value: "PROMESA_DE_PAGO", label: "Promesa de Pago" },
+  { value: "PAGO", label: "Pagó" },
+  { value: "CONVENIO", label: "Convenio" },
+  { value: "SE_NIEGA_A_PAGAR", label: "Se niega a pagar" },
+  { value: "CLIENTE_NO_UBICADO", label: "Cliente no ubicado" },
+] as const;
+
+export const COLLECTION_RESULT_LABELS: Record<string, string> = Object.fromEntries(
+  COLLECTION_RESULTS.map((r) => [r.value, r.label])
+);
+
+export const COLLECTION_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  COLLECTION_MANAGEMENT_TYPES.map((t) => [t.value, t.label])
+);

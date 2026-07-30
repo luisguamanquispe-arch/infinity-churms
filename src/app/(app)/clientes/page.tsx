@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { COLORS, CUSTOMER_ZONES, EQUIPMENT_TYPES, toUpperInput, HAS_STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL } from "@/lib/constants";
 import { normalizeCedula, validateEcuadorianCedula } from "@/lib/cedula";
 import { formatUsd } from "@/lib/liquidation";
@@ -290,9 +291,14 @@ export default function ClientesPage() {
                     : "Sin registrar"}
                 </td>
                 <td className="px-4 py-3">
-                  <button onClick={() => setEditingBalance({ id: c.id, value: String(c.pendingBalance) })} className="text-xs text-teal-700 hover:underline">
-                    Editar saldo
-                  </button>
+                  <div className="flex flex-col gap-1">
+                    <Link href={`/clientes/${c.id}`} className="text-xs font-semibold text-teal-700 hover:underline">
+                      Gestionar →
+                    </Link>
+                    <button onClick={() => setEditingBalance({ id: c.id, value: String(c.pendingBalance) })} className="text-xs text-slate-500 hover:underline text-left">
+                      Editar saldo
+                    </button>
+                  </div>
                 </td>
               </tr>
             ))}
