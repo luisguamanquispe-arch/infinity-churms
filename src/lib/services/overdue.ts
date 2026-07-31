@@ -1,4 +1,9 @@
 import { differenceInDays } from "date-fns";
+import {
+  formatChargeConcept,
+  formatChargeDetail,
+  type CollectionChargeView,
+} from "@/lib/services/collection-charges";
 
 export const PRELEGAL_OVERDUE_DAYS = 90;
 
@@ -78,6 +83,7 @@ export function buildPrelegalOverdueSummary(params: {
   tvStreamingSince: Date | string | null;
   equipment: { type: string; brand?: string | null; model?: string | null }[];
   equipmentTariffs: { type: string; notReturnedUsd: number | string }[];
+  collectionCharges?: CollectionChargeView[];
 }): PrelegalOverdueSummary | null {
   if (!isPrelegalOverdue(params)) return null;
 
@@ -86,13 +92,20 @@ export function buildPrelegalOverdueSummary(params: {
   const overdueSince = params.overdueSince ? new Date(params.overdueSince) : null;
   const pendingBalance = Number(params.pendingBalance);
 
-  const overdueItems: PrelegalOverdueSummary["overdueItems"] = [
-    {
-      concept: "Valores vencidos (servicios)",
-      detail: `Plan ${params.planName} · mora ${overdueDays} días (≈ ${overdueMonths} mes(es))`,
-      amount: pendingBalance,
-    },
-  ];
+  const overdueItems: PrelegalOverdueSummary["overdueItems"] =
+    params.collectionCharges && params.collectionCharges.length > 0
+      ? params.collectionCharges.map((charge) => ({
+          concept: formatChargeConcept(charge),
+          detail: formatChargeDetail(charge),
+          amount: Number(charge.amount),
+        }))
+      : [
+          {
+            concept: "Valores vencidos (servicios)",
+            detail: `Plan ${params.planName} · mora ${overdueDays} días (≈ ${overdueMonths} mes(es))`,
+            amount: pendingBalance,
+          },
+        ];
 
   const totalOverdue = pendingBalance;
 

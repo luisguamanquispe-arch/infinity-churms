@@ -35,6 +35,8 @@ export default async function ClienteDetailPage({ params }: Props) {
     pendingBalance: String(customer.pendingBalance),
     overdueSince: customer.overdueSince?.toISOString() ?? null,
     inCollectionWhitelist: customer.inCollectionWhitelist,
+    assignedAgentUserId: customer.assignedAgentUserId,
+    assignedAgentName: customer.assignedAgentName,
     tvStreamingSince: customer.tvStreamingSince?.toISOString() ?? null,
     hasCancellation,
     eligibility,

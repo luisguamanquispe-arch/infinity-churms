@@ -2,12 +2,48 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { listClosedForAnalysis } from "@/lib/services/cancellations";
+import {
+  collectionReportToCsv,
+  getCollectionReport,
+  parseCollectionReportFilters,
+} from "@/lib/services/collection-reports";
+import { collectionReportPdfBuffer } from "@/lib/pdf-reporte-cobranzas";
 import { REASON_LABELS, getEquipmentReportStatus } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
     const session = await requireSession();
     const type = request.nextUrl.searchParams.get("type") ?? "bajas";
+    const format = request.nextUrl.searchParams.get("format") ?? "json";
+
+    if (type === "cobranzas") {
+      const filters = parseCollectionReportFilters(request.nextUrl.searchParams);
+      const report = await getCollectionReport(filters);
+
+      if (format === "pdf") {
+        const pdf = collectionReportPdfBuffer(report);
+        const filename = `reporte-cobranzas-${filters.view}-${new Date().toISOString().slice(0, 10)}.pdf`;
+        return new NextResponse(new Uint8Array(pdf), {
+          headers: {
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `inline; filename="${filename}"`,
+          },
+        });
+      }
+
+      if (format === "csv") {
+        const csv = collectionReportToCsv(report);
+        const filename = `reporte-cobranzas-${filters.view}-${new Date().toISOString().slice(0, 10)}.csv`;
+        return new NextResponse(csv, {
+          headers: {
+            "Content-Type": "text/csv; charset=utf-8",
+            "Content-Disposition": `attachment; filename="${filename}"`,
+          },
+        });
+      }
+
+      return NextResponse.json(report);
+    }
 
     if (type === "causas") {
       if (!session || !["ADMIN", "SUPERVISOR"].includes(session.role)) {

@@ -132,3 +132,19 @@ export const COLLECTION_RESULT_LABELS: Record<string, string> = Object.fromEntri
 export const COLLECTION_TYPE_LABELS: Record<string, string> = Object.fromEntries(
   COLLECTION_MANAGEMENT_TYPES.map((t) => [t.value, t.label])
 );
+
+export const COLLECTION_CHARGE_TYPES = [
+  { value: "CONSUMO_MENSUAL", label: "Meses de consumo" },
+  { value: "CAMBIO_DOMICILIO", label: "Cambio de domicilio" },
+  { value: "EXCEDENTE_FIBRA", label: "Excedente de fibra" },
+  { value: "INSTALACION", label: "Instalación" },
+  { value: "STREAMS", label: "Soporte Streams" },
+  { value: "RECONEXION", label: "Reconexión" },
+  { value: "OTRO", label: "Otro concepto" },
+] as const;
+
+export type CollectionChargeTypeValue = (typeof COLLECTION_CHARGE_TYPES)[number]["value"];
+
+export const COLLECTION_CHARGE_TYPE_LABELS: Record<string, string> = Object.fromEntries(
+  COLLECTION_CHARGE_TYPES.map((t) => [t.value, t.label])
+);

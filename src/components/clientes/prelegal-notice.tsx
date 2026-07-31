@@ -13,6 +13,7 @@ import { COLORS } from "@/lib/constants";
 export function PrelegalOverdueNotice({
   customer,
   equipmentTariffs,
+  collectionCharges = [],
 }: {
   customer: {
     id: string;
@@ -26,6 +27,14 @@ export function PrelegalOverdueNotice({
     equipment: { type: string; brand?: string | null; model?: string | null }[];
   };
   equipmentTariffs: { type: string; notReturnedUsd: number | string }[];
+  collectionCharges?: {
+    chargeType: string;
+    description?: string | null;
+    periodLabel?: string | null;
+    periodFrom?: string | null;
+    periodTo?: string | null;
+    amount: number | string;
+  }[];
 }) {
   const days = getOverdueDays({
     pendingBalance: customer.pendingBalance,
@@ -43,9 +52,10 @@ export function PrelegalOverdueNotice({
         planName: customer.planName,
         hasTvStreaming: customer.hasTvStreaming,
         tvStreamingSince: customer.tvStreamingSince,
-      equipment: customer.equipment,
-      equipmentTariffs,
-    })
+        equipment: customer.equipment,
+        equipmentTariffs,
+        collectionCharges,
+      })
     : null;
 
   if (Number(customer.pendingBalance) <= 0) return null;
@@ -109,8 +119,8 @@ export function PrelegalOverdueNotice({
             </tr>
           </thead>
           <tbody>
-            {summary.overdueItems.map((item) => (
-              <tr key={item.concept} className="border-t">
+            {summary.overdueItems.map((item, index) => (
+              <tr key={`${item.concept}-${index}`} className="border-t">
                 <td className="px-3 py-2 font-medium">{item.concept}</td>
                 <td className="px-3 py-2 text-slate-600">{item.detail}</td>
                 <td className="px-3 py-2 text-right">{formatUsd(item.amount)}</td>

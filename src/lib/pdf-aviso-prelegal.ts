@@ -7,6 +7,7 @@ import {
   buildPrelegalOverdueSummary,
   type PrelegalOverdueSummary,
 } from "@/lib/services/overdue";
+import type { CollectionChargeView } from "@/lib/services/collection-charges";
 
 export function generatePrelegalNoticePdf(
   customer: {
@@ -22,11 +23,13 @@ export function generatePrelegalNoticePdf(
     tvStreamingSince: Date | string | null;
     equipment: { type: string; brand?: string | null; model?: string | null }[];
   },
-  equipmentTariffs: { type: string; notReturnedUsd: number | string }[]
+  equipmentTariffs: { type: string; notReturnedUsd: number | string }[],
+  collectionCharges?: CollectionChargeView[]
 ) {
   const summary = buildPrelegalOverdueSummary({
     ...customer,
     equipmentTariffs,
+    collectionCharges,
   });
 
   if (!summary) {
@@ -197,9 +200,10 @@ function renderOverdueValues(
 
 export function prelegalNoticePdfBuffer(
   customer: Parameters<typeof generatePrelegalNoticePdf>[0],
-  equipmentTariffs: Parameters<typeof generatePrelegalNoticePdf>[1]
+  equipmentTariffs: Parameters<typeof generatePrelegalNoticePdf>[1],
+  collectionCharges?: Parameters<typeof generatePrelegalNoticePdf>[2]
 ) {
   return Buffer.from(
-    generatePrelegalNoticePdf(customer, equipmentTariffs).output("arraybuffer")
+    generatePrelegalNoticePdf(customer, equipmentTariffs, collectionCharges).output("arraybuffer")
   );
 }

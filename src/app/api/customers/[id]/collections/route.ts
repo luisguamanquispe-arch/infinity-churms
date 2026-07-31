@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { getClientIp } from "@/lib/request-ip";
+import { prisma } from "@/lib/prisma";
 import {
   createCollectionAction,
   getBajaEligibility,
+  getCustomerAgentHistory,
   listCollectionActions,
 } from "@/lib/services/collections";
 
@@ -15,9 +17,26 @@ export async function GET(
   try {
     await requirePermission("customers:manage");
     const { id } = await params;
-    const actions = await listCollectionActions(id);
-    const eligibility = await getBajaEligibility(id);
-    return NextResponse.json({ actions, eligibility });
+    const [actions, eligibility, agentHistory, customer] = await Promise.all([
+      listCollectionActions(id),
+      getBajaEligibility(id),
+      getCustomerAgentHistory(id),
+      prisma.customer.findUnique({
+        where: { id },
+        select: { assignedAgentUserId: true, assignedAgentName: true },
+      }),
+    ]);
+    return NextResponse.json({
+      actions,
+      eligibility,
+      agentHistory,
+      assignedAgent: customer
+        ? {
+            userId: customer.assignedAgentUserId,
+            name: customer.assignedAgentName,
+          }
+        : null,
+    });
   } catch (e) {
     if (e instanceof Error && e.message === "FORBIDDEN") {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
@@ -42,13 +61,14 @@ export async function POST(
       action: "COLLECTION",
       entity: "CollectionAction",
       entityId: item.id,
-      detail: `${item.managementType} → ${item.result}`,
+      detail: `${item.agentName} · ${item.managementType} → ${item.result}`,
       ipAddress: getClientIp(request),
     });
 
     const eligibility = await getBajaEligibility(id);
     const actions = await listCollectionActions(id);
-    return NextResponse.json({ item, eligibility, actions });
+    const agentHistory = await getCustomerAgentHistory(id);
+    return NextResponse.json({ item, eligibility, actions, agentHistory });
   } catch (e) {
     if (e instanceof Error && e.message === "FORBIDDEN") {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
@@ -56,6 +76,12 @@ export async function POST(
     if (e instanceof Error && e.message === "PROMISE_REQUIRED") {
       return NextResponse.json(
         { error: "Promesa de pago requiere fecha compromiso y valor" },
+        { status: 400 }
+      );
+    }
+    if (e instanceof Error && e.message === "AGENT_INVALID") {
+      return NextResponse.json(
+        { error: "Seleccione un agente de cobranza válido y activo" },
         { status: 400 }
       );
     }

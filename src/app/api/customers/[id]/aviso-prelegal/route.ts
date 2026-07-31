@@ -3,6 +3,7 @@ import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { prelegalNoticePdfBuffer } from "@/lib/pdf-aviso-prelegal";
 import { buildPrelegalOverdueSummary, isPrelegalOverdue } from "@/lib/services/overdue";
+import { listCollectionCharges } from "@/lib/services/collection-charges";
 
 export async function GET(
   _req: NextRequest,
@@ -36,6 +37,7 @@ export async function GET(
     }
 
     const tariffs = await prisma.equipmentTariff.findMany();
+    const collectionCharges = await listCollectionCharges(id);
 
     const pdf = prelegalNoticePdfBuffer(
       {
@@ -51,7 +53,8 @@ export async function GET(
         tvStreamingSince: customer.tvStreamingSince,
         equipment: customer.equipment,
       },
-      tariffs.map((t) => ({ type: t.type, notReturnedUsd: Number(t.notReturnedUsd) }))
+      tariffs.map((t) => ({ type: t.type, notReturnedUsd: Number(t.notReturnedUsd) })),
+      collectionCharges
     );
 
     const filename = `aviso-prelegal-${customer.contract}.pdf`;
@@ -89,6 +92,7 @@ export async function POST(
     }
 
     const tariffs = await prisma.equipmentTariff.findMany();
+    const collectionCharges = await listCollectionCharges(id);
 
     const summary = buildPrelegalOverdueSummary({
       pendingBalance: Number(customer.pendingBalance),
@@ -101,6 +105,7 @@ export async function POST(
         type: t.type,
         notReturnedUsd: Number(t.notReturnedUsd),
       })),
+      collectionCharges,
     });
 
     if (!summary) {

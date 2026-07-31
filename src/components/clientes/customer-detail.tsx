@@ -13,12 +13,15 @@ import {
 import { formatUsd } from "@/lib/liquidation";
 import { PrelegalOverdueNotice } from "@/components/clientes/prelegal-notice";
 import { CollectionPaymentsPanel } from "@/components/clientes/collection-payments-panel";
+import { CollectionChargesPanel } from "@/components/clientes/collection-charges-panel";
 
 interface CollectionAction {
   id: string;
   actionDate: string;
   managementType: string;
   result: string;
+  agentUserId: string;
+  agentName: string;
   notes: string | null;
   nextFollowUpDate: string | null;
   promiseDate: string | null;
@@ -27,6 +30,30 @@ interface CollectionAction {
   attachmentName: string | null;
   photoName: string | null;
   user: { name: string; role: string };
+  agent: { name: string; role: string };
+}
+
+interface CollectionChargeRow {
+  chargeType: string;
+  description: string | null;
+  periodLabel: string | null;
+  periodFrom: string | null;
+  periodTo: string | null;
+  amount: string;
+}
+
+interface CollectionAgentOption {
+  id: string;
+  name: string;
+  role: string;
+}
+
+interface CustomerAgentStage {
+  agentUserId: string;
+  agentName: string;
+  firstActionDate: string;
+  lastActionDate: string;
+  gestionesCount: number;
 }
 
 interface CustomerDetail {
@@ -41,6 +68,8 @@ interface CustomerDetail {
   pendingBalance: string;
   overdueSince: string | null;
   inCollectionWhitelist: boolean;
+  assignedAgentUserId: string | null;
+  assignedAgentName: string | null;
   openTechnicalClaim: boolean;
   hasTvStreaming: boolean;
   tvStreamingSince: string | null;
@@ -52,6 +81,7 @@ interface CustomerDetail {
 }
 
 const emptyForm = {
+  agentUserId: "",
   actionDate: new Date().toISOString().slice(0, 16),
   managementType: "LLAMADA",
   result: "CONTESTO",
@@ -84,6 +114,9 @@ export function CustomerDetailView({
   const [tab, setTab] = useState<"datos" | "cobranza">("cobranza");
   const [customer, setCustomer] = useState(initial);
   const [actions, setActions] = useState<CollectionAction[]>([]);
+  const [agentHistory, setAgentHistory] = useState<CustomerAgentStage[]>([]);
+  const [collectionAgents, setCollectionAgents] = useState<CollectionAgentOption[]>([]);
+  const [collectionCharges, setCollectionCharges] = useState<CollectionChargeRow[]>([]);
   const [form, setForm] = useState(emptyForm);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
@@ -93,15 +126,44 @@ export function CustomerDetailView({
   const [sendingBaja, setSendingBaja] = useState(false);
 
   async function refreshCollections() {
-    const res = await fetch(`/api/customers/${customer.id}/collections`);
-    if (res.ok) {
-      const json = await res.json();
+    const [collectionsRes, chargesRes] = await Promise.all([
+      fetch(`/api/customers/${customer.id}/collections`),
+      fetch(`/api/customers/${customer.id}/charges`),
+    ]);
+    if (collectionsRes.ok) {
+      const json = await collectionsRes.json();
       setActions(json.actions);
-      setCustomer((c) => ({ ...c, eligibility: json.eligibility }));
+      setAgentHistory(json.agentHistory ?? []);
+      setCustomer((c) => ({
+        ...c,
+        eligibility: json.eligibility,
+        assignedAgentUserId: json.assignedAgent?.userId ?? c.assignedAgentUserId,
+        assignedAgentName: json.assignedAgent?.name ?? c.assignedAgentName,
+      }));
+    }
+    if (chargesRes.ok) {
+      const json = await chargesRes.json();
+      setCollectionCharges(json.charges ?? []);
     }
   }
 
   useEffect(() => {
+    async function bootstrapAgents() {
+      const [meRes, agentsRes] = await Promise.all([
+        fetch("/api/auth/me"),
+        fetch("/api/users/collection-agents"),
+      ]);
+      const me = meRes.ok ? await meRes.json() : null;
+      const agents = agentsRes.ok ? await agentsRes.json() : [];
+      setCollectionAgents(agents);
+      const defaultAgentId =
+        customer.assignedAgentUserId ??
+        me?.userId ??
+        agents[0]?.id ??
+        "";
+      setForm((f) => ({ ...f, agentUserId: f.agentUserId || defaultAgentId }));
+    }
+    bootstrapAgents();
     refreshCollections();
   }, [customer.id]);
 
@@ -127,12 +189,18 @@ export function CustomerDetailView({
         setMsg(json.error ?? "Error al guardar gestión");
         return;
       }
-      setForm(emptyForm);
+      setForm((f) => ({ ...emptyForm, agentUserId: f.agentUserId }));
       setAttachment(null);
       setPhoto(null);
       setActions(json.actions ?? actions);
+      setAgentHistory(json.agentHistory ?? []);
       if (json.eligibility) {
-        setCustomer((c) => ({ ...c, eligibility: json.eligibility }));
+        setCustomer((c) => ({
+          ...c,
+          eligibility: json.eligibility,
+          assignedAgentUserId: json.item?.agentUserId ?? c.assignedAgentUserId,
+          assignedAgentName: json.item?.agentName ?? c.assignedAgentName,
+        }));
       } else {
         await refreshCollections();
       }
@@ -266,6 +334,7 @@ export function CustomerDetailView({
             equipment: customer.equipment,
           }}
           equipmentTariffs={equipmentTariffs}
+          collectionCharges={collectionCharges}
         />
       )}
 
@@ -339,14 +408,28 @@ export function CustomerDetailView({
             />
           </div>
           <p className="mt-2 text-xs text-slate-500">
-            El aviso prelegal (+90 días) usa esta fecha y el saldo pendiente para calcular los valores
-            vencidos.
+            El aviso prelegal (+90 días) usa la fecha de mora, el saldo pendiente y el detalle de
+            conceptos registrados en cobranza.
           </p>
         </Card>
       )}
 
       {tab === "cobranza" && (
         <>
+          <CollectionChargesPanel
+            customerId={customer.id}
+            pendingBalance={customer.pendingBalance}
+            onUpdated={({ pendingBalance, overdueSince, inCollectionWhitelist }) => {
+              setCustomer((c) => ({
+                ...c,
+                pendingBalance,
+                overdueSince,
+                inCollectionWhitelist,
+              }));
+              refreshCollections();
+            }}
+          />
+
           <CollectionPaymentsPanel
             customerId={customer.id}
             pendingBalance={customer.pendingBalance}
@@ -362,9 +445,61 @@ export function CustomerDetailView({
             }}
           />
 
+          {(customer.assignedAgentName || agentHistory.length > 0) && (
+            <Card title="Agentes de cobranza por etapas">
+              {customer.assignedAgentName && (
+                <p className="mb-3 text-sm">
+                  Agente asignado actual:{" "}
+                  <strong className="text-[#0B1F3A]">{customer.assignedAgentName}</strong>
+                </p>
+              )}
+              {agentHistory.length === 0 ? (
+                <p className="text-sm text-slate-500">Sin historial de agentes.</p>
+              ) : (
+                <div className="space-y-2">
+                  {agentHistory.map((stage, index) => (
+                    <div
+                      key={`${stage.agentUserId}-${stage.firstActionDate}`}
+                      className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-sm"
+                    >
+                      <div>
+                        <span className="mr-2 text-xs font-semibold uppercase text-slate-500">
+                          Etapa {index + 1}
+                        </span>
+                        <strong>{stage.agentName}</strong>
+                      </div>
+                      <div className="text-xs text-slate-600">
+                        {new Date(stage.firstActionDate).toLocaleDateString("es-VE")}
+                        {stage.firstActionDate !== stage.lastActionDate &&
+                          ` — ${new Date(stage.lastActionDate).toLocaleDateString("es-VE")}`}
+                        {" · "}
+                        {stage.gestionesCount} gestión(es)
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
+
           <Card title="Registrar gestión">
             <form onSubmit={saveCollection} className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">
+                <Field label="Agente de cobranza *">
+                  <select
+                    required
+                    value={form.agentUserId}
+                    onChange={(e) => setForm({ ...form, agentUserId: e.target.value })}
+                    className="w-full rounded border px-2 py-1.5 text-sm"
+                  >
+                    <option value="">Seleccione agente</option>
+                    {collectionAgents.map((agent) => (
+                      <option key={agent.id} value={agent.id}>
+                        {agent.name}
+                      </option>
+                    ))}
+                  </select>
+                </Field>
                 <Field label="Fecha y hora">
                   <input
                     type="datetime-local"
@@ -495,7 +630,8 @@ export function CustomerDetailView({
                     <tr>
                       <th className="px-3 py-2">Fecha</th>
                       <th className="px-3 py-2">Hora</th>
-                      <th className="px-3 py-2">Usuario</th>
+                      <th className="px-3 py-2">Agente</th>
+                      <th className="px-3 py-2">Registró</th>
                       <th className="px-3 py-2">Tipo</th>
                       <th className="px-3 py-2">Resultado</th>
                       <th className="px-3 py-2">Observaciones</th>
@@ -508,7 +644,10 @@ export function CustomerDetailView({
                         <tr key={a.id} className="border-t align-top">
                           <td className="px-3 py-2 whitespace-nowrap">{d.toLocaleDateString("es-VE")}</td>
                           <td className="px-3 py-2 whitespace-nowrap">{d.toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" })}</td>
-                          <td className="px-3 py-2">{a.user.name}</td>
+                          <td className="px-3 py-2 font-medium">{a.agentName}</td>
+                          <td className="px-3 py-2 text-slate-600">
+                            {a.user.name !== a.agentName ? a.user.name : "—"}
+                          </td>
                           <td className="px-3 py-2">{COLLECTION_TYPE_LABELS[a.managementType] ?? a.managementType}</td>
                           <td className="px-3 py-2">{COLLECTION_RESULT_LABELS[a.result] ?? a.result}</td>
                           <td className="px-3 py-2 text-slate-600">

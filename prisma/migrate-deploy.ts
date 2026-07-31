@@ -304,6 +304,150 @@ async function main() {
     END $$;
   `);
 
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CollectionChargeType') THEN
+        CREATE TYPE "CollectionChargeType" AS ENUM (
+          'CONSUMO_MENSUAL',
+          'CAMBIO_DOMICILIO',
+          'EXCEDENTE_FIBRA',
+          'INSTALACION',
+          'STREAMS',
+          'RECONEXION',
+          'OTRO'
+        );
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "CollectionCharge" (
+      "id" TEXT NOT NULL,
+      "customerId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "chargeType" "CollectionChargeType" NOT NULL,
+      "description" TEXT,
+      "periodLabel" TEXT,
+      "periodFrom" TIMESTAMP(3),
+      "periodTo" TIMESTAMP(3),
+      "amount" DECIMAL(10,2) NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "CollectionCharge_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CollectionCharge_customerId_fkey'
+      ) THEN
+        ALTER TABLE "CollectionCharge"
+          ADD CONSTRAINT "CollectionCharge_customerId_fkey"
+          FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CollectionCharge_userId_fkey'
+      ) THEN
+        ALTER TABLE "CollectionCharge"
+          ADD CONSTRAINT "CollectionCharge_userId_fkey"
+          FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'Customer'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Customer' AND column_name = 'assignedAgentUserId'
+      ) THEN
+        ALTER TABLE "Customer" ADD COLUMN "assignedAgentUserId" TEXT;
+        ALTER TABLE "Customer" ADD COLUMN "assignedAgentName" TEXT;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'CollectionAction'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'CollectionAction' AND column_name = 'agentUserId'
+      ) THEN
+        ALTER TABLE "CollectionAction" ADD COLUMN "agentUserId" TEXT;
+        ALTER TABLE "CollectionAction" ADD COLUMN "agentName" TEXT;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    UPDATE "CollectionAction" ca
+    SET "agentUserId" = ca."userId",
+        "agentName" = u."name"
+    FROM "User" u
+    WHERE ca."agentUserId" IS NULL AND u.id = ca."userId";
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'CollectionAction' AND column_name = 'agentUserId'
+      ) THEN
+        ALTER TABLE "CollectionAction" ALTER COLUMN "agentUserId" SET NOT NULL;
+        ALTER TABLE "CollectionAction" ALTER COLUMN "agentName" SET NOT NULL;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CollectionAction_agentUserId_fkey'
+      ) THEN
+        ALTER TABLE "CollectionAction"
+          ADD CONSTRAINT "CollectionAction_agentUserId_fkey"
+          FOREIGN KEY ("agentUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'Customer_assignedAgentUserId_fkey'
+      ) THEN
+        ALTER TABLE "Customer"
+          ADD CONSTRAINT "Customer_assignedAgentUserId_fkey"
+          FOREIGN KEY ("assignedAgentUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    UPDATE "Customer" c
+    SET "assignedAgentUserId" = latest."agentUserId",
+        "assignedAgentName" = latest."agentName"
+    FROM (
+      SELECT DISTINCT ON ("customerId") "customerId", "agentUserId", "agentName"
+      FROM "CollectionAction"
+      ORDER BY "customerId", "actionDate" DESC, "createdAt" DESC
+    ) latest
+    WHERE c.id = latest."customerId"
+      AND (c."assignedAgentUserId" IS NULL OR c."assignedAgentName" IS NULL);
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 

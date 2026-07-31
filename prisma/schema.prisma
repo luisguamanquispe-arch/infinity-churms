@@ -65,6 +65,16 @@ enum CollectionResult {
   CLIENTE_NO_UBICADO
 }
 
+enum CollectionChargeType {
+  CONSUMO_MENSUAL
+  CAMBIO_DOMICILIO
+  EXCEDENTE_FIBRA
+  INSTALACION
+  STREAMS
+  RECONEXION
+  OTRO
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -76,8 +86,11 @@ model User {
 
   cancellations Cancellation[] @relation("CreatedBy")
   auditLogs     AuditLog[]
-  collectionActions CollectionAction[]
+  collectionActionsRegistered CollectionAction[] @relation("CollectionRegisteredBy")
+  collectionActionsAsAgent    CollectionAction[] @relation("CollectionAgent")
   collectionPayments CollectionPayment[]
+  collectionCharges CollectionCharge[]
+  assignedCustomers Customer[] @relation("AssignedCollectionAgent")
 }
 
 model Customer {
@@ -97,12 +110,16 @@ model Customer {
   overdueSince     DateTime?
   openTechnicalClaim Boolean @default(false)
   inCollectionWhitelist Boolean @default(false)
+  assignedAgentUserId String?
+  assignedAgentName   String?
   createdAt        DateTime @default(now())
 
   equipment     CustomerEquipment[]
   cancellations Cancellation[]
   collectionActions CollectionAction[]
   collectionPayments CollectionPayment[]
+  collectionCharges CollectionCharge[]
+  assignedAgent User? @relation("AssignedCollectionAgent", fields: [assignedAgentUserId], references: [id])
 }
 
 model CustomerEquipment {
@@ -223,6 +240,8 @@ model CollectionAction {
   id               String                   @id @default(cuid())
   customerId       String
   userId           String
+  agentUserId      String
+  agentName        String
   actionDate       DateTime                 @default(now())
   managementType   CollectionManagementType
   result           CollectionResult
@@ -238,7 +257,8 @@ model CollectionAction {
   createdAt        DateTime                 @default(now())
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  user     User     @relation(fields: [userId], references: [id])
+  user     User     @relation("CollectionRegisteredBy", fields: [userId], references: [id])
+  agent    User     @relation("CollectionAgent", fields: [agentUserId], references: [id])
 }
 
 model CollectionPayment {
@@ -251,6 +271,23 @@ model CollectionPayment {
   paymentMethod String?
   notes         String?
   createdAt     DateTime @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+}
+
+model CollectionCharge {
+  id          String               @id @default(cuid())
+  customerId  String
+  userId      String
+  chargeType  CollectionChargeType
+  description String?
+  periodLabel String?
+  periodFrom  DateTime?
+  periodTo    DateTime?
+  amount      Decimal              @db.Decimal(10, 2)
+  createdAt   DateTime             @default(now())
+  updatedAt   DateTime             @updatedAt
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id])
