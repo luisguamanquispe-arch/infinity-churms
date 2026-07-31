@@ -110,8 +110,23 @@ El archivo `render.yaml` define la BD, pero **solo se crea automáticamente** si
    - `JWT_SECRET` → generado
 4. **Logs** → pestaña *Deploy* del último build: buscar error en build o start
 5. Tras deploy OK, probar:
-   - `https://<su-url>.onrender.com/api/health`
+   - `https://<su-url>.onrender.com/api/health` → debe incluir `"collectionsReady": true` y `"version"` con el commit desplegado
+   - `https://<su-url>.onrender.com/clientes` → enlace **Gestionar →** por cliente
    - `https://<su-url>.onrender.com/login`
+
+## Si GitHub tiene el código pero Render no lo muestra
+
+1. Dashboard → servicio **infinity-bajas-v3vn** (o el suyo)
+2. **Settings → Build & Deploy**
+   - Repo: `luisguamanquispe-arch/infinity-churms`
+   - Branch: `main`
+   - Build: `npm ci --include=dev && npm run render:build`
+   - Start: `npm run render:start`
+3. **Manual Deploy** → **Deploy latest commit**
+4. Revisar **Logs** del deploy (errores en build o migraciones)
+5. Confirmar en `/api/health`:
+   - `"version": "5425983..."` o commit más reciente
+   - `"collectionsReady": true`
 
 ## Login producción
 
