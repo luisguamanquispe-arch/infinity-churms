@@ -75,7 +75,7 @@ export function canAccessRoute(role: UserRole, pathname: string): boolean {
 export const NAV_ITEMS = [
   { href: "/", label: "Dashboard", permission: "dashboard:view" as Permission },
   { href: "/bajas", label: "Bajas", permission: "cancellations:list" as Permission },
-  { href: "/clientes", label: "Clientes", permission: "customers:manage" as Permission },
+  { href: "/clientes", label: "Clientes · Cobranza", permission: "customers:manage" as Permission },
   { href: "/reportes", label: "Reportes", permission: "reports:view" as Permission },
   { href: "/configuracion", label: "Configuración", permission: "config:manage" as Permission },
 ];

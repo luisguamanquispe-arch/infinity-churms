@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { COLORS, CANCELLATION_REASONS, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_SINCE_LABEL, STREAMS_SUPPORT_LABEL } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { differenceInMonths } from "date-fns";
@@ -134,6 +135,14 @@ export default function NuevaBajaPage() {
               Este cliente ya tiene una baja registrada. No se puede crear otra.
             </p>
           )}
+
+          <p className="rounded-lg border border-teal-100 bg-teal-50 px-4 py-3 text-sm text-teal-900">
+            Antes de registrar la baja, complete la{" "}
+            <Link href={`/clientes/${selected.id}`} className="font-semibold underline">
+              Gestión de Cobranza
+            </Link>{" "}
+            del cliente (promesas, convenios, pagos).
+          </p>
 
           <section className="rounded-xl border bg-white p-5 shadow-sm">
             <h2 className="font-semibold">Motivo de la baja *</h2>

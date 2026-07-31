@@ -129,7 +129,10 @@ export default function ClientesPage() {
       <header className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-[#0B1F3A]">Clientes</h1>
-          <p className="text-sm text-slate-500">Maestro por contrato y saldo pendiente</p>
+          <p className="text-sm text-slate-500">
+            Maestro por contrato · use <strong className="text-teal-700">Gestionar →</strong> para{" "}
+            <strong className="text-teal-700">Gestión de Cobranza</strong> antes de enviar a baja
+          </p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -260,11 +263,20 @@ export default function ClientesPage() {
               <th className="px-4 py-3">Streams desde</th>
               <th className="px-4 py-3">Saldo</th>
               <th className="px-4 py-3">Equipos</th>
-              <th className="px-4 py-3"></th>
+              <th className="px-4 py-3">Cobranza / Baja</th>
             </tr>
           </thead>
           <tbody>
-            {customers.map((c) => (
+            {customers.length === 0 ? (
+              <tr>
+                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                  No hay clientes registrados. Cree uno con <strong>+ Nuevo cliente</strong> y luego use{" "}
+                  <strong className="text-teal-700">Gestionar →</strong> para la pestaña{" "}
+                  <strong className="text-teal-700">Gestión de Cobranza</strong>.
+                </td>
+              </tr>
+            ) : (
+            customers.map((c) => (
               <tr key={c.id} className="border-t">
                 <td className="px-4 py-3 font-medium">{c.contract}</td>
                 <td className="px-4 py-3">{c.name}</td>
@@ -293,7 +305,7 @@ export default function ClientesPage() {
                 <td className="px-4 py-3">
                   <div className="flex flex-col gap-1">
                     <Link href={`/clientes/${c.id}`} className="text-xs font-semibold text-teal-700 hover:underline">
-                      Gestionar →
+                      Cobranza →
                     </Link>
                     <button onClick={() => setEditingBalance({ id: c.id, value: String(c.pendingBalance) })} className="text-xs text-slate-500 hover:underline text-left">
                       Editar saldo
@@ -301,7 +313,8 @@ export default function ClientesPage() {
                   </div>
                 </td>
               </tr>
-            ))}
+            ))
+            )}
           </tbody>
         </table>
       </div>

@@ -109,7 +109,7 @@ export default async function BajasPage() {
                   </td>
                   <td className="px-4 py-3">
                     <Link href={`/bajas/${r.id}`} className="text-xs font-semibold text-teal-600">
-                      Gestionar →
+                      Ver baja →
                     </Link>
                   </td>
                 </tr>
