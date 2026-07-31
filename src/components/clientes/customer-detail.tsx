@@ -11,6 +11,8 @@ import {
   COLLECTION_TYPE_LABELS,
 } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
+import { PrelegalOverdueNotice } from "@/components/clientes/prelegal-notice";
+import { CollectionPaymentsPanel } from "@/components/clientes/collection-payments-panel";
 
 interface CollectionAction {
   id: string;
@@ -37,12 +39,15 @@ interface CustomerDetail {
   planName: string;
   status: string;
   pendingBalance: string;
+  overdueSince: string | null;
+  inCollectionWhitelist: boolean;
   openTechnicalClaim: boolean;
   hasTvStreaming: boolean;
   tvStreamingSince: string | null;
   serviceStartDate: string;
   equipment: { type: string; serial: string | null; brand: string | null; model: string | null }[];
   hasCancellation: boolean;
+  prelegalOverdue: boolean;
   eligibility: { allowed: boolean; blockers: string[] };
 }
 
@@ -69,9 +74,11 @@ async function readFileAsDataUrl(file: File): Promise<{ name: string; data: stri
 export function CustomerDetailView({
   initial,
   canCreateBaja,
+  equipmentTariffs,
 }: {
   initial: CustomerDetail;
   canCreateBaja: boolean;
+  equipmentTariffs: { type: string; notReturnedUsd: number | string }[];
 }) {
   const router = useRouter();
   const [tab, setTab] = useState<"datos" | "cobranza">("cobranza");
@@ -181,6 +188,11 @@ export function CustomerDetailView({
           </p>
           <p className="mt-1 text-sm">
             Saldo pendiente: <strong>{formatUsd(Number(customer.pendingBalance))}</strong>
+            {customer.inCollectionWhitelist && (
+              <span className="ml-2 rounded-full bg-teal-100 px-2 py-0.5 text-xs font-semibold text-teal-800">
+                Lista blanca
+              </span>
+            )}
             {customer.openTechnicalClaim && (
               <span className="ml-2 rounded-full bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
                 Reclamo técnico abierto
@@ -240,6 +252,23 @@ export function CustomerDetailView({
         <p className="rounded-lg bg-teal-50 px-4 py-2 text-sm text-teal-800">{msg}</p>
       )}
 
+      {!customer.inCollectionWhitelist && (
+        <PrelegalOverdueNotice
+          customer={{
+            id: customer.id,
+            name: customer.name,
+            contract: customer.contract,
+            pendingBalance: customer.pendingBalance,
+            overdueSince: customer.overdueSince,
+            planName: customer.planName,
+            hasTvStreaming: customer.hasTvStreaming,
+            tvStreamingSince: customer.tvStreamingSince,
+            equipment: customer.equipment,
+          }}
+          equipmentTariffs={equipmentTariffs}
+        />
+      )}
+
       <div className="flex gap-2 border-b">
         <TabButton active={tab === "datos"} onClick={() => setTab("datos")}>
           Datos del cliente
@@ -276,11 +305,63 @@ export function CustomerDetailView({
             />
             Reclamo técnico abierto (bloquea envío a baja)
           </label>
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
+            <Field label="Fecha inicio de mora">
+              <input
+                type="date"
+                value={customer.overdueSince ? customer.overdueSince.slice(0, 10) : ""}
+                onChange={async (e) => {
+                  const value = e.target.value;
+                  const res = await fetch(`/api/customers/${customer.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                      overdueSince: value || null,
+                    }),
+                  });
+                  if (res.ok) {
+                    const updated = await res.json();
+                    setCustomer((c) => ({
+                      ...c,
+                      overdueSince: updated.overdueSince
+                        ? new Date(updated.overdueSince).toISOString()
+                        : null,
+                    }));
+                    setMsg("Fecha de mora actualizada");
+                  }
+                }}
+                className="w-full rounded border px-2 py-1.5 text-sm"
+              />
+            </Field>
+            <Info
+              label="Saldo pendiente registrado"
+              value={formatUsd(Number(customer.pendingBalance))}
+            />
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            El aviso prelegal (+90 días) usa esta fecha y el saldo pendiente para calcular los valores
+            vencidos.
+          </p>
         </Card>
       )}
 
       {tab === "cobranza" && (
         <>
+          <CollectionPaymentsPanel
+            customerId={customer.id}
+            pendingBalance={customer.pendingBalance}
+            inCollectionWhitelist={customer.inCollectionWhitelist}
+            onUpdated={({ pendingBalance, inCollectionWhitelist }) => {
+              setCustomer((c) => ({
+                ...c,
+                pendingBalance,
+                inCollectionWhitelist,
+                overdueSince: inCollectionWhitelist ? null : c.overdueSince,
+              }));
+              refreshCollections();
+            }}
+          />
+
           <Card title="Registrar gestión">
             <form onSubmit={saveCollection} className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">

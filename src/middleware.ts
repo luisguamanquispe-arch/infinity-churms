@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { verifyToken, AUTH_COOKIE } from "@/lib/auth";
 import { canAccessRoute } from "@/lib/permissions";
 
-const PUBLIC = ["/login", "/api/auth/login", "/api/health"];
+const PUBLIC = ["/login", "/api/auth/login", "/api/health", "/api/docs/manual-cobranza"];
 
 function isPublicPath(pathname: string) {
   if (PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return true;

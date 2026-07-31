@@ -3,8 +3,9 @@ import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { customerHasCancellation } from "@/lib/services/cancellations";
 import { getBajaEligibility } from "@/lib/services/collections";
-import { prisma } from "@/lib/prisma";
 import { CustomerDetailView } from "@/components/clientes/customer-detail";
+import { isPrelegalOverdue } from "@/lib/services/overdue";
+import { prisma } from "@/lib/prisma";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -24,19 +25,33 @@ export default async function ClienteDetailPage({ params }: Props) {
   const hasCancellation = await customerHasCancellation(id);
   const eligibility = await getBajaEligibility(id);
 
+  const [equipmentTariffs] = await Promise.all([
+    prisma.equipmentTariff.findMany(),
+  ]);
+
   const detail = {
     ...customer,
     serviceStartDate: customer.serviceStartDate.toISOString(),
     pendingBalance: String(customer.pendingBalance),
+    overdueSince: customer.overdueSince?.toISOString() ?? null,
+    inCollectionWhitelist: customer.inCollectionWhitelist,
     tvStreamingSince: customer.tvStreamingSince?.toISOString() ?? null,
     hasCancellation,
     eligibility,
+    prelegalOverdue: isPrelegalOverdue({
+      pendingBalance: Number(customer.pendingBalance),
+      overdueSince: customer.overdueSince,
+    }),
   };
 
   return (
     <CustomerDetailView
       initial={detail}
       canCreateBaja={hasPermission(session.role, "cancellations:create")}
+      equipmentTariffs={equipmentTariffs.map((t) => ({
+        type: t.type,
+        notReturnedUsd: Number(t.notReturnedUsd),
+      }))}
     />
   );
 }

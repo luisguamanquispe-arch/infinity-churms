@@ -77,6 +77,7 @@ model User {
   cancellations Cancellation[] @relation("CreatedBy")
   auditLogs     AuditLog[]
   collectionActions CollectionAction[]
+  collectionPayments CollectionPayment[]
 }
 
 model Customer {
@@ -93,12 +94,15 @@ model Customer {
   hasTvStreaming   Boolean  @default(false)
   tvStreamingSince DateTime?
   pendingBalance   Decimal  @default(0) @db.Decimal(10, 2)
+  overdueSince     DateTime?
   openTechnicalClaim Boolean @default(false)
+  inCollectionWhitelist Boolean @default(false)
   createdAt        DateTime @default(now())
 
   equipment     CustomerEquipment[]
   cancellations Cancellation[]
   collectionActions CollectionAction[]
+  collectionPayments CollectionPayment[]
 }
 
 model CustomerEquipment {
@@ -232,6 +236,21 @@ model CollectionAction {
   photoName        String?
   photoData        String?
   createdAt        DateTime                 @default(now())
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+}
+
+model CollectionPayment {
+  id            String   @id @default(cuid())
+  customerId    String
+  userId        String
+  paymentDate   DateTime
+  amount        Decimal  @db.Decimal(10, 2)
+  fenixDocument String
+  paymentMethod String?
+  notes         String?
+  createdAt     DateTime @default(now())
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id])

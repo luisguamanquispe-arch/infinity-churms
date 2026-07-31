@@ -2,6 +2,7 @@ import type { PrismaClient } from "@prisma/client";
 
 export async function clearBusinessData(prisma: PrismaClient) {
   const deleted = {
+    collectionPayments: (await prisma.collectionPayment.deleteMany()).count,
     payments: (await prisma.cancellationPayment.deleteMany()).count,
     charges: (await prisma.cancellationCharge.deleteMany()).count,
     cancellationEquipment: (await prisma.cancellationEquipment.deleteMany()).count,

@@ -237,6 +237,73 @@ async function main() {
     console.log("Datos eliminados:", deleted);
   }
 
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'Customer'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Customer' AND column_name = 'overdueSince'
+      ) THEN
+        ALTER TABLE "Customer" ADD COLUMN "overdueSince" TIMESTAMP(3);
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'Customer'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Customer' AND column_name = 'inCollectionWhitelist'
+      ) THEN
+        ALTER TABLE "Customer" ADD COLUMN "inCollectionWhitelist" BOOLEAN NOT NULL DEFAULT false;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "CollectionPayment" (
+      "id" TEXT NOT NULL,
+      "customerId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "paymentDate" TIMESTAMP(3) NOT NULL,
+      "amount" DECIMAL(10,2) NOT NULL,
+      "fenixDocument" TEXT NOT NULL,
+      "paymentMethod" TEXT,
+      "notes" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "CollectionPayment_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CollectionPayment_customerId_fkey'
+      ) THEN
+        ALTER TABLE "CollectionPayment"
+          ADD CONSTRAINT "CollectionPayment_customerId_fkey"
+          FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CollectionPayment_userId_fkey'
+      ) THEN
+        ALTER TABLE "CollectionPayment"
+          ADD CONSTRAINT "CollectionPayment_userId_fkey"
+          FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 

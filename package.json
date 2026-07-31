@@ -18,7 +18,8 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:clear-data": "tsx prisma/run-clear-business-data.ts",
     "db:verify-equipment": "tsx prisma/verify-equipment-persistence.ts",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "docs:manual-cobranza": "tsx scripts/generate-manual-cobranza.ts"
   },
   "engines": {
     "node": ">=20"

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { COLORS, CUSTOMER_ZONES, EQUIPMENT_TYPES, toUpperInput, HAS_STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL } from "@/lib/constants";
 import { normalizeCedula, validateEcuadorianCedula } from "@/lib/cedula";
 import { formatUsd } from "@/lib/liquidation";
+import { getOverdueDays, isPrelegalOverdue } from "@/lib/services/overdue";
 
 interface Customer {
   id: string;
@@ -16,6 +17,8 @@ interface Customer {
   planName: string;
   status: string;
   pendingBalance: string;
+  overdueSince: string | null;
+  inCollectionWhitelist?: boolean;
   hasTvStreaming: boolean;
   tvStreamingSince: string | null;
   equipment: { type: string; serial: string | null; brand: string | null; model: string | null }[];
@@ -30,6 +33,7 @@ const emptyForm = {
   planName: "",
   serviceStartDate: new Date().toISOString().slice(0, 10),
   pendingBalance: "0",
+  overdueSince: "",
   hasTvStreaming: false,
   tvStreamingSince: "",
   equipment: [] as { type: string; serial: string; brand: string; model: string }[],
@@ -94,6 +98,7 @@ export default function ClientesPage() {
       body: JSON.stringify({
         ...form,
         pendingBalance: parseFloat(form.pendingBalance),
+        overdueSince: form.overdueSince || undefined,
         tvStreamingSince: form.hasTvStreaming ? form.tvStreamingSince : null,
         equipment: form.equipment.filter((eq) => eq.type && (eq.serial || eq.brand || eq.model)),
       }),
@@ -176,6 +181,7 @@ export default function ClientesPage() {
             <Input label="Dirección *" value={form.address} onChange={(v) => updateUpper("address", v)} uppercase required />
             <Input label="Fecha alta *" type="date" value={form.serviceStartDate} onChange={(v) => setForm({ ...form, serviceStartDate: v })} required />
             <Input label="Saldo pendiente" type="number" value={form.pendingBalance} onChange={(v) => setForm({ ...form, pendingBalance: v })} />
+            <Input label="Inicio mora (si aplica)" type="date" value={form.overdueSince} onChange={(v) => setForm({ ...form, overdueSince: v })} />
           </div>
           <label className="flex items-center gap-2 text-sm">
             <input
@@ -262,6 +268,7 @@ export default function ClientesPage() {
               <th className="px-4 py-3">Plan</th>
               <th className="px-4 py-3">Streams desde</th>
               <th className="px-4 py-3">Saldo</th>
+              <th className="px-4 py-3">Mora</th>
               <th className="px-4 py-3">Equipos</th>
               <th className="px-4 py-3">Cobranza / Baja</th>
             </tr>
@@ -269,7 +276,7 @@ export default function ClientesPage() {
           <tbody>
             {customers.length === 0 ? (
               <tr>
-                <td colSpan={8} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
                   No hay clientes registrados. Cree uno con <strong>+ Nuevo cliente</strong> y luego use{" "}
                   <strong className="text-teal-700">Gestionar →</strong> para la pestaña{" "}
                   <strong className="text-teal-700">Gestión de Cobranza</strong>.
@@ -279,7 +286,14 @@ export default function ClientesPage() {
             customers.map((c) => (
               <tr key={c.id} className="border-t">
                 <td className="px-4 py-3 font-medium">{c.contract}</td>
-                <td className="px-4 py-3">{c.name}</td>
+                <td className="px-4 py-3">
+                  {c.name}
+                  {c.inCollectionWhitelist && (
+                    <span className="ml-2 rounded-full bg-teal-100 px-2 py-0.5 text-[10px] font-semibold text-teal-800">
+                      Lista blanca
+                    </span>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-slate-500">{c.zone ?? "—"}</td>
                 <td className="px-4 py-3">{c.planName}</td>
                 <td className="px-4 py-3 text-slate-500">
@@ -295,6 +309,26 @@ export default function ClientesPage() {
                     </div>
                   ) : (
                     formatUsd(Number(c.pendingBalance))
+                  )}
+                </td>
+                <td className="px-4 py-3">
+                  {Number(c.pendingBalance) > 0 ? (
+                    isPrelegalOverdue({
+                      pendingBalance: c.pendingBalance,
+                      overdueSince: c.overdueSince,
+                    }) ? (
+                      <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-900">
+                        Prelegal {getOverdueDays({ pendingBalance: c.pendingBalance, overdueSince: c.overdueSince })}d
+                      </span>
+                    ) : c.overdueSince ? (
+                      <span className="text-xs text-slate-600">
+                        {getOverdueDays({ pendingBalance: c.pendingBalance, overdueSince: c.overdueSince })} días
+                      </span>
+                    ) : (
+                      <span className="text-xs text-slate-400">Sin fecha mora</span>
+                    )
+                  ) : (
+                    <span className="text-xs text-slate-400">—</span>
                   )}
                 </td>
                 <td className="px-4 py-3 text-slate-500">

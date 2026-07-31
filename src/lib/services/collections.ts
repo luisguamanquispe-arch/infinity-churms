@@ -55,9 +55,8 @@ export async function getBajaEligibility(customerId: string) {
     blockers.push("Existe un reclamo técnico abierto");
   }
 
-  const hasPaymentResult = actions.some((a) => a.result === "PAGO");
-  if (hasPaymentResult) {
-    blockers.push("Existe un pago registrado en gestión de cobranza — finalice la gestión");
+  if (customer.inCollectionWhitelist) {
+    blockers.push("Cliente en lista blanca (cuenta al día)");
   }
 
   const today = startOfDay(new Date());

@@ -58,6 +58,14 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: validationError }, { status: 400 });
     }
 
+    const pendingBalance = body.pendingBalance ?? 0;
+    const overdueSince =
+      body.overdueSince && pendingBalance > 0
+        ? new Date(body.overdueSince)
+        : pendingBalance > 0
+          ? new Date()
+          : null;
+
     const customer = await prisma.customer.create({
       data: {
         contract: formatted.contract,
@@ -73,7 +81,8 @@ export async function POST(request: NextRequest) {
           body.hasTvStreaming && body.tvStreamingSince
             ? new Date(body.tvStreamingSince)
             : null,
-        pendingBalance: body.pendingBalance ?? 0,
+        pendingBalance,
+        overdueSince,
         equipment: {
           create: (body.equipment ?? []).map(
             (eq: { type: EquipmentType; serial?: string; brand?: string; model?: string }, i: number) => ({

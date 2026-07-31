@@ -5,6 +5,7 @@ import { audit } from "@/lib/audit";
 import { getClientIp } from "@/lib/request-ip";
 import { customerHasCancellation } from "@/lib/services/cancellations";
 import { getBajaEligibility } from "@/lib/services/collections";
+import { resolveOverdueSinceOnBalanceChange } from "@/lib/services/overdue";
 
 export async function GET(
   _req: NextRequest,
@@ -41,8 +42,28 @@ export async function PATCH(
     const { id } = await params;
     const body = await request.json();
 
+    const existing = await prisma.customer.findUnique({ where: { id } });
+    if (!existing) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+
     const data: Record<string, unknown> = {};
-    if (body.pendingBalance !== undefined) data.pendingBalance = body.pendingBalance;
+    if (body.pendingBalance !== undefined) {
+      data.pendingBalance = body.pendingBalance;
+      const newBalance = Number(body.pendingBalance);
+      data.overdueSince = resolveOverdueSinceOnBalanceChange(
+        Number(existing.pendingBalance),
+        newBalance,
+        existing.overdueSince
+      );
+      if (newBalance > 0) {
+        data.inCollectionWhitelist = false;
+      } else if (newBalance <= 0) {
+        data.inCollectionWhitelist = true;
+        data.overdueSince = null;
+      }
+    }
+    if (body.overdueSince !== undefined) {
+      data.overdueSince = body.overdueSince ? new Date(body.overdueSince) : null;
+    }
     if (body.planName !== undefined) data.planName = body.planName;
     if (body.status !== undefined) data.status = body.status;
     if (body.openTechnicalClaim !== undefined) data.openTechnicalClaim = Boolean(body.openTechnicalClaim);
