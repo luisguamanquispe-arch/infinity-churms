@@ -7,7 +7,7 @@ async function main() {
   const hash = await bcrypt.hash("admin2010", 10);
 
   await prisma.user.updateMany({
-    where: { email: { notIn: ["admin@infinity.net", "supervisor@infinity.net"] } },
+    where: { email: { notIn: ["admin@infinity.net", "supervisor@infinity.net", "cobranzas@infinity.net"] } },
     data: { active: false },
   });
 
@@ -30,6 +30,17 @@ async function main() {
       password: hash,
       name: "Supervisor",
       role: "SUPERVISOR",
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: "cobranzas@infinity.net" },
+    update: { password: hash, name: "Agente Cobranzas", role: "COBRANZAS", active: true },
+    create: {
+      email: "cobranzas@infinity.net",
+      password: hash,
+      name: "Agente Cobranzas",
+      role: "COBRANZAS",
     },
   });
 
@@ -60,7 +71,7 @@ async function main() {
     });
   }
 
-  console.log("Seed OK — usuarios: admin@infinity.net, supervisor@infinity.net");
+  console.log("Seed OK — admin@infinity.net, cobranzas@infinity.net, supervisor@infinity.net");
 }
 
 main()

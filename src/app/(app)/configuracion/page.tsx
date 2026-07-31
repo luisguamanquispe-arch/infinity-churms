@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { COLORS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
+import { UsersManagerPanel } from "@/components/config/users-manager-panel";
 
 interface TariffConfig {
   permanenceMonths: number;
@@ -16,7 +17,10 @@ interface EquipmentTariff {
   notReturnedUsd: string;
 }
 
+type ConfigTab = "tarifas" | "usuarios";
+
 export default function ConfiguracionPage() {
+  const [tab, setTab] = useState<ConfigTab>("usuarios");
   const [tariff, setTariff] = useState<TariffConfig | null>(null);
   const [equipment, setEquipment] = useState<EquipmentTariff[]>([]);
   const [msg, setMsg] = useState("");
@@ -70,80 +74,121 @@ export default function ConfiguracionPage() {
   if (loading) return <p className="text-sm text-slate-500">Cargando...</p>;
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-4xl space-y-6">
       <header>
-        <h1 className="text-2xl font-bold text-[#0B1F3A]">Configuración de tarifas</h1>
-        <p className="text-sm text-slate-500">Solo administradores. Afecta liquidaciones futuras.</p>
+        <h1 className="text-2xl font-bold text-[#0B1F3A]">Configuración</h1>
+        <p className="text-sm text-slate-500">
+          Administración de tarifas y gestor de usuarios / agentes de cobranza.
+        </p>
       </header>
 
-      {msg && <p className="rounded-lg bg-teal-50 px-4 py-2 text-sm text-teal-800">{msg}</p>}
+      <div className="flex gap-2 border-b">
+        <TabButton active={tab === "usuarios"} onClick={() => setTab("usuarios")}>
+          Usuarios y agentes
+        </TabButton>
+        <TabButton active={tab === "tarifas"} onClick={() => setTab("tarifas")}>
+          Tarifas
+        </TabButton>
+      </div>
 
-      {tariff && (
-        <section className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
-          <h2 className="font-semibold">Permanencia y Streams</h2>
-          <div className="grid gap-3 sm:grid-cols-3">
-            <Field
-              label="Meses permanencia"
-              type="number"
-              value={String(tariff.permanenceMonths)}
-              onChange={(v) => setTariff({ ...tariff, permanenceMonths: parseInt(v) || 18 })}
-            />
-            <Field
-              label="Costo instalación (USD)"
-              type="number"
-              value={tariff.installCostUsd}
-              onChange={(v) => setTariff({ ...tariff, installCostUsd: v })}
-            />
-            <Field
-              label="Soporte de Streams / mes (USD)"
-              type="number"
-              value={tariff.tvMonthlyUsd}
-              onChange={(v) => setTariff({ ...tariff, tvMonthlyUsd: v })}
-            />
-          </div>
-          <p className="text-xs text-slate-500">
-            Prorrateo mensual: {formatUsd(Number(tariff.installCostUsd) / tariff.permanenceMonths)} / mes
-          </p>
-        </section>
+      {tab === "usuarios" && <UsersManagerPanel />}
+
+      {tab === "tarifas" && (
+        <>
+          {msg && <p className="rounded-lg bg-teal-50 px-4 py-2 text-sm text-teal-800">{msg}</p>}
+
+          {tariff && (
+            <section className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
+              <h2 className="font-semibold">Permanencia y Streams</h2>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <Field
+                  label="Meses permanencia"
+                  type="number"
+                  value={String(tariff.permanenceMonths)}
+                  onChange={(v) => setTariff({ ...tariff, permanenceMonths: parseInt(v) || 18 })}
+                />
+                <Field
+                  label="Costo instalación (USD)"
+                  type="number"
+                  value={tariff.installCostUsd}
+                  onChange={(v) => setTariff({ ...tariff, installCostUsd: v })}
+                />
+                <Field
+                  label="Soporte de Streams / mes (USD)"
+                  type="number"
+                  value={tariff.tvMonthlyUsd}
+                  onChange={(v) => setTariff({ ...tariff, tvMonthlyUsd: v })}
+                />
+              </div>
+              <p className="text-xs text-slate-500">
+                Prorrateo mensual: {formatUsd(Number(tariff.installCostUsd) / tariff.permanenceMonths)} / mes
+              </p>
+            </section>
+          )}
+
+          <section className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
+            <h2 className="font-semibold">Tarifas por equipo</h2>
+            {equipment.map((eq, i) => (
+              <div key={eq.type} className="grid gap-3 border-t pt-3 sm:grid-cols-3">
+                <p className="font-medium text-sm">{eq.type}</p>
+                <Field
+                  label="Dañado (USD)"
+                  type="number"
+                  value={eq.damagedUsd}
+                  onChange={(v) => {
+                    const next = [...equipment];
+                    next[i] = { ...eq, damagedUsd: v };
+                    setEquipment(next);
+                  }}
+                />
+                <Field
+                  label="No entregado (USD)"
+                  type="number"
+                  value={eq.notReturnedUsd}
+                  onChange={(v) => {
+                    const next = [...equipment];
+                    next[i] = { ...eq, notReturnedUsd: v };
+                    setEquipment(next);
+                  }}
+                />
+              </div>
+            ))}
+          </section>
+
+          <button
+            onClick={save}
+            className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
+            style={{ backgroundColor: COLORS.brand }}
+          >
+            Guardar configuración
+          </button>
+        </>
       )}
-
-      <section className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
-        <h2 className="font-semibold">Tarifas por equipo</h2>
-        {equipment.map((eq, i) => (
-          <div key={eq.type} className="grid gap-3 border-t pt-3 sm:grid-cols-3">
-            <p className="font-medium text-sm">{eq.type}</p>
-            <Field
-              label="Dañado (USD)"
-              type="number"
-              value={eq.damagedUsd}
-              onChange={(v) => {
-                const next = [...equipment];
-                next[i] = { ...eq, damagedUsd: v };
-                setEquipment(next);
-              }}
-            />
-            <Field
-              label="No entregado (USD)"
-              type="number"
-              value={eq.notReturnedUsd}
-              onChange={(v) => {
-                const next = [...equipment];
-                next[i] = { ...eq, notReturnedUsd: v };
-                setEquipment(next);
-              }}
-            />
-          </div>
-        ))}
-      </section>
-
-      <button
-        onClick={save}
-        className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
-        style={{ backgroundColor: COLORS.brand }}
-      >
-        Guardar configuración
-      </button>
     </div>
+  );
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`border-b-2 px-4 py-2 text-sm font-semibold transition ${
+        active
+          ? "border-[#00A9B5] text-[#0B1F3A]"
+          : "border-transparent text-slate-500 hover:text-slate-700"
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

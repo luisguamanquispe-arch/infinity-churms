@@ -11,7 +11,8 @@ export type Permission =
   | "cancellations:close"
   | "customers:manage"
   | "reports:view"
-  | "config:manage";
+  | "config:manage"
+  | "users:manage";
 
 const ALL: Permission[] = [
   "dashboard:view",
@@ -25,6 +26,7 @@ const ALL: Permission[] = [
   "customers:manage",
   "reports:view",
   "config:manage",
+  "users:manage",
 ];
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
@@ -68,6 +70,12 @@ export function canAccessRoute(role: UserRole, pathname: string): boolean {
   }
   if (pathname === "/configuracion" || pathname.startsWith("/api/config")) {
     return hasPermission(role, "config:manage");
+  }
+  if (pathname.startsWith("/api/users/collection-agents")) {
+    return hasPermission(role, "customers:manage");
+  }
+  if (pathname.startsWith("/api/users")) {
+    return hasPermission(role, "users:manage");
   }
   return true;
 }

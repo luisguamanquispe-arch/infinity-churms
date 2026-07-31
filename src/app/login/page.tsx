@@ -44,8 +44,8 @@ function LoginForm() {
       style={{ backgroundColor: "#f8fafc" }}
     >
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl border bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-bold text-[#0B1F3A]">Infinity — Bajas</h1>
-        <p className="mt-1 text-sm text-slate-500">Gestión de bajas y equipos</p>
+        <h1 className="text-xl font-bold text-[#0B1F3A]">Infinity — Gestión</h1>
+        <p className="mt-1 text-sm text-slate-500">Bajas, cobranzas y agentes</p>
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
         <div className="mt-6 space-y-4">
           <input
@@ -53,14 +53,14 @@ function LoginForm() {
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             className="w-full rounded-lg border px-3 py-2 text-sm"
-            placeholder="Correo"
+            placeholder="Usuario (correo)"
           />
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             className="w-full rounded-lg border px-3 py-2 text-sm"
-            placeholder="Contraseña"
+            placeholder="Clave"
           />
           <button
             type="submit"
@@ -71,7 +71,9 @@ function LoginForm() {
             {loading ? "Ingresando…" : "Ingresar"}
           </button>
         </div>
-        <p className="mt-4 text-xs text-slate-400">admin@infinity.net / admin2010 · supervisor@infinity.net / admin2010</p>
+        <p className="mt-4 text-xs text-slate-400">
+          admin@infinity.net · cobranzas@infinity.net / admin2010
+        </p>
       </form>
     </div>
   );
