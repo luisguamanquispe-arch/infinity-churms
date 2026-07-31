@@ -1,9 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { Suspense, useState } from "react";
+import { useSearchParams } from "next/navigation";
 import { COLORS } from "@/lib/constants";
 
-export default function LoginPage() {
+function safeRedirectPath(from: string | null) {
+  if (!from || !from.startsWith("/") || from.startsWith("//")) return "/";
+  return from;
+}
+
+function LoginForm() {
+  const searchParams = useSearchParams();
   const [email, setEmail] = useState("admin@infinity.net");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -23,7 +30,7 @@ export default function LoginPage() {
         setError("Credenciales inválidas");
         return;
       }
-      window.location.href = "/";
+      window.location.href = safeRedirectPath(searchParams.get("from"));
     } catch {
       setError("No se pudo conectar con el servidor");
     } finally {
@@ -67,5 +74,13 @@ export default function LoginPage() {
         <p className="mt-4 text-xs text-slate-400">admin@infinity.net / admin2010 · supervisor@infinity.net / admin2010</p>
       </form>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

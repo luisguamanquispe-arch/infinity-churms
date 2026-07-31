@@ -11,8 +11,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     ({ href, label }) => ({ href, label })
   );
 
+  const buildVersion = process.env.RENDER_GIT_COMMIT ?? "dev";
+
   return (
-    <AppShell user={{ name: session.name, role: session.role }} nav={nav}>
+    <AppShell user={{ name: session.name, role: session.role }} nav={nav} buildVersion={buildVersion}>
       {children}
     </AppShell>
   );

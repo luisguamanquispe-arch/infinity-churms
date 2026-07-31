@@ -31,10 +31,12 @@ export function AppShell({
   children,
   user,
   nav,
+  buildVersion,
 }: {
   children: React.ReactNode;
   user?: { name: string; role: UserRole };
   nav?: NavItem[];
+  buildVersion?: string;
 }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -78,13 +80,20 @@ export function AppShell({
             );
           })}
         </nav>
-        <button
-          onClick={logout}
-          className="mt-auto flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/5"
-        >
-          <LogOut className="h-4 w-4" />
-          Salir
-        </button>
+        <div className="mt-auto space-y-2">
+          {buildVersion && (
+            <p className="px-3 text-[10px] text-slate-500" title={buildVersion}>
+              v{buildVersion.slice(0, 7)}
+            </p>
+          )}
+          <button
+            onClick={logout}
+            className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/5"
+          >
+            <LogOut className="h-4 w-4" />
+            Salir
+          </button>
+        </div>
       </aside>
 
       {mobileOpen && (
