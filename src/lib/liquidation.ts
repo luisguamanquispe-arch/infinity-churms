@@ -1,18 +1,22 @@
 import { differenceInMonths } from "date-fns";
 
 export interface LiquidationInput {
-  serviceStartDate: Date;
+  permanenceStartDate: Date;
   requestDate: Date;
   hasTvStreaming: boolean;
   tvStreamingSince: Date | null;
   pendingBalance: number;
   config: { permanenceMonths: number; installCostUsd: number; tvMonthlyUsd: number };
   extraCharges: { concept: string; amount: number }[];
+  /** When set, overrides calculated permanence charge (from permanence module). */
+  permanenceAmountOverride?: number;
+  monthsCompletedOverride?: number;
 }
 
 export interface LiquidationResult {
   monthsCompleted: number;
   permanenceAmount: number;
+  fiberInstallPending: boolean;
   tvAmount: number;
   monthlyAmount: number;
   equipmentAmount: number;
@@ -21,13 +25,22 @@ export interface LiquidationResult {
 }
 
 export function calculateLiquidation(input: LiquidationInput): LiquidationResult {
-  const monthsCompleted = Math.max(
-    0,
-    differenceInMonths(input.requestDate, input.serviceStartDate)
-  );
-  const monthsPending = Math.max(0, input.config.permanenceMonths - monthsCompleted);
-  const monthlyPermanence = input.config.installCostUsd / input.config.permanenceMonths;
-  const permanenceAmount = Math.round(monthsPending * monthlyPermanence * 100) / 100;
+  const monthsCompleted =
+    input.monthsCompletedOverride ??
+    Math.max(0, differenceInMonths(input.requestDate, input.permanenceStartDate));
+
+  let permanenceAmount: number;
+  let fiberInstallPending: boolean;
+
+  if (input.permanenceAmountOverride !== undefined) {
+    permanenceAmount = input.permanenceAmountOverride;
+    fiberInstallPending = permanenceAmount > 0;
+  } else {
+    const monthsPending = Math.max(0, input.config.permanenceMonths - monthsCompleted);
+    const monthlyPermanence = input.config.installCostUsd / input.config.permanenceMonths;
+    permanenceAmount = Math.round(monthsPending * monthlyPermanence * 100) / 100;
+    fiberInstallPending = monthsPending > 0;
+  }
 
   let tvAmount = 0;
   if (input.hasTvStreaming && input.tvStreamingSince) {
@@ -44,6 +57,7 @@ export function calculateLiquidation(input: LiquidationInput): LiquidationResult
   return {
     monthsCompleted,
     permanenceAmount,
+    fiberInstallPending,
     tvAmount,
     monthlyAmount,
     equipmentAmount,

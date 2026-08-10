@@ -7,7 +7,10 @@ import {
   initEquipmentChecklist,
   listCancellations,
   recalculateCancellation,
+  validatePermanenceForCancellation,
+  customerTechnologyInput,
 } from "@/lib/services/cancellations";
+import { buildPermanenceSummary, PERMANENCE_AUDIT_REASON } from "@/lib/permanence";
 import { getBajaEligibility } from "@/lib/services/collections";
 import { getClientIp } from "@/lib/request-ip";
 import type { CancellationReason } from "@prisma/client";
@@ -72,6 +75,21 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const techInput = customerTechnologyInput(customer);
+    const permanenceValidation = validatePermanenceForCancellation(techInput);
+    if (!permanenceValidation.ok) {
+      return NextResponse.json({ error: permanenceValidation.warning }, { status: 400 });
+    }
+
+    const config = await prisma.tariffConfig.findFirst();
+    const permanencePreview = buildPermanenceSummary(customer, new Date(), {
+      permanenceMonths: config?.permanenceMonths ?? 18,
+      installCostUsd: Number(config?.installCostUsd ?? 200),
+    });
+    if (!permanencePreview.canCalculate) {
+      return NextResponse.json({ error: permanencePreview.warning }, { status: 400 });
+    }
+
     const cancellation = await prisma.cancellation.create({
       data: {
         customerId,
@@ -104,6 +122,17 @@ export async function POST(request: NextRequest) {
       detail: `Baja ${customer.contract}`,
       ipAddress: getClientIp(request),
     });
+
+    if (permanencePreview.fiberInstallPending) {
+      await audit({
+        userId: session.userId,
+        action: "PERMANENCE_CHARGE",
+        entity: "Cancellation",
+        entityId: cancellation.id,
+        detail: `${PERMANENCE_AUDIT_REASON} · ${permanencePreview.installAmount} USD · meses=${permanencePreview.monthsInFiber}/${permanencePreview.minContractMonths}`,
+        ipAddress: getClientIp(request),
+      });
+    }
 
     return NextResponse.json({ id: cancellation.id });
   } catch (e) {

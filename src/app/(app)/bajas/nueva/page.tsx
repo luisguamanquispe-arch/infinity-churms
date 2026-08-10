@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { COLORS, CANCELLATION_REASONS, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_SINCE_LABEL, STREAMS_SUPPORT_LABEL } from "@/lib/constants";
+import { COLORS, CANCELLATION_REASONS, STREAMS_SUPPORT_SINCE_LABEL, STREAMS_SUPPORT_LABEL } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
-import { differenceInMonths } from "date-fns";
+import { PermanenceSummaryPanel } from "@/components/bajas/permanence-summary-panel";
+import type { PermanenceSummary } from "@/lib/permanence";
 
 interface Customer {
   id: string;
@@ -16,6 +17,11 @@ interface Customer {
   serviceStartDate: string;
   planName: string;
   status: string;
+  originTechnology: string;
+  currentTechnology: string;
+  fiberInstallDate: string | null;
+  fiberMigrationDate: string | null;
+  migrationReviewRequired: boolean;
   hasTvStreaming: boolean;
   tvStreamingSince: string | null;
   pendingBalance: string;
@@ -30,6 +36,7 @@ export default function NuevaBajaPage() {
   const [q, setQ] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
+  const [permanence, setPermanence] = useState<PermanenceSummary | null>(null);
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -53,6 +60,16 @@ export default function NuevaBajaPage() {
       });
   }, [prefillCustomerId]);
 
+  useEffect(() => {
+    if (!selected) {
+      setPermanence(null);
+      return;
+    }
+    fetch(`/api/customers/${selected.id}/permanence-preview`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then(setPermanence);
+  }, [selected]);
+
   async function submit() {
     if (!selected || !reason) {
       setError("Seleccione cliente y motivo de baja");
@@ -60,6 +77,13 @@ export default function NuevaBajaPage() {
     }
     if (selected.hasCancellation) {
       setError("Este cliente ya tiene una baja registrada");
+      return;
+    }
+    if (permanence && !permanence.canCalculate) {
+      setError(
+        permanence.warning ??
+          "Complete la información de migración/instalación de fibra antes de registrar la baja."
+      );
       return;
     }
     const eligRes = await fetch(`/api/customers/${selected.id}/collections`);
@@ -83,13 +107,15 @@ export default function NuevaBajaPage() {
     setLoading(false);
   }
 
-  const months = selected
-    ? differenceInMonths(new Date(), new Date(selected.serviceStartDate))
-    : 0;
-  const permanencePreview = selected ? Math.max(0, 18 - months) * (200 / 18) : 0;
   const tvMonths =
     selected?.hasTvStreaming && selected.tvStreamingSince
-      ? differenceInMonths(new Date(), new Date(selected.tvStreamingSince))
+      ? Math.max(
+          1,
+          Math.floor(
+            (Date.now() - new Date(selected.tvStreamingSince).getTime()) /
+              (1000 * 60 * 60 * 24 * 30)
+          )
+        )
       : 0;
 
   return (
@@ -139,9 +165,9 @@ export default function NuevaBajaPage() {
           <p className="rounded-lg border border-teal-100 bg-teal-50 px-4 py-3 text-sm text-teal-900">
             Antes de registrar la baja, complete la{" "}
             <Link href={`/clientes/${selected.id}`} className="font-semibold underline">
-              Gestión de Cobranza
+              ficha del cliente
             </Link>{" "}
-            del cliente (promesas, convenios, pagos).
+            (tecnología, migración a fibra y cobranza).
           </p>
 
           <section className="rounded-xl border bg-white p-5 shadow-sm">
@@ -165,36 +191,24 @@ export default function NuevaBajaPage() {
             <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
               <Row label="Contrato" value={selected.contract} />
               <Row label="Nombre" value={selected.name} />
-              <Row label="Cédula" value={selected.cedula} />
               <Row label="Plan" value={selected.planName} />
-              <Row label="Dirección" value={selected.address} />
-              <Row label="Alta servicio" value={new Date(selected.serviceStartDate).toLocaleDateString("es-VE")} />
-              <Row label="Estado" value={selected.status} />
+              <Row label="Alta original" value={new Date(selected.serviceStartDate).toLocaleDateString("es-VE")} />
+              <Row label="Tecnología origen" value={selected.originTechnology} />
+              <Row label="Tecnología actual" value={selected.currentTechnology} />
               <Row label="Mensualidades pend." value={formatUsd(Number(selected.pendingBalance))} />
-              {selected.hasTvStreaming && (
-                <Row
-                  label={STREAMS_SUPPORT_SINCE_LABEL}
-                  value={
-                    selected.tvStreamingSince
-                      ? new Date(selected.tvStreamingSince).toLocaleDateString("es-VE")
-                      : "Sin fecha — actualice en Clientes"
-                  }
-                />
-              )}
             </dl>
           </section>
 
-          <section className="rounded-xl border bg-slate-50 p-5">
-            <h2 className="font-semibold text-sm">Vista previa liquidación</h2>
-            <p className="mt-2 text-sm">Meses cumplidos: {months} / 18</p>
-            <p className="text-sm">{INSTALLATION_PRORATION_LABEL} estimado: {formatUsd(permanencePreview)}</p>
-            {selected.hasTvStreaming && selected.tvStreamingSince && (
-              <p className="text-sm">
-                {STREAMS_SUPPORT_LABEL} ({tvMonths} meses × $2): {formatUsd(tvMonths * 2)}
+          {permanence && <PermanenceSummaryPanel summary={permanence} />}
+
+          {selected.hasTvStreaming && selected.tvStreamingSince && (
+            <section className="rounded-xl border bg-slate-50 p-4 text-sm">
+              <p>
+                {STREAMS_SUPPORT_LABEL} ({tvMonths} meses estimados):{" "}
+                {formatUsd(tvMonths * 2)}
               </p>
-            )}
-            <p className="mt-1 text-xs text-slate-500">Equipos no se incluyen en la liquidación</p>
-          </section>
+            </section>
+          )}
 
           <section className="rounded-xl border bg-white p-5">
             <h2 className="font-semibold text-sm">Equipos asociados</h2>
@@ -222,7 +236,12 @@ export default function NuevaBajaPage() {
 
           <button
             onClick={submit}
-            disabled={loading || selected.hasCancellation || !reason}
+            disabled={
+              loading ||
+              selected.hasCancellation ||
+              !reason ||
+              (permanence !== null && !permanence.canCalculate)
+            }
             className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
             style={{ backgroundColor: COLORS.brand }}
           >

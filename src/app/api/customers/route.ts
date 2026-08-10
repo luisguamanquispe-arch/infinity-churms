@@ -66,6 +66,17 @@ export async function POST(request: NextRequest) {
           ? new Date()
           : null;
 
+    const originTechnology = body.originTechnology === "RADIOENLACE" ? "RADIOENLACE" : "FIBRA";
+    const currentTechnology =
+      body.currentTechnology === "RADIOENLACE" ? "RADIOENLACE" : originTechnology;
+    const serviceStart = new Date(body.serviceStartDate);
+    const fiberInstallDate =
+      body.fiberInstallDate
+        ? new Date(body.fiberInstallDate)
+        : originTechnology === "FIBRA"
+          ? serviceStart
+          : null;
+
     const customer = await prisma.customer.create({
       data: {
         contract: formatted.contract,
@@ -74,8 +85,18 @@ export async function POST(request: NextRequest) {
         address: formatted.address,
         zone: formatted.zone,
         phone: formatted.phone,
-        serviceStartDate: new Date(body.serviceStartDate),
+        serviceStartDate: serviceStart,
         planName: formatted.planName,
+        originTechnology,
+        currentTechnology,
+        fiberInstallDate,
+        fiberMigrationDate: body.fiberMigrationDate
+          ? new Date(body.fiberMigrationDate)
+          : null,
+        migrationReviewRequired:
+          originTechnology === "RADIOENLACE" &&
+          currentTechnology === "FIBRA" &&
+          !body.fiberMigrationDate,
         hasTvStreaming: Boolean(body.hasTvStreaming),
         tvStreamingSince:
           body.hasTvStreaming && body.tvStreamingSince

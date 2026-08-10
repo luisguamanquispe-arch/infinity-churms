@@ -75,6 +75,11 @@ enum CollectionChargeType {
   OTRO
 }
 
+enum ServiceTechnology {
+  FIBRA
+  RADIOENLACE
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -91,6 +96,7 @@ model User {
   collectionPayments CollectionPayment[]
   collectionCharges CollectionCharge[]
   assignedCustomers Customer[] @relation("AssignedCollectionAgent")
+  technologyEvents CustomerTechnologyEvent[]
 }
 
 model Customer {
@@ -112,6 +118,11 @@ model Customer {
   inCollectionWhitelist Boolean @default(false)
   assignedAgentUserId String?
   assignedAgentName   String?
+  originTechnology    ServiceTechnology @default(FIBRA)
+  currentTechnology   ServiceTechnology @default(FIBRA)
+  fiberInstallDate    DateTime?
+  fiberMigrationDate  DateTime?
+  migrationReviewRequired Boolean @default(false)
   createdAt        DateTime @default(now())
 
   equipment     CustomerEquipment[]
@@ -120,6 +131,7 @@ model Customer {
   collectionPayments CollectionPayment[]
   collectionCharges CollectionCharge[]
   assignedAgent User? @relation("AssignedCollectionAgent", fields: [assignedAgentUserId], references: [id])
+  technologyEvents CustomerTechnologyEvent[]
 }
 
 model CustomerEquipment {
@@ -168,6 +180,10 @@ model Cancellation {
   qrCode           String?            @unique
   actaNumber       String?            @unique
   actaPhysicalCode String?            @unique
+  permanenceStartDate DateTime?
+  originTechnology    ServiceTechnology?
+  currentTechnology   ServiceTechnology?
+  fiberInstallPending Boolean?
   createdById      String
   createdAt        DateTime           @default(now())
   updatedAt        DateTime           @updatedAt
@@ -288,6 +304,21 @@ model CollectionCharge {
   amount      Decimal              @db.Decimal(10, 2)
   createdAt   DateTime             @default(now())
   updatedAt   DateTime             @updatedAt
+
+  customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  user     User     @relation(fields: [userId], references: [id])
+}
+
+model CustomerTechnologyEvent {
+  id             String            @id @default(cuid())
+  customerId     String
+  userId         String
+  eventType      String
+  fromTechnology ServiceTechnology
+  toTechnology   ServiceTechnology
+  eventDate      DateTime
+  notes          String?
+  createdAt      DateTime          @default(now())
 
   customer Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
   user     User     @relation(fields: [userId], references: [id])

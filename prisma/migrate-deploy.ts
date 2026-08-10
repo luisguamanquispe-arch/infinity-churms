@@ -448,6 +448,96 @@ async function main() {
       AND (c."assignedAgentUserId" IS NULL OR c."assignedAgentName" IS NULL);
   `);
 
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ServiceTechnology') THEN
+        CREATE TYPE "ServiceTechnology" AS ENUM ('FIBRA', 'RADIOENLACE');
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'Customer'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Customer' AND column_name = 'originTechnology'
+      ) THEN
+        ALTER TABLE "Customer" ADD COLUMN "originTechnology" "ServiceTechnology" NOT NULL DEFAULT 'FIBRA';
+        ALTER TABLE "Customer" ADD COLUMN "currentTechnology" "ServiceTechnology" NOT NULL DEFAULT 'FIBRA';
+        ALTER TABLE "Customer" ADD COLUMN "fiberInstallDate" TIMESTAMP(3);
+        ALTER TABLE "Customer" ADD COLUMN "fiberMigrationDate" TIMESTAMP(3);
+        ALTER TABLE "Customer" ADD COLUMN "migrationReviewRequired" BOOLEAN NOT NULL DEFAULT false;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    UPDATE "Customer"
+    SET "fiberInstallDate" = "serviceStartDate"
+    WHERE "fiberInstallDate" IS NULL
+      AND "originTechnology" = 'FIBRA'
+      AND "currentTechnology" = 'FIBRA';
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'Cancellation'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Cancellation' AND column_name = 'permanenceStartDate'
+      ) THEN
+        ALTER TABLE "Cancellation" ADD COLUMN "permanenceStartDate" TIMESTAMP(3);
+        ALTER TABLE "Cancellation" ADD COLUMN "originTechnology" "ServiceTechnology";
+        ALTER TABLE "Cancellation" ADD COLUMN "currentTechnology" "ServiceTechnology";
+        ALTER TABLE "Cancellation" ADD COLUMN "fiberInstallPending" BOOLEAN;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "CustomerTechnologyEvent" (
+      "id" TEXT NOT NULL,
+      "customerId" TEXT NOT NULL,
+      "userId" TEXT NOT NULL,
+      "eventType" TEXT NOT NULL,
+      "fromTechnology" "ServiceTechnology" NOT NULL,
+      "toTechnology" "ServiceTechnology" NOT NULL,
+      "eventDate" TIMESTAMP(3) NOT NULL,
+      "notes" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "CustomerTechnologyEvent_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CustomerTechnologyEvent_customerId_fkey'
+      ) THEN
+        ALTER TABLE "CustomerTechnologyEvent"
+          ADD CONSTRAINT "CustomerTechnologyEvent_customerId_fkey"
+          FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'CustomerTechnologyEvent_userId_fkey'
+      ) THEN
+        ALTER TABLE "CustomerTechnologyEvent"
+          ADD CONSTRAINT "CustomerTechnologyEvent_userId_fkey"
+          FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 

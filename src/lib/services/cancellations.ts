@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { calculateLiquidation } from "@/lib/liquidation";
+import { buildPermanenceSummary, validatePermanenceForCancellation } from "@/lib/permanence";
 import type { CancellationStatus, EquipmentCondition, EquipmentType } from "@prisma/client";
 import { deliveryStateForEquipment, isEquipmentReceptionComplete } from "@/lib/equipment-reception";
 
@@ -108,18 +109,31 @@ export async function recalculateCancellation(cancellationId: string) {
   if (!row) throw new Error("NOT_FOUND");
 
   const config = await prisma.tariffConfig.findFirst();
+  const tariff = {
+    permanenceMonths: config?.permanenceMonths ?? 18,
+    installCostUsd: Number(config?.installCostUsd ?? 200),
+    tvMonthlyUsd: Number(config?.tvMonthlyUsd ?? 2),
+  };
+
+  const permanence = buildPermanenceSummary(row.customer, row.requestDate, {
+    permanenceMonths: tariff.permanenceMonths,
+    installCostUsd: tariff.installCostUsd,
+  });
+
+  if (!permanence.canCalculate || !permanence.permanenceStartDate) {
+    throw new Error("PERMANENCE_INCOMPLETE");
+  }
+
   const liq = calculateLiquidation({
-    serviceStartDate: row.customer.serviceStartDate,
+    permanenceStartDate: new Date(permanence.permanenceStartDate),
     requestDate: row.requestDate,
     hasTvStreaming: row.customer.hasTvStreaming,
     tvStreamingSince: row.customer.tvStreamingSince,
     pendingBalance: Number(row.customer.pendingBalance),
-    config: {
-      permanenceMonths: config?.permanenceMonths ?? 18,
-      installCostUsd: Number(config?.installCostUsd ?? 200),
-      tvMonthlyUsd: Number(config?.tvMonthlyUsd ?? 2),
-    },
+    config: tariff,
     extraCharges: row.charges.map((c) => ({ concept: c.concept, amount: Number(c.amount) })),
+    permanenceAmountOverride: permanence.installAmount,
+    monthsCompletedOverride: permanence.monthsInFiber,
   });
 
   return prisma.cancellation.update({
@@ -132,9 +146,43 @@ export async function recalculateCancellation(cancellationId: string) {
       equipmentAmount: 0,
       otherAmount: liq.otherAmount,
       totalAmount: liq.totalAmount,
+      permanenceStartDate: new Date(permanence.permanenceStartDate),
+      originTechnology: permanence.originTechnology,
+      currentTechnology: permanence.currentTechnology,
+      fiberInstallPending: liq.fiberInstallPending,
     },
   });
 }
+
+export function customerTechnologyInput(customer: {
+  serviceStartDate: Date;
+  originTechnology: string;
+  currentTechnology: string;
+  fiberInstallDate: Date | null;
+  fiberMigrationDate: Date | null;
+  migrationReviewRequired: boolean;
+}) {
+  return {
+    serviceStartDate: customer.serviceStartDate,
+    originTechnology: customer.originTechnology,
+    currentTechnology: customer.currentTechnology,
+    fiberInstallDate: customer.fiberInstallDate,
+    fiberMigrationDate: customer.fiberMigrationDate,
+    migrationReviewRequired: customer.migrationReviewRequired,
+  };
+}
+
+export async function getPermanencePreviewForCustomer(customerId: string, requestDate = new Date()) {
+  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
+  if (!customer) throw new Error("NOT_FOUND");
+  const config = await prisma.tariffConfig.findFirst();
+  return buildPermanenceSummary(customer, requestDate, {
+    permanenceMonths: config?.permanenceMonths ?? 18,
+    installCostUsd: Number(config?.installCostUsd ?? 200),
+  });
+}
+
+export { validatePermanenceForCancellation };
 
 export async function initEquipmentChecklist(cancellationId: string, customerId: string) {
   const items = await prisma.customerEquipment.findMany({ where: { customerId } });

@@ -6,6 +6,9 @@ import { useRouter } from "next/navigation";
 import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, SUSPENSION_POLICIES, EQUIPMENT_TYPES, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL, getEquipmentReportStatus } from "@/lib/constants";
 import { isEquipmentReceptionComplete } from "@/lib/equipment-reception";
 import { formatUsd } from "@/lib/liquidation";
+import { PermanenceSummaryPanel } from "@/components/bajas/permanence-summary-panel";
+import type { PermanenceSummary } from "@/lib/permanence";
+import { technologyLabel } from "@/lib/permanence";
 
 interface Detail {
   id: string;
@@ -15,6 +18,10 @@ interface Detail {
   actaPhysicalCode: string | null;
   clientSignature: string | null;
   requestDate: string;
+  permanenceStartDate: string | null;
+  originTechnology: string | null;
+  currentTechnology: string | null;
+  fiberInstallPending: boolean | null;
   monthsCompleted: number;
   permanenceAmount: string;
   tvAmount: string;
@@ -31,6 +38,10 @@ interface Detail {
     serviceStartDate: string;
     planName: string;
     pendingBalance: string;
+    originTechnology?: string;
+    currentTechnology?: string;
+    fiberInstallDate?: string | null;
+    fiberMigrationDate?: string | null;
     hasTvStreaming: boolean;
     tvStreamingSince: string | null;
   };
@@ -79,9 +90,11 @@ const ACTION_LABELS: Record<string, string> = {
 export function CancellationDetail({
   initial,
   permissions,
+  permanenceSummary,
 }: {
   initial: Detail;
   permissions: Permissions;
+  permanenceSummary?: PermanenceSummary | null;
 }) {
   const router = useRouter();
   const [data, setData] = useState(initial);
@@ -229,8 +242,26 @@ export function CancellationDetail({
           <Info label="Zona" value={data.customer.zone ?? "—"} />
           <Info label="Dirección" value={data.customer.address} />
           <Info label="Plan" value={data.customer.planName} />
-          <Info label="Alta" value={new Date(data.customer.serviceStartDate).toLocaleDateString("es-VE")} />
-          <Info label="Meses cumplidos" value={String(data.monthsCompleted)} />
+          <Info label="Alta (antigüedad)" value={new Date(data.customer.serviceStartDate).toLocaleDateString("es-VE")} />
+          {data.originTechnology && (
+            <Info label="Tecnología origen" value={technologyLabel(data.originTechnology)} />
+          )}
+          {data.currentTechnology && (
+            <Info label="Tecnología actual" value={technologyLabel(data.currentTechnology)} />
+          )}
+          {data.permanenceStartDate && (
+            <Info
+              label="Inicio permanencia fibra"
+              value={new Date(data.permanenceStartDate).toLocaleDateString("es-VE")}
+            />
+          )}
+          <Info label="Meses en fibra/servicio" value={String(data.monthsCompleted)} />
+          {data.fiberInstallPending !== null && (
+            <Info
+              label="Instalación fibra"
+              value={data.fiberInstallPending ? "PENDIENTE" : "NO PENDIENTE"}
+            />
+          )}
           <Info label="Saldo pendiente" value={formatUsd(Number(data.customer.pendingBalance))} />
           {data.customer.hasTvStreaming && data.customer.tvStreamingSince && (
             <Info label={STREAMS_SUPPORT_SINCE_LABEL} value={new Date(data.customer.tvStreamingSince).toLocaleDateString("es-VE")} />
@@ -248,6 +279,10 @@ export function CancellationDetail({
           </div>
         </Card>
       </div>
+
+      {permanenceSummary && (
+        <PermanenceSummaryPanel summary={permanenceSummary} compact />
+      )}
 
       <Card title="Pre-liquidación para el cliente">
         <p className="text-sm text-slate-600">

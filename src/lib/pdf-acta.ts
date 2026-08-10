@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, getEquipmentReportStatus } from "@/lib/constants";
+import { getCustomerTypeLabel, technologyLabel } from "@/lib/permanence";
 import type {
   Cancellation,
   CancellationEquipment,
@@ -47,9 +48,14 @@ export async function generateActaPdf(params: {
   doc.text(`Plan: ${customer.planName}`, 14, 68);
   doc.text(`Motivo baja: ${params.reasonLabel}`, 14, 74);
   doc.text(`Fecha solicitud: ${c.requestDate.toLocaleDateString("es-VE")}`, 14, 80);
+  doc.setFontSize(8);
+  doc.text(`Tecnología: ${technologyLabel(customer.originTechnology)} → ${technologyLabel(customer.currentTechnology)}`, 14, 86);
+  doc.text(`Permanencia fibra desde: ${c.permanenceStartDate?.toLocaleDateString("es-VE") ?? "—"} · ${c.monthsCompleted} meses`, 14, 91);
+  doc.text(`Estado: ${c.fiberInstallPending ? "Instalación pendiente" : "Permanencia cumplida"}`, 14, 96);
+  doc.setFontSize(10);
 
   autoTable(doc, {
-    startY: 86,
+    startY: 102,
     head: [["Tipo", "Marca", "Modelo", "Serie", "Estado", "Observaciones"]],
     body: equipment.map((e) => [
       e.type,

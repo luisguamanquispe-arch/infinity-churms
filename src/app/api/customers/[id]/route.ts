@@ -74,6 +74,24 @@ export async function PATCH(
     if (body.tvStreamingSince !== undefined && body.hasTvStreaming) {
       data.tvStreamingSince = new Date(body.tvStreamingSince);
     }
+    if (body.originTechnology !== undefined) {
+      data.originTechnology = body.originTechnology === "RADIOENLACE" ? "RADIOENLACE" : "FIBRA";
+    }
+    if (body.currentTechnology !== undefined) {
+      data.currentTechnology =
+        body.currentTechnology === "RADIOENLACE" ? "RADIOENLACE" : "FIBRA";
+    }
+    if (body.fiberInstallDate !== undefined) {
+      data.fiberInstallDate = body.fiberInstallDate ? new Date(body.fiberInstallDate) : null;
+    }
+    if (body.fiberMigrationDate !== undefined) {
+      data.fiberMigrationDate = body.fiberMigrationDate
+        ? new Date(body.fiberMigrationDate)
+        : null;
+    }
+    if (body.migrationReviewRequired !== undefined) {
+      data.migrationReviewRequired = Boolean(body.migrationReviewRequired);
+    }
 
     const customer = await prisma.customer.update({
       where: { id },

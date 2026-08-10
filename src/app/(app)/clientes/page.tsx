@@ -32,6 +32,10 @@ const emptyForm = {
   zone: "",
   planName: "",
   serviceStartDate: new Date().toISOString().slice(0, 10),
+  originTechnology: "FIBRA",
+  currentTechnology: "FIBRA",
+  fiberInstallDate: "",
+  fiberMigrationDate: "",
   pendingBalance: "0",
   overdueSince: "",
   hasTvStreaming: false,
@@ -179,7 +183,35 @@ export default function ClientesPage() {
             </div>
             <Input label="Plan *" value={form.planName} onChange={(v) => updateUpper("planName", v)} uppercase required />
             <Input label="Dirección *" value={form.address} onChange={(v) => updateUpper("address", v)} uppercase required />
-            <Input label="Fecha alta *" type="date" value={form.serviceStartDate} onChange={(v) => setForm({ ...form, serviceStartDate: v })} required />
+            <Input label="Fecha alta (instalación original) *" type="date" value={form.serviceStartDate} onChange={(v) => setForm({ ...form, serviceStartDate: v })} required />
+            <div>
+              <label className="text-xs text-slate-600">Tecnología origen *</label>
+              <select
+                value={form.originTechnology}
+                onChange={(e) => setForm({ ...form, originTechnology: e.target.value, currentTechnology: e.target.value === "RADIOENLACE" ? form.currentTechnology : "FIBRA" })}
+                className="mt-1 w-full rounded border px-2 py-1.5 text-sm"
+              >
+                <option value="FIBRA">Fibra</option>
+                <option value="RADIOENLACE">Radioenlace</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-600">Tecnología actual *</label>
+              <select
+                value={form.currentTechnology}
+                onChange={(e) => setForm({ ...form, currentTechnology: e.target.value })}
+                className="mt-1 w-full rounded border px-2 py-1.5 text-sm"
+              >
+                <option value="FIBRA">Fibra</option>
+                <option value="RADIOENLACE">Radioenlace</option>
+              </select>
+            </div>
+            {form.originTechnology === "FIBRA" && (
+              <Input label="Fecha instalación fibra" type="date" value={form.fiberInstallDate || form.serviceStartDate} onChange={(v) => setForm({ ...form, fiberInstallDate: v })} />
+            )}
+            {form.originTechnology === "RADIOENLACE" && form.currentTechnology === "FIBRA" && (
+              <Input label="Fecha migración a fibra *" type="date" value={form.fiberMigrationDate} onChange={(v) => setForm({ ...form, fiberMigrationDate: v })} required />
+            )}
             <Input label="Saldo pendiente" type="number" value={form.pendingBalance} onChange={(v) => setForm({ ...form, pendingBalance: v })} />
             <Input label="Inicio mora (si aplica)" type="date" value={form.overdueSince} onChange={(v) => setForm({ ...form, overdueSince: v })} />
           </div>

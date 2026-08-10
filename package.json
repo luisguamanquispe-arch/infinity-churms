@@ -19,7 +19,8 @@
     "db:clear-data": "tsx prisma/run-clear-business-data.ts",
     "db:verify-equipment": "tsx prisma/verify-equipment-persistence.ts",
     "db:studio": "prisma studio",
-    "docs:manual-cobranza": "tsx scripts/generate-manual-cobranza.ts"
+    "docs:manual-cobranza": "tsx scripts/generate-manual-cobranza.ts",
+    "test:permanence": "tsx scripts/test-permanence-scenarios.ts"
   },
   "engines": {
     "node": ">=20"

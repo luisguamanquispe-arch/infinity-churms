@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { APP_NAME, SUSPENSION_POLICIES, INSTALLATION_PRORATION_LABEL, installationProrationDetail, STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL } from "@/lib/constants";
+import { getCustomerTypeLabel, technologyLabel } from "@/lib/permanence";
 import type { Cancellation, CancellationCharge, CancellationEquipment, Customer } from "@prisma/client";
 
 export function generatePreliquidacionPdf(params: {
@@ -55,8 +56,33 @@ export function generatePreliquidacionPdf(params: {
       ["Zona", customer.zone ?? "—"],
       ["Dirección", customer.address],
       ["Plan", customer.planName],
-      ["Alta servicio", customer.serviceStartDate.toLocaleDateString("es-VE")],
-      ["Meses cumplidos", `${c.monthsCompleted} meses`],
+      ["Tipo cliente", getCustomerTypeLabel(customer)],
+      ["Tecnología original", technologyLabel(customer.originTechnology)],
+      ["Tecnología actual", technologyLabel(customer.currentTechnology)],
+      ["Alta servicio (original)", customer.serviceStartDate.toLocaleDateString("es-VE")],
+      [
+        "Fecha migración fibra",
+        customer.fiberMigrationDate
+          ? customer.fiberMigrationDate.toLocaleDateString("es-VE")
+          : "—",
+      ],
+      [
+        "Fecha instalación fibra",
+        customer.fiberInstallDate
+          ? customer.fiberInstallDate.toLocaleDateString("es-VE")
+          : "—",
+      ],
+      [
+        "Inicio permanencia fibra",
+        c.permanenceStartDate
+          ? c.permanenceStartDate.toLocaleDateString("es-VE")
+          : "—",
+      ],
+      ["Meses en fibra / servicio", `${c.monthsCompleted} meses`],
+      [
+        "Estado permanencia",
+        c.fiberInstallPending ? "NO CUMPLE PERMANENCIA" : "PERMANENCIA CUMPLIDA",
+      ],
       ["Motivo de baja", params.reasonLabel],
       ...(customer.hasTvStreaming && customer.tvStreamingSince
         ? [[STREAMS_SUPPORT_SINCE_LABEL, customer.tvStreamingSince.toLocaleDateString("es-VE")]]
