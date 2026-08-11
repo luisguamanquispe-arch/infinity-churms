@@ -14,6 +14,20 @@ export const STATUS_LABELS: Record<string, string> = {
   BAJA_COMPLETADA: "Baja completada",
 };
 
+export const CANCELLATION_STATUSES = [
+  "SOLICITADA",
+  "EN_REVISION",
+  "PENDIENTE_DE_PAGO",
+  "PAGADA",
+  "EQUIPOS_RECUPERADOS",
+  "BAJA_COMPLETADA",
+] as const;
+
+export const SERVICE_TECHNOLOGIES = [
+  { value: "FIBRA", label: "Fibra Óptica" },
+  { value: "RADIOENLACE", label: "Radioenlace" },
+] as const;
+
 export const ROLE_LABELS: Record<string, string> = {
   ADMIN: "Administrador",
   COBRANZAS: "Cobranzas",

@@ -12,5 +12,7 @@ export function getCancellationPermissions(role: UserRole) {
     advanceEquipment: hasPermission(role, "cancellations:advance_equipment"),
     close: hasPermission(role, "cancellations:close"),
     manageEquipment: equipment || charges || create,
+    edit: hasPermission(role, "cancellations:edit"),
+    delete: hasPermission(role, "cancellations:delete"),
   };
 }

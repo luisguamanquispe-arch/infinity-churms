@@ -9,6 +9,8 @@ export type Permission =
   | "cancellations:equipment"
   | "cancellations:advance_equipment"
   | "cancellations:close"
+  | "cancellations:edit"
+  | "cancellations:delete"
   | "customers:manage"
   | "reports:view"
   | "config:manage"
@@ -23,6 +25,8 @@ const ALL: Permission[] = [
   "cancellations:equipment",
   "cancellations:advance_equipment",
   "cancellations:close",
+  "cancellations:edit",
+  "cancellations:delete",
   "customers:manage",
   "reports:view",
   "config:manage",
@@ -31,7 +35,13 @@ const ALL: Permission[] = [
 
 const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
   ADMIN: ALL,
-  SUPERVISOR: ALL.filter((p) => p !== "config:manage" && p !== "reports:view"),
+  SUPERVISOR: ALL.filter(
+    (p) =>
+      p !== "config:manage" &&
+      p !== "reports:view" &&
+      p !== "cancellations:edit" &&
+      p !== "cancellations:delete"
+  ),
   COBRANZAS: [
     "dashboard:view",
     "cancellations:list",

@@ -23,6 +23,7 @@ export default async function GestionarBajaPage({ params }: Props) {
   const detail = {
     ...row,
     requestDate: row.requestDate.toISOString(),
+    closeDate: row.closeDate?.toISOString() ?? null,
     permanenceStartDate: row.permanenceStartDate?.toISOString() ?? null,
     originTechnology: row.originTechnology,
     currentTechnology: row.currentTechnology,

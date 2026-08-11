@@ -7,6 +7,7 @@ import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LA
 import { isEquipmentReceptionComplete } from "@/lib/equipment-reception";
 import { formatUsd } from "@/lib/liquidation";
 import { PermanenceSummaryPanel } from "@/components/bajas/permanence-summary-panel";
+import { CancellationAdminPanel } from "@/components/bajas/cancellation-admin-panel";
 import type { PermanenceSummary } from "@/lib/permanence";
 import { technologyLabel } from "@/lib/permanence";
 
@@ -14,10 +15,12 @@ interface Detail {
   id: string;
   status: string;
   reason: string;
+  notes: string | null;
   actaNumber: string | null;
   actaPhysicalCode: string | null;
   clientSignature: string | null;
   requestDate: string;
+  closeDate: string | null;
   permanenceStartDate: string | null;
   originTechnology: string | null;
   currentTechnology: string | null;
@@ -26,6 +29,7 @@ interface Detail {
   permanenceAmount: string;
   tvAmount: string;
   monthlyAmount: string;
+  equipmentAmount: string;
   otherAmount: string;
   totalAmount: string;
   invoiceNumber: string | null;
@@ -56,7 +60,7 @@ interface Detail {
     notes: string | null;
   }[];
   charges: { id: string; concept: string; amount: string }[];
-  payments: { invoiceNumber: string; amountPaid: string; method: string; paymentDate: string }[];
+  payments: { id: string; invoiceNumber: string; amountPaid: string; method: string; paymentDate: string; notes: string | null }[];
 }
 
 interface Permissions {
@@ -66,6 +70,8 @@ interface Permissions {
   advanceEquipment: boolean;
   close: boolean;
   manageEquipment: boolean;
+  edit: boolean;
+  delete: boolean;
 }
 
 interface AuditEntry {
@@ -85,6 +91,9 @@ const ACTION_LABELS: Record<string, string> = {
   STATUS: "Cambio de estado",
   SIGNATURE: "Firma registrada",
   PDF_PRELIQUIDACION: "Pre-liquidación PDF generada",
+  UPDATE: "Baja editada",
+  DELETE: "Baja eliminada",
+  DELETE_CHARGE: "Cargo eliminado",
 };
 
 export function CancellationDetail({
@@ -234,6 +243,15 @@ export function CancellationDetail({
       </header>
 
       {msg && <p className="rounded-lg bg-teal-50 px-4 py-2 text-sm text-teal-800">{msg}</p>}
+
+      {(permissions.edit || permissions.delete) && (
+        <CancellationAdminPanel
+          data={data}
+          canEdit={permissions.edit}
+          canDelete={permissions.delete}
+          onMessage={setMsg}
+        />
+      )}
 
       <div className="grid gap-4 lg:grid-cols-2">
         <Card title="Cliente">
@@ -539,13 +557,31 @@ function Line({ label, value }: { label: string; value: string }) {
   return <div className="flex justify-between text-sm"><span>{label}</span><span className="font-medium">{value}</span></div>;
 }
 
-function Field({ label, value, onChange, type = "text", select }: { label: string; value: string; onChange: (v: string) => void; type?: string; select?: string[] }) {
+function Field({
+  label,
+  value,
+  onChange,
+  type = "text",
+  select,
+  selectLabels,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  type?: string;
+  select?: string[];
+  selectLabels?: Record<string, string>;
+}) {
   return (
     <div>
       <label className="text-xs text-slate-600">{label}</label>
       {select ? (
         <select value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-sm">
-          {select.map((s) => <option key={s}>{s}</option>)}
+          {select.map((s) => (
+            <option key={s} value={s}>
+              {selectLabels?.[s] ?? s}
+            </option>
+          ))}
         </select>
       ) : (
         <input type={type} value={value} onChange={(e) => onChange(e.target.value)} className="mt-1 w-full rounded border px-2 py-1.5 text-sm" />

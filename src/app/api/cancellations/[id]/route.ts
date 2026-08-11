@@ -2,8 +2,15 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
-import { getCancellation, recalculateCancellation } from "@/lib/services/cancellations";
-import type { CancellationStatus } from "@prisma/client";
+import {
+  deleteCancellation,
+  deleteCancellationCharge,
+  getCancellation,
+  recalculateCancellation,
+  updateCancellationAdmin,
+} from "@/lib/services/cancellations";
+import type { CancellationReason, CancellationStatus } from "@prisma/client";
+import { getClientIp } from "@/lib/request-ip";
 
 const FLOW: Partial<Record<CancellationStatus, CancellationStatus>> = {
   PAGADA: "EQUIPOS_RECUPERADOS",
@@ -22,6 +29,36 @@ export async function GET(
     return NextResponse.json(row);
   } catch {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requirePermission("cancellations:delete");
+    const { id } = await params;
+    const removed = await deleteCancellation(id);
+
+    await audit({
+      userId: session.userId,
+      action: "DELETE",
+      entity: "Cancellation",
+      entityId: id,
+      detail: `Baja eliminada · ${removed.customer.contract} · ${removed.customer.name}`,
+      ipAddress: getClientIp(request),
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    if (e instanceof Error && e.message === "FORBIDDEN") {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
+    if (e instanceof Error && e.message === "NOT_FOUND") {
+      return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+    }
+    return NextResponse.json({ error: "Error al eliminar" }, { status: 500 });
   }
 }
 
@@ -56,6 +93,93 @@ export async function PATCH(
       await recalculateCancellation(id);
       await audit({ userId: session.userId, action: "ADD_CHARGE", entity: "Cancellation", entityId: id });
       return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "delete_charge") {
+      const session = await requirePermission("cancellations:edit");
+      if (!body.chargeId) {
+        return NextResponse.json({ error: "Cargo no indicado" }, { status: 400 });
+      }
+      await deleteCancellationCharge(id, body.chargeId);
+      await audit({
+        userId: session.userId,
+        action: "DELETE_CHARGE",
+        entity: "Cancellation",
+        entityId: id,
+        detail: body.chargeId,
+      });
+      return NextResponse.json({ ok: true });
+    }
+
+    if (body.action === "update") {
+      const session = await requirePermission("cancellations:edit");
+      const updateData: Parameters<typeof updateCancellationAdmin>[1] = {};
+
+      if (body.reason !== undefined) updateData.reason = body.reason as CancellationReason;
+      if (body.notes !== undefined) updateData.notes = body.notes;
+      if (body.requestDate !== undefined) {
+        const parsed = new Date(body.requestDate);
+        if (Number.isNaN(parsed.getTime())) {
+          return NextResponse.json({ error: "Fecha de solicitud inválida" }, { status: 400 });
+        }
+        updateData.requestDate = parsed;
+      }
+      if (body.closeDate !== undefined) {
+        updateData.closeDate = body.closeDate ? new Date(body.closeDate) : null;
+      }
+      if (body.status !== undefined) updateData.status = body.status as CancellationStatus;
+      if (body.invoiceNumber !== undefined) updateData.invoiceNumber = body.invoiceNumber;
+      if (body.clientSignature !== undefined) updateData.clientSignature = body.clientSignature;
+      if (body.actaNumber !== undefined) updateData.actaNumber = body.actaNumber;
+      if (body.actaPhysicalCode !== undefined) updateData.actaPhysicalCode = body.actaPhysicalCode;
+      if (body.monthsCompleted !== undefined) updateData.monthsCompleted = Number(body.monthsCompleted);
+      if (body.permanenceStartDate !== undefined) {
+        updateData.permanenceStartDate = body.permanenceStartDate
+          ? new Date(body.permanenceStartDate)
+          : null;
+      }
+      if (body.originTechnology !== undefined) updateData.originTechnology = body.originTechnology;
+      if (body.currentTechnology !== undefined) updateData.currentTechnology = body.currentTechnology;
+      if (body.fiberInstallPending !== undefined) {
+        updateData.fiberInstallPending = Boolean(body.fiberInstallPending);
+      }
+      if (body.permanenceAmount !== undefined) updateData.permanenceAmount = Number(body.permanenceAmount);
+      if (body.tvAmount !== undefined) updateData.tvAmount = Number(body.tvAmount);
+      if (body.monthlyAmount !== undefined) updateData.monthlyAmount = Number(body.monthlyAmount);
+      if (body.equipmentAmount !== undefined) updateData.equipmentAmount = Number(body.equipmentAmount);
+      if (body.otherAmount !== undefined) updateData.otherAmount = Number(body.otherAmount);
+      if (body.totalAmount !== undefined) updateData.totalAmount = Number(body.totalAmount);
+      if (body.recalculate === true) updateData.recalculate = true;
+      if (Array.isArray(body.charges)) updateData.charges = body.charges;
+      if (Array.isArray(body.deletedChargeIds)) updateData.deletedChargeIds = body.deletedChargeIds;
+      if (Array.isArray(body.payments)) {
+        updateData.payments = body.payments.map(
+          (p: {
+            id?: string;
+            paymentDate: string;
+            method: string;
+            invoiceNumber: string;
+            amountPaid: number;
+            notes?: string | null;
+          }) => ({
+            ...p,
+            paymentDate: new Date(p.paymentDate),
+          })
+        );
+      }
+      if (Array.isArray(body.deletedPaymentIds)) updateData.deletedPaymentIds = body.deletedPaymentIds;
+      if (Array.isArray(body.equipment)) updateData.equipment = body.equipment;
+
+      const updated = await updateCancellationAdmin(id, updateData);
+      await audit({
+        userId: session.userId,
+        action: "UPDATE",
+        entity: "Cancellation",
+        entityId: id,
+        detail: body.recalculate ? "Recálculo automático" : "Edición administrativa completa",
+        ipAddress: getClientIp(request),
+      });
+      return NextResponse.json(updated);
     }
 
     if (body.action === "advance_status") {
@@ -108,6 +232,12 @@ export async function PATCH(
     }
     if (e instanceof Error && e.message === "UNAUTHORIZED") {
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
+    }
+    if (e instanceof Error && e.message === "PERMANENCE_INCOMPLETE") {
+      return NextResponse.json(
+        { error: "No se puede recalcular: falta información de permanencia de fibra del cliente" },
+        { status: 400 }
+      );
     }
     return NextResponse.json({ error: "Error" }, { status: 500 });
   }
