@@ -42,7 +42,7 @@ export function inferBajaClientPath(customer: {
 export function needsMigrationForm(
   path: BajaClientPath,
   customer: {
-    fiberMigrationDate: string | null;
+    fiberMigrationDate?: Date | string | null;
     originTechnology: string;
     currentTechnology: string;
   }
@@ -62,7 +62,7 @@ export function pathLabel(path: BajaClientPath): string {
 export type BajaClientPathCustomer = {
   originTechnology: string;
   currentTechnology: string;
-  fiberMigrationDate?: string | null;
+  fiberMigrationDate?: Date | string | null;
 };
 
 /** Valida que el tipo seleccionado coincida con los datos del cliente en BD. */
