@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import {
   CANCELLATION_REASONS,
@@ -13,6 +13,10 @@ import {
   STATUS_LABELS,
   STREAMS_SUPPORT_LABEL,
 } from "@/lib/constants";
+import {
+  calculatePermanenceFromStartDate,
+  type PermanenceConfig,
+} from "@/lib/permanence";
 
 type ChargeRow = { id?: string; concept: string; amount: string; _deleted?: boolean };
 type PaymentRow = {
@@ -140,10 +144,50 @@ export function CancellationAdminPanel({
   const [form, setForm] = useState(() => buildForm(data));
   const [saving, setSaving] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
+  const [tariff, setTariff] = useState<PermanenceConfig | null>(null);
 
   useEffect(() => {
     setForm(buildForm(data));
   }, [data]);
+
+  useEffect(() => {
+    fetch("/api/config/tariffs/summary")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((t) => {
+        if (t) setTariff({ permanenceMonths: t.permanenceMonths, installCostUsd: t.installCostUsd });
+      });
+  }, []);
+
+  const applyPermanenceCalc = useCallback(
+    (requestDate: string, permanenceStartDate: string, prev: AdminForm) => {
+      if (!tariff || !permanenceStartDate || !requestDate) return prev;
+      const charge = calculatePermanenceFromStartDate(
+        new Date(permanenceStartDate),
+        new Date(requestDate),
+        tariff
+      );
+      const chargeSum = prev.charges
+        .filter((c) => !c._deleted)
+        .reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
+      const tv = parseFloat(prev.tvAmount) || 0;
+      const monthly = parseFloat(prev.monthlyAmount) || 0;
+      const total = Math.round((charge.installAmount + tv + monthly + chargeSum) * 100) / 100;
+      return {
+        ...prev,
+        monthsCompleted: String(charge.monthsInFiber),
+        permanenceAmount: String(charge.installAmount),
+        fiberInstallPending: charge.fiberInstallPending,
+        otherAmount: String(chargeSum),
+        totalAmount: String(total),
+      };
+    },
+    [tariff]
+  );
+
+  useEffect(() => {
+    if (!tariff || !form.permanenceStartDate || !form.requestDate) return;
+    setForm((prev) => applyPermanenceCalc(prev.requestDate, prev.permanenceStartDate, prev));
+  }, [form.requestDate, form.permanenceStartDate, tariff, applyPermanenceCalc]);
 
   function updateLineAmounts(next: Partial<AdminForm>) {
     const merged = { ...form, ...next };
@@ -263,7 +307,7 @@ export function CancellationAdminPanel({
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Motivo" select={CANCELLATION_REASONS.map((r) => r.value)} selectLabels={Object.fromEntries(CANCELLATION_REASONS.map((r) => [r.value, r.label]))} value={form.reason} onChange={(v) => setForm({ ...form, reason: v })} />
               <Field label="Estado" select={[...CANCELLATION_STATUSES]} selectLabels={STATUS_LABELS} value={form.status} onChange={(v) => setForm({ ...form, status: v })} />
-              <Field label="Fecha solicitud" type="date" value={form.requestDate} onChange={(v) => setForm({ ...form, requestDate: v })} />
+              <Field label="Fecha solicitud" type="date" value={form.requestDate} onChange={(v) => setForm((prev) => ({ ...prev, requestDate: v }))} />
               <Field label="Fecha cierre" type="date" value={form.closeDate} onChange={(v) => setForm({ ...form, closeDate: v })} />
               <Field label="N° Factura (cabecera)" value={form.invoiceNumber} onChange={(v) => setForm({ ...form, invoiceNumber: v })} />
               <div className="sm:col-span-2">
@@ -274,26 +318,45 @@ export function CancellationAdminPanel({
           </AdminSection>
 
           <AdminSection title="Permanencia e instalación fibra">
+            <p className="mb-3 text-xs text-slate-600">
+              Los meses y el cobro de instalación se calculan automáticamente: plazo mínimo{" "}
+              {tariff?.permanenceMonths ?? 18} meses desde la fecha de inicio de permanencia fibra
+              hasta la fecha de solicitud de baja.
+            </p>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Inicio permanencia fibra" type="date" value={form.permanenceStartDate} onChange={(v) => setForm({ ...form, permanenceStartDate: v })} />
-              <Field label="Meses cumplidos" type="number" value={form.monthsCompleted} onChange={(v) => setForm({ ...form, monthsCompleted: v })} />
+              <Field label="Inicio permanencia fibra" type="date" value={form.permanenceStartDate} onChange={(v) => setForm((prev) => ({ ...prev, permanenceStartDate: v }))} />
+              <ReadOnlyField label="Meses cumplidos (auto)" value={`${form.monthsCompleted} mes(es)`} />
+              <ReadOnlyField
+                label={`Meses faltantes de ${tariff?.permanenceMonths ?? 18}`}
+                value={
+                  tariff && form.permanenceStartDate && form.requestDate
+                    ? String(
+                        calculatePermanenceFromStartDate(
+                          new Date(form.permanenceStartDate),
+                          new Date(form.requestDate),
+                          tariff
+                        ).monthsRemaining
+                      )
+                    : "—"
+                }
+              />
               <Field label="Tecnología origen" select={SERVICE_TECHNOLOGIES.map((t) => t.value)} selectLabels={Object.fromEntries(SERVICE_TECHNOLOGIES.map((t) => [t.value, t.label]))} value={form.originTechnology} onChange={(v) => setForm({ ...form, originTechnology: v })} />
               <Field label="Tecnología actual" select={SERVICE_TECHNOLOGIES.map((t) => t.value)} selectLabels={Object.fromEntries(SERVICE_TECHNOLOGIES.map((t) => [t.value, t.label]))} value={form.currentTechnology} onChange={(v) => setForm({ ...form, currentTechnology: v })} />
-              <label className="flex items-center gap-2 text-sm sm:col-span-2">
-                <input type="checkbox" checked={form.fiberInstallPending} onChange={(e) => setForm({ ...form, fiberInstallPending: e.target.checked })} />
-                Instalación fibra pendiente
-              </label>
+              <ReadOnlyField
+                label="Instalación fibra"
+                value={form.fiberInstallPending ? "PENDIENTE — hay cobro" : "NO PENDIENTE — $0"}
+              />
             </div>
           </AdminSection>
 
           <AdminSection title="Liquidación">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <Field label={INSTALLATION_PRORATION_LABEL} type="number" value={form.permanenceAmount} onChange={(v) => updateLineAmounts({ permanenceAmount: v })} />
+              <ReadOnlyField label={`${INSTALLATION_PRORATION_LABEL} (auto)`} value={form.permanenceAmount} />
               <Field label={STREAMS_SUPPORT_LABEL} type="number" value={form.tvAmount} onChange={(v) => updateLineAmounts({ tvAmount: v })} />
               <Field label="Mensualidades" type="number" value={form.monthlyAmount} onChange={(v) => updateLineAmounts({ monthlyAmount: v })} />
-              <Field label="Otros cargos" type="number" value={form.otherAmount} onChange={(v) => updateLineAmounts({ otherAmount: v })} />
+              <ReadOnlyField label="Otros cargos" value={form.otherAmount} />
               <Field label="Equipos (informativo)" type="number" value={form.equipmentAmount} onChange={(v) => setForm({ ...form, equipmentAmount: v })} />
-              <Field label="TOTAL" type="number" value={form.totalAmount} onChange={(v) => setForm({ ...form, totalAmount: v })} />
+              <ReadOnlyField label="TOTAL (auto)" value={form.totalAmount} />
             </div>
             <button
               type="button"
@@ -412,6 +475,17 @@ function AdminSection({ title, children }: { title: string; children: React.Reac
     <div className="rounded-lg border border-slate-200 bg-white p-4">
       <h3 className="text-sm font-semibold text-[#0B1F3A]">{title}</h3>
       <div className="mt-3">{children}</div>
+    </div>
+  );
+}
+
+function ReadOnlyField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <label className="text-xs text-slate-600">{label}</label>
+      <p className="mt-1 rounded border border-slate-200 bg-slate-50 px-2 py-1.5 text-sm font-medium text-[#0B1F3A]">
+        {value}
+      </p>
     </div>
   );
 }

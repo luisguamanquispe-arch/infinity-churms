@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { calculateLiquidation } from "@/lib/liquidation";
-import { buildPermanenceSummary, validatePermanenceForCancellation } from "@/lib/permanence";
+import { buildPermanenceSummary, validatePermanenceForCancellation, calculatePermanenceFromStartDate } from "@/lib/permanence";
 import type { CancellationReason, CancellationStatus, EquipmentCondition, EquipmentType } from "@prisma/client";
 import { deliveryStateForEquipment, isEquipmentReceptionComplete } from "@/lib/equipment-reception";
 
@@ -124,16 +124,24 @@ export async function recalculateCancellation(cancellationId: string) {
     throw new Error("PERMANENCE_INCOMPLETE");
   }
 
+  const permanenceStart =
+    row.permanenceStartDate ?? new Date(permanence.permanenceStartDate);
+  const charge = calculatePermanenceFromStartDate(
+    permanenceStart,
+    row.requestDate,
+    { permanenceMonths: tariff.permanenceMonths, installCostUsd: tariff.installCostUsd }
+  );
+
   const liq = calculateLiquidation({
-    permanenceStartDate: new Date(permanence.permanenceStartDate),
+    permanenceStartDate: permanenceStart,
     requestDate: row.requestDate,
     hasTvStreaming: row.customer.hasTvStreaming,
     tvStreamingSince: row.customer.tvStreamingSince,
     pendingBalance: Number(row.customer.pendingBalance),
     config: tariff,
     extraCharges: row.charges.map((c) => ({ concept: c.concept, amount: Number(c.amount) })),
-    permanenceAmountOverride: permanence.installAmount,
-    monthsCompletedOverride: permanence.monthsInFiber,
+    permanenceAmountOverride: charge.installAmount,
+    monthsCompletedOverride: charge.monthsInFiber,
   });
 
   return prisma.cancellation.update({
@@ -146,7 +154,7 @@ export async function recalculateCancellation(cancellationId: string) {
       equipmentAmount: 0,
       otherAmount: liq.otherAmount,
       totalAmount: liq.totalAmount,
-      permanenceStartDate: new Date(permanence.permanenceStartDate),
+      permanenceStartDate: permanenceStart,
       originTechnology: permanence.originTechnology,
       currentTechnology: permanence.currentTechnology,
       fiberInstallPending: liq.fiberInstallPending,
@@ -529,7 +537,15 @@ export async function updateCancellationAdmin(id: string, data: AdminCancellatio
     }
   }
 
-  if (data.recalculate) {
+  const requestDateChanged =
+    data.requestDate !== undefined &&
+    data.requestDate.getTime() !== current.requestDate.getTime();
+  const permanenceStartChanged =
+    data.permanenceStartDate !== undefined &&
+    (data.permanenceStartDate?.getTime() ?? null) !==
+      (current.permanenceStartDate?.getTime() ?? null);
+
+  if (data.recalculate || requestDateChanged || permanenceStartChanged) {
     await recalculateCancellation(id);
   } else if (data.charges?.length || data.deletedChargeIds?.length) {
     const row = await getCancellation(id);

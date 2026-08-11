@@ -32,12 +32,14 @@ export interface PermanenceSummary {
   permanenceStartDate: string | null;
   requestDate: string;
   monthsInFiber: number;
+  monthsRemaining: number;
   customerSeniorityMonths: number;
   minContractMonths: number;
   fiberInstallValue: number;
   permanenceMet: boolean;
   fiberInstallPending: boolean;
   installAmount: number;
+  monthlyPermanenceRate: number;
   canCalculate: boolean;
   permanenceStatusLabel: string;
   fiberInstallStatusLabel: string;
@@ -109,6 +111,30 @@ export function validatePermanenceForCancellation(
   return { ok: true, warning: null };
 }
 
+/** Calcula meses cumplidos, meses restantes y cobro de instalación desde fechas concretas. */
+export function calculatePermanenceFromStartDate(
+  permanenceStartDate: Date,
+  requestDate: Date,
+  config: PermanenceConfig
+) {
+  const monthsInFiber = Math.max(0, differenceInMonths(requestDate, permanenceStartDate));
+  const permanenceMet = monthsInFiber >= config.permanenceMonths;
+  const monthsRemaining = Math.max(0, config.permanenceMonths - monthsInFiber);
+  const monthlyPermanenceRate = config.installCostUsd / config.permanenceMonths;
+  const installAmount = permanenceMet
+    ? 0
+    : Math.round(monthsRemaining * monthlyPermanenceRate * 100) / 100;
+
+  return {
+    monthsInFiber,
+    monthsRemaining,
+    permanenceMet,
+    fiberInstallPending: !permanenceMet,
+    installAmount,
+    monthlyPermanenceRate,
+  };
+}
+
 export function buildPermanenceSummary(
   customer: CustomerTechnologyInput,
   requestDate: Date,
@@ -146,12 +172,14 @@ export function buildPermanenceSummary(
       permanenceStartDate: null,
       requestDate: requestDate.toISOString(),
       monthsInFiber: 0,
+      monthsRemaining: config.permanenceMonths,
       customerSeniorityMonths,
       minContractMonths: config.permanenceMonths,
       fiberInstallValue: config.installCostUsd,
       permanenceMet: false,
       fiberInstallPending: false,
       installAmount: 0,
+      monthlyPermanenceRate: config.installCostUsd / config.permanenceMonths,
       canCalculate: false,
       permanenceStatusLabel: "REVISIÓN REQUERIDA",
       fiberInstallStatusLabel: "NO CALCULADO",
@@ -160,14 +188,7 @@ export function buildPermanenceSummary(
     };
   }
 
-  const monthsInFiber = Math.max(0, differenceInMonths(requestDate, permanenceStart));
-  const permanenceMet = monthsInFiber >= config.permanenceMonths;
-  const fiberInstallPending = !permanenceMet;
-  const monthsPending = Math.max(0, config.permanenceMonths - monthsInFiber);
-  const monthlyPermanence = config.installCostUsd / config.permanenceMonths;
-  const installAmount = permanenceMet
-    ? 0
-    : Math.round(monthsPending * monthlyPermanence * 100) / 100;
+  const charge = calculatePermanenceFromStartDate(permanenceStart, requestDate, config);
 
   return {
     customerTypeLabel: getCustomerTypeLabel(customer),
@@ -179,18 +200,20 @@ export function buildPermanenceSummary(
     fiberInstallDate: fiberInstallDate?.toISOString() ?? null,
     permanenceStartDate: permanenceStart.toISOString(),
     requestDate: requestDate.toISOString(),
-    monthsInFiber,
+    monthsInFiber: charge.monthsInFiber,
+    monthsRemaining: charge.monthsRemaining,
     customerSeniorityMonths,
     minContractMonths: config.permanenceMonths,
     fiberInstallValue: config.installCostUsd,
-    permanenceMet,
-    fiberInstallPending,
-    installAmount,
+    permanenceMet: charge.permanenceMet,
+    fiberInstallPending: charge.fiberInstallPending,
+    installAmount: charge.installAmount,
+    monthlyPermanenceRate: charge.monthlyPermanenceRate,
     canCalculate: true,
-    permanenceStatusLabel: permanenceMet ? "PERMANENCIA CUMPLIDA" : "NO CUMPLE PERMANENCIA",
-    fiberInstallStatusLabel: fiberInstallPending ? "PENDIENTE" : "NO PENDIENTE",
+    permanenceStatusLabel: charge.permanenceMet ? "PERMANENCIA CUMPLIDA" : "NO CUMPLE PERMANENCIA",
+    fiberInstallStatusLabel: charge.fiberInstallPending ? "PENDIENTE" : "NO PENDIENTE",
     warning: null,
-    auditReason: fiberInstallPending ? PERMANENCE_AUDIT_REASON : null,
+    auditReason: charge.fiberInstallPending ? PERMANENCE_AUDIT_REASON : null,
   };
 }
 

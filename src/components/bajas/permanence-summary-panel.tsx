@@ -52,10 +52,22 @@ export function PermanenceSummaryPanel({
       highlight: true,
     },
     {
+      label: "MESES FALTANTES (PLAZO MÍNIMO)",
+      value:
+        summary.monthsRemaining > 0
+          ? `${summary.monthsRemaining} mes(es) por cumplir`
+          : "0 — permanencia cumplida",
+      highlight: summary.monthsRemaining > 0,
+    },
+    {
       label: "ANTIGÜEDAD DEL CLIENTE",
       value: `${summary.customerSeniorityMonths} mes(es) (informativo)`,
     },
     { label: "PLAZO MÍNIMO", value: `${summary.minContractMonths} meses` },
+    {
+      label: "PRORRATEO MENSUAL INST.",
+      value: formatUsd(summary.monthlyPermanenceRate),
+    },
     { label: "ESTADO", value: summary.permanenceStatusLabel, highlight: true },
     { label: "INSTALACIÓN FIBRA", value: summary.fiberInstallStatusLabel, highlight: true },
     { label: "VALOR A COBRAR", value: formatUsd(summary.installAmount), highlight: true },

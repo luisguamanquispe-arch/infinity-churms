@@ -42,10 +42,15 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await requirePermission("cancellations:create");
-    const { customerId, notes, reason } = await request.json();
+    const { customerId, notes, reason, requestDate: requestDateBody } = await request.json();
 
     if (!reason || !VALID_REASONS.includes(reason)) {
       return NextResponse.json({ error: "Motivo de baja obligatorio" }, { status: 400 });
+    }
+
+    const requestDate = requestDateBody ? new Date(requestDateBody) : new Date();
+    if (Number.isNaN(requestDate.getTime())) {
+      return NextResponse.json({ error: "Fecha de solicitud inválida" }, { status: 400 });
     }
 
     const customer = await prisma.customer.findUnique({ where: { id: customerId } });
@@ -82,7 +87,7 @@ export async function POST(request: NextRequest) {
     }
 
     const config = await prisma.tariffConfig.findFirst();
-    const permanencePreview = buildPermanenceSummary(customer, new Date(), {
+    const permanencePreview = buildPermanenceSummary(customer, requestDate, {
       permanenceMonths: config?.permanenceMonths ?? 18,
       installCostUsd: Number(config?.installCostUsd ?? 200),
     });
@@ -95,6 +100,7 @@ export async function POST(request: NextRequest) {
         customerId,
         reason,
         notes,
+        requestDate,
         createdById: session.userId,
         status: "SOLICITADA",
       },

@@ -81,6 +81,9 @@ export function canAccessRoute(role: UserRole, pathname: string): boolean {
   if (pathname === "/reportes" || pathname.startsWith("/api/reports")) {
     return hasPermission(role, "reports:view");
   }
+  if (pathname.startsWith("/api/config/tariffs/summary")) {
+    return hasPermission(role, "cancellations:create");
+  }
   if (pathname === "/configuracion" || pathname.startsWith("/api/config")) {
     return hasPermission(role, "config:manage");
   }
