@@ -2,7 +2,6 @@
 
 import { formatUsd } from "@/lib/liquidation";
 import type { PermanenceSummary } from "@/lib/permanence";
-import { isMigratedRadioToFiber } from "@/lib/permanence";
 
 function fmtDate(iso: string | null) {
   if (!iso) return "—";
@@ -49,7 +48,8 @@ export function PermanenceSummaryPanel({
     { label: "FECHA SOLICITUD DE BAJA", value: fmtDate(summary.requestDate) },
     {
       label:
-        summary.currentTechnology === "FIBRA" || isMigratedRadioToFiber(summary)
+        summary.currentTechnology === "FIBRA" ||
+        (summary.originTechnology === "RADIOENLACE" && summary.fiberMigrationDate)
           ? "TIEMPO EN FIBRA"
           : "TIEMPO EN SERVICIO",
       value: `${summary.monthsInFiber} mes(es)`,
