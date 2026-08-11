@@ -104,7 +104,10 @@ export async function listClosedForAnalysis() {
   });
 }
 
-export async function recalculateCancellation(cancellationId: string) {
+export async function recalculateCancellation(
+  cancellationId: string,
+  options?: { permanenceStartOverride?: Date | null }
+) {
   const row = await getCancellation(cancellationId);
   if (!row) throw new Error("NOT_FOUND");
 
@@ -124,8 +127,8 @@ export async function recalculateCancellation(cancellationId: string) {
     throw new Error("PERMANENCE_INCOMPLETE");
   }
 
-  const permanenceStart =
-    row.permanenceStartDate ?? new Date(permanence.permanenceStartDate);
+  const computedStart = new Date(permanence.permanenceStartDate);
+  const permanenceStart = options?.permanenceStartOverride ?? computedStart;
   const charge = calculatePermanenceFromStartDate(
     permanenceStart,
     row.requestDate,
@@ -546,7 +549,9 @@ export async function updateCancellationAdmin(id: string, data: AdminCancellatio
       (current.permanenceStartDate?.getTime() ?? null);
 
   if (data.recalculate || requestDateChanged || permanenceStartChanged) {
-    await recalculateCancellation(id);
+    await recalculateCancellation(id, {
+      permanenceStartOverride: permanenceStartChanged ? data.permanenceStartDate : undefined,
+    });
   } else if (data.charges?.length || data.deletedChargeIds?.length) {
     const row = await getCancellation(id);
     if (row) {

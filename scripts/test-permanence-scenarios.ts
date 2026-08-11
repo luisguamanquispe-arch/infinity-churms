@@ -111,6 +111,20 @@ const scenarios: Scenario[] = [
     expectCanCalculate: true,
     expectMonths: 4,
   },
+  {
+    name: "PRUEBA 7 — Radio con migración registrada pero currentTechnology aún RADIO",
+    customer: {
+      serviceStartDate: "2022-08-03",
+      originTechnology: "RADIOENLACE",
+      currentTechnology: "RADIOENLACE",
+      fiberMigrationDate: "2025-12-09",
+      fiberInstallDate: "2025-12-09",
+    },
+    requestDate: "2026-08-10",
+    expectPending: true,
+    expectCanCalculate: true,
+    expectMonths: 8,
+  },
 ];
 
 let passed = 0;

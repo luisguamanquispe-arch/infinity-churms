@@ -85,9 +85,15 @@ export async function PATCH(
       data.fiberInstallDate = body.fiberInstallDate ? new Date(body.fiberInstallDate) : null;
     }
     if (body.fiberMigrationDate !== undefined) {
-      data.fiberMigrationDate = body.fiberMigrationDate
+      const migrationDate = body.fiberMigrationDate
         ? new Date(body.fiberMigrationDate)
         : null;
+      data.fiberMigrationDate = migrationDate;
+      if (migrationDate && existing.originTechnology === "RADIOENLACE") {
+        data.currentTechnology = "FIBRA";
+        data.fiberInstallDate = existing.fiberInstallDate ?? migrationDate;
+        data.migrationReviewRequired = false;
+      }
     }
     if (body.migrationReviewRequired !== undefined) {
       data.migrationReviewRequired = Boolean(body.migrationReviewRequired);

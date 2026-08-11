@@ -57,7 +57,7 @@ export function getCustomerTypeLabel(customer: CustomerTechnologyInput): string 
   const origin = customer.originTechnology as ServiceTechnology;
   const current = customer.currentTechnology as ServiceTechnology;
   if (origin === "FIBRA" && current === "FIBRA") return "Cliente original de Fibra";
-  if (origin === "RADIOENLACE" && current === "FIBRA") {
+  if (origin === "RADIOENLACE" && (current === "FIBRA" || customer.fiberMigrationDate)) {
     return "Cliente migrado de Radioenlace a Fibra";
   }
   if (origin === "RADIOENLACE" && current === "RADIOENLACE") {
@@ -66,11 +66,21 @@ export function getCustomerTypeLabel(customer: CustomerTechnologyInput): string 
   return "Cliente con cambio tecnológico";
 }
 
+/** Cliente radio→fibra con fecha de migración registrada (aunque currentTechnology no esté actualizado). */
+export function isMigratedRadioToFiber(customer: CustomerTechnologyInput): boolean {
+  const origin = customer.originTechnology as ServiceTechnology;
+  return origin === "RADIOENLACE" && !!customer.fiberMigrationDate;
+}
+
 export function resolvePermanenceStartDate(
   customer: CustomerTechnologyInput
 ): Date | null {
   const origin = customer.originTechnology as ServiceTechnology;
   const current = customer.currentTechnology as ServiceTechnology;
+
+  if (isMigratedRadioToFiber(customer)) {
+    return new Date(customer.fiberMigrationDate!);
+  }
 
   if (current === "FIBRA") {
     if (origin === "FIBRA") {
@@ -94,7 +104,7 @@ export function validatePermanenceForCancellation(
 
   if (customer.migrationReviewRequired) {
     const migratedWithDate =
-      origin === "RADIOENLACE" && current === "FIBRA" && customer.fiberMigrationDate;
+      origin === "RADIOENLACE" && customer.fiberMigrationDate;
     if (!migratedWithDate) {
       return {
         ok: false,

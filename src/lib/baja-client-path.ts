@@ -26,10 +26,11 @@ export const BAJA_CLIENT_PATH_OPTIONS: {
 export function inferBajaClientPath(customer: {
   originTechnology: string;
   currentTechnology: string;
+  fiberMigrationDate?: Date | string | null;
 }): BajaClientPath {
   if (
     customer.originTechnology === "RADIOENLACE" &&
-    customer.currentTechnology === "FIBRA"
+    (customer.currentTechnology === "FIBRA" || customer.fiberMigrationDate)
   ) {
     return "MIGRATED";
   }
