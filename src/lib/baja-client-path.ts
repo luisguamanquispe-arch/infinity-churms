@@ -58,3 +58,70 @@ export function needsMigrationForm(
 export function pathLabel(path: BajaClientPath): string {
   return BAJA_CLIENT_PATH_OPTIONS.find((o) => o.value === path)?.label ?? path;
 }
+
+export type BajaClientPathCustomer = {
+  originTechnology: string;
+  currentTechnology: string;
+  fiberMigrationDate?: string | null;
+};
+
+/** Valida que el tipo seleccionado coincida con los datos del cliente en BD. */
+export function validateClientPath(
+  path: BajaClientPath,
+  customer: BajaClientPathCustomer
+): { ok: boolean; message: string | null } {
+  if (path === "FIBRA_ORIGINAL") {
+    if (customer.currentTechnology === "RADIOENLACE") {
+      return {
+        ok: false,
+        message:
+          "Este cliente es solo radioenlace. Seleccione «Solo radioenlace (sin fibra)» o registre migración a fibra.",
+      };
+    }
+    if (
+      customer.originTechnology === "RADIOENLACE" &&
+      customer.currentTechnology === "FIBRA"
+    ) {
+      return {
+        ok: false,
+        message:
+          "Este cliente migró de radio a fibra. Seleccione «Migrado de radioenlace a fibra».",
+      };
+    }
+    return { ok: true, message: null };
+  }
+
+  if (path === "RADIO_ONLY") {
+    if (customer.currentTechnology === "FIBRA") {
+      return {
+        ok: false,
+        message:
+          "Este cliente tiene servicio de fibra. No puede usar el flujo solo radioenlace.",
+      };
+    }
+    return { ok: true, message: null };
+  }
+
+  if (path === "MIGRATED") {
+    if (
+      customer.originTechnology === "FIBRA" &&
+      customer.currentTechnology === "FIBRA"
+    ) {
+      return {
+        ok: false,
+        message:
+          "Este cliente es fibra original. Seleccione «Cliente original de fibra».",
+      };
+    }
+    return { ok: true, message: null };
+  }
+
+  return { ok: true, message: null };
+}
+
+export function isClientPathCompatible(
+  path: BajaClientPath,
+  customer: BajaClientPathCustomer
+): boolean {
+  return validateClientPath(path, customer).ok;
+}

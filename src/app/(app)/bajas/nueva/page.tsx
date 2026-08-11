@@ -16,8 +16,10 @@ import type { PermanenceSummary } from "@/lib/permanence";
 import {
   BAJA_CLIENT_PATH_OPTIONS,
   inferBajaClientPath,
+  isClientPathCompatible,
   needsMigrationForm,
   pathLabel,
+  validateClientPath,
   type BajaClientPath,
 } from "@/lib/baja-client-path";
 
@@ -129,6 +131,11 @@ export default function NuevaBajaPage() {
       setError("Registre primero la migración a fibra antes de crear la baja");
       return;
     }
+    const pathValidation = validateClientPath(clientPath, selected);
+    if (!pathValidation.ok) {
+      setError(pathValidation.message ?? "Tipo de cliente incompatible con los datos registrados");
+      return;
+    }
     if (selected.hasCancellation) {
       setError("Este cliente ya tiene una baja registrada");
       return;
@@ -153,7 +160,7 @@ export default function NuevaBajaPage() {
     const res = await fetch("/api/cancellations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customerId: selected.id, reason, requestDate }),
+      body: JSON.stringify({ customerId: selected.id, reason, requestDate, clientPath }),
     });
     const data = await res.json();
     if (res.ok) router.push(`/bajas/${data.id}`);
@@ -229,13 +236,17 @@ export default function NuevaBajaPage() {
               qué formulario completar y desde qué fecha se calculan los 18 meses mínimos.
             </p>
             <div className="mt-4 space-y-2">
-              {BAJA_CLIENT_PATH_OPTIONS.map((opt) => (
+              {BAJA_CLIENT_PATH_OPTIONS.map((opt) => {
+                const compatible = isClientPathCompatible(opt.value, selected);
+                return (
                 <label
                   key={opt.value}
-                  className={`flex cursor-pointer gap-3 rounded-lg border p-3 transition ${
-                    clientPath === opt.value
-                      ? "border-teal-400 bg-teal-50/60 ring-1 ring-teal-300"
-                      : "border-slate-200 hover:border-slate-300"
+                  className={`flex gap-3 rounded-lg border p-3 transition ${
+                    !compatible
+                      ? "cursor-not-allowed border-slate-100 bg-slate-50 opacity-60"
+                      : clientPath === opt.value
+                      ? "cursor-pointer border-teal-400 bg-teal-50/60 ring-1 ring-teal-300"
+                      : "cursor-pointer border-slate-200 hover:border-slate-300"
                   }`}
                 >
                   <input
@@ -243,6 +254,7 @@ export default function NuevaBajaPage() {
                     name="clientPath"
                     value={opt.value}
                     checked={clientPath === opt.value}
+                    disabled={!compatible}
                     onChange={() => {
                       setClientPath(opt.value);
                       setError("");
@@ -252,9 +264,16 @@ export default function NuevaBajaPage() {
                   <span>
                     <span className="block text-sm font-semibold text-[#0B1F3A]">{opt.label}</span>
                     <span className="block text-xs text-slate-600">{opt.description}</span>
+                    {!compatible && (
+                      <span className="mt-1 block text-xs text-amber-700">
+                        No aplica según tecnología registrada ({selected.originTechnology} →{" "}
+                        {selected.currentTechnology}).
+                      </span>
+                    )}
                   </span>
                 </label>
-              ))}
+              );
+              })}
             </div>
           </section>
 

@@ -20,7 +20,8 @@
     "db:verify-equipment": "tsx prisma/verify-equipment-persistence.ts",
     "db:studio": "prisma studio",
     "docs:manual-cobranza": "tsx scripts/generate-manual-cobranza.ts",
-    "test:permanence": "tsx scripts/test-permanence-scenarios.ts"
+    "test:permanence": "tsx scripts/test-permanence-scenarios.ts",
+    "test:baja-paths": "tsx scripts/test-baja-client-path.ts"
   },
   "engines": {
     "node": ">=20"

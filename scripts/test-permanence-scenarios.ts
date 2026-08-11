@@ -97,6 +97,20 @@ const scenarios: Scenario[] = [
     expectPending: false,
     expectCanCalculate: false,
   },
+  {
+    name: "PRUEBA 6b — Migrado con fecha pero flag revisión (permite calcular)",
+    customer: {
+      serviceStartDate: "2024-01-10",
+      originTechnology: "RADIOENLACE",
+      currentTechnology: "FIBRA",
+      fiberMigrationDate: "2026-03-15",
+      migrationReviewRequired: true,
+    },
+    requestDate: "2026-08-10",
+    expectPending: true,
+    expectCanCalculate: true,
+    expectMonths: 4,
+  },
 ];
 
 let passed = 0;

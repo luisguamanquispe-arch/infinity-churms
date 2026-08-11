@@ -11,6 +11,7 @@ import {
   customerTechnologyInput,
 } from "@/lib/services/cancellations";
 import { buildPermanenceSummary, PERMANENCE_AUDIT_REASON } from "@/lib/permanence";
+import { validateClientPath, type BajaClientPath } from "@/lib/baja-client-path";
 import { getBajaEligibility } from "@/lib/services/collections";
 import { getClientIp } from "@/lib/request-ip";
 import type { CancellationReason } from "@prisma/client";
@@ -42,7 +43,13 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const session = await requirePermission("cancellations:create");
-    const { customerId, notes, reason, requestDate: requestDateBody } = await request.json();
+    const {
+      customerId,
+      notes,
+      reason,
+      requestDate: requestDateBody,
+      clientPath,
+    } = await request.json();
 
     if (!reason || !VALID_REASONS.includes(reason)) {
       return NextResponse.json({ error: "Motivo de baja obligatorio" }, { status: 400 });
@@ -78,6 +85,13 @@ export async function POST(request: NextRequest) {
         { error: eligibility.blockers.join(". ") },
         { status: 400 }
       );
+    }
+
+    if (clientPath) {
+      const pathValidation = validateClientPath(clientPath as BajaClientPath, customer);
+      if (!pathValidation.ok) {
+        return NextResponse.json({ error: pathValidation.message }, { status: 400 });
+      }
     }
 
     const techInput = customerTechnologyInput(customer);

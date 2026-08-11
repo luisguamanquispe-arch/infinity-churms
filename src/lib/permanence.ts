@@ -89,16 +89,20 @@ export function resolvePermanenceStartDate(
 export function validatePermanenceForCancellation(
   customer: CustomerTechnologyInput
 ): { ok: boolean; warning: string | null } {
-  if (customer.migrationReviewRequired) {
-    return {
-      ok: false,
-      warning:
-        "Cliente marcado para revisión: complete la fecha de migración a fibra antes de registrar la baja.",
-    };
-  }
-
   const origin = customer.originTechnology as ServiceTechnology;
   const current = customer.currentTechnology as ServiceTechnology;
+
+  if (customer.migrationReviewRequired) {
+    const migratedWithDate =
+      origin === "RADIOENLACE" && current === "FIBRA" && customer.fiberMigrationDate;
+    if (!migratedWithDate) {
+      return {
+        ok: false,
+        warning:
+          "Cliente marcado para revisión: complete la fecha de migración a fibra antes de registrar la baja.",
+      };
+    }
+  }
 
   if (origin === "RADIOENLACE" && current === "FIBRA" && !customer.fiberMigrationDate) {
     return { ok: false, warning: PERMANENCE_WARNING_INCOMPLETE };

@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
 import {
   COLORS,
   COLLECTION_MANAGEMENT_TYPES,
@@ -115,7 +114,6 @@ export function CustomerDetailView({
   canCreateBaja: boolean;
   equipmentTariffs: { type: string; notReturnedUsd: number | string }[];
 }) {
-  const router = useRouter();
   const [tab, setTab] = useState<"datos" | "cobranza">("cobranza");
   const [customer, setCustomer] = useState(initial);
   const [actions, setActions] = useState<CollectionAction[]>([]);
@@ -127,8 +125,6 @@ export function CustomerDetailView({
   const [saving, setSaving] = useState(false);
   const [attachment, setAttachment] = useState<{ name: string; data: string } | null>(null);
   const [photo, setPhoto] = useState<{ name: string; data: string } | null>(null);
-  const [bajaReason, setBajaReason] = useState("DECISION_VOLUNTARIA");
-  const [sendingBaja, setSendingBaja] = useState(false);
 
   async function refreshCollections() {
     const [collectionsRes, chargesRes] = await Promise.all([
@@ -228,24 +224,6 @@ export function CustomerDetailView({
     }
   }
 
-  async function sendToBaja() {
-    if (!customer.eligibility.allowed || customer.hasCancellation) return;
-    setSendingBaja(true);
-    setMsg("");
-    const res = await fetch("/api/cancellations", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customerId: customer.id, reason: bajaReason }),
-    });
-    const json = await res.json();
-    if (res.ok) {
-      router.push(`/bajas/${json.id}`);
-    } else {
-      setMsg(json.error ?? "No se pudo enviar a baja");
-      setSendingBaja(false);
-    }
-  }
-
   const showPromise = form.result === "PROMESA_DE_PAGO";
 
   return (
@@ -288,27 +266,17 @@ export function CustomerDetailView({
               )}
               {canCreateBaja && customer.eligibility.allowed && (
                 <div className="mt-3 space-y-2">
-                  <select
-                    value={bajaReason}
-                    onChange={(e) => setBajaReason(e.target.value)}
-                    className="w-full rounded border px-2 py-1.5 text-sm"
-                  >
-                    <option value="DECISION_VOLUNTARIA">Decisión voluntaria</option>
-                    <option value="FALLAS_CONTINUAS">Fallas continuas</option>
-                    <option value="INCUMPLIMIENTO_CONTRATO">Incumplimiento del contrato</option>
-                    <option value="MUDANZA">Mudanza</option>
-                    <option value="PROBLEMAS_ATENCION">Problemas de atención</option>
-                    <option value="MEJOR_OFERTA">Mejor oferta</option>
-                  </select>
-                  <button
-                    type="button"
-                    disabled={sendingBaja}
-                    onClick={sendToBaja}
-                    className="w-full rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+                  <Link
+                    href={`/bajas/nueva?customerId=${customer.id}`}
+                    className="block w-full rounded-lg px-4 py-2 text-center text-sm font-semibold text-white"
                     style={{ backgroundColor: COLORS.brand }}
                   >
-                    {sendingBaja ? "Procesando…" : "Enviar a Baja"}
-                  </button>
+                    Registrar solicitud de baja
+                  </Link>
+                  <p className="text-xs text-slate-500">
+                    Abre el flujo completo: tipo de cliente, migración si aplica, preview de
+                    permanencia y liquidación.
+                  </p>
                 </div>
               )}
               {canCreateBaja && !customer.eligibility.allowed && (
