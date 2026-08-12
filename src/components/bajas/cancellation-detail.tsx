@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, SUSPENSION_POLICIES, EQUIPMENT_TYPES, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL, getEquipmentReportStatus } from "@/lib/constants";
+import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, SUSPENSION_POLICIES, EQUIPMENT_TYPES, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL, getEquipmentReportStatus, WITHDRAWAL_REQUEST_PDF_LABEL } from "@/lib/constants";
 import { isEquipmentReceptionComplete } from "@/lib/equipment-reception";
 import { formatUsd } from "@/lib/liquidation";
 import { PermanenceSummaryPanel } from "@/components/bajas/permanence-summary-panel";
@@ -33,6 +33,8 @@ interface Detail {
   otherAmount: string;
   totalAmount: string;
   invoiceNumber: string | null;
+  withdrawalRequestFileName: string | null;
+  withdrawalRequestUploadedAt: string | null;
   customer: {
     contract: string;
     name: string;
@@ -301,6 +303,44 @@ export function CancellationDetail({
       {permanenceSummary && (
         <PermanenceSummaryPanel summary={permanenceSummary} compact />
       )}
+
+      <Card title="Documento archivado — solicitud de retiro">
+        {data.withdrawalRequestFileName ? (
+          <>
+            <p className="text-sm text-slate-600">
+              PDF registrado al crear la baja
+              {data.withdrawalRequestUploadedAt && (
+                <>
+                  {" "}
+                  el{" "}
+                  {new Date(data.withdrawalRequestUploadedAt).toLocaleString("es-VE", {
+                    dateStyle: "medium",
+                    timeStyle: "short",
+                  })}
+                </>
+              )}
+              .
+            </p>
+            <p className="mt-2 text-sm font-medium text-[#0B1F3A]">
+              {data.withdrawalRequestFileName}
+            </p>
+            <a
+              href={`/api/cancellations/${data.id}/solicitud-retiro`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-4 inline-block rounded-lg px-4 py-2 text-sm font-semibold text-white"
+              style={{ backgroundColor: COLORS.navy }}
+            >
+              Ver / descargar {WITHDRAWAL_REQUEST_PDF_LABEL}
+            </a>
+          </>
+        ) : (
+          <p className="text-sm text-amber-800">
+            Esta baja no tiene {WITHDRAWAL_REQUEST_PDF_LABEL} archivado (registro anterior al
+            requisito obligatorio).
+          </p>
+        )}
+      </Card>
 
       <Card title="Pre-liquidación para el cliente">
         <p className="text-sm text-slate-600">

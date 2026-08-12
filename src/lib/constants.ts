@@ -83,6 +83,8 @@ export const CUSTOMER_ZONES = [
 
 export type CustomerZone = (typeof CUSTOMER_ZONES)[number];
 
+export const CUSTOMER_STATUSES = ["ACTIVO", "SUSPENDIDO", "INACTIVO", "CANCELADO"] as const;
+
 export function toUpperInput(value: string): string {
   return value.toUpperCase();
 }
@@ -96,6 +98,8 @@ export function installationProrationDetail(monthsCompleted: number) {
 export const STREAMS_SUPPORT_LABEL = "Soporte de Streams";
 export const HAS_STREAMS_SUPPORT_LABEL = "Tiene soporte de Streams";
 export const STREAMS_SUPPORT_SINCE_LABEL = "Soporte de Streams desde";
+
+export const WITHDRAWAL_REQUEST_PDF_LABEL = "Solicitud de retiro (PDF)";
 
 export const EQUIPMENT_CONDITIONS = [
   { value: "BUENO", label: "Bueno" },

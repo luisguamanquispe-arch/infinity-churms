@@ -31,6 +31,7 @@ export default async function ClienteDetailPage({ params }: Props) {
 
   const detail = {
     ...customer,
+    phone: customer.phone,
     serviceStartDate: customer.serviceStartDate.toISOString(),
     pendingBalance: String(customer.pendingBalance),
     overdueSince: customer.overdueSince?.toISOString() ?? null,

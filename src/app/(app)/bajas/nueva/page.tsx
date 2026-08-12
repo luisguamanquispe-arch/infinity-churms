@@ -8,6 +8,7 @@ import {
   CANCELLATION_REASONS,
   STREAMS_SUPPORT_SINCE_LABEL,
   STREAMS_SUPPORT_LABEL,
+  WITHDRAWAL_REQUEST_PDF_LABEL,
 } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { PermanenceSummaryPanel } from "@/components/bajas/permanence-summary-panel";
@@ -22,6 +23,18 @@ import {
   validateClientPath,
   type BajaClientPath,
 } from "@/lib/baja-client-path";
+
+async function readPdfAsDataUrl(file: File): Promise<{ name: string; data: string }> {
+  if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+    throw new Error("Solo se permiten archivos PDF");
+  }
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({ name: file.name, data: String(reader.result) });
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 interface Customer {
   id: string;
@@ -63,6 +76,8 @@ export default function NuevaBajaPage() {
   const [reason, setReason] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [withdrawalPdf, setWithdrawalPdf] = useState<{ name: string; data: string } | null>(null);
+  const [pdfMsg, setPdfMsg] = useState("");
 
   useEffect(() => {
     if (q.length < 2) return;
@@ -107,6 +122,8 @@ export default function NuevaBajaPage() {
   function selectCustomer(c: Customer) {
     setSelected(c);
     setClientPath(inferBajaClientPath(c));
+    setWithdrawalPdf(null);
+    setPdfMsg("");
     setError("");
   }
 
@@ -147,6 +164,10 @@ export default function NuevaBajaPage() {
       );
       return;
     }
+    if (!withdrawalPdf) {
+      setError(`Debe adjuntar el PDF de ${WITHDRAWAL_REQUEST_PDF_LABEL}`);
+      return;
+    }
     const eligRes = await fetch(`/api/customers/${selected.id}/collections`);
     if (eligRes.ok) {
       const { eligibility } = await eligRes.json();
@@ -160,7 +181,14 @@ export default function NuevaBajaPage() {
     const res = await fetch("/api/cancellations", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ customerId: selected.id, reason, requestDate, clientPath }),
+      body: JSON.stringify({
+        customerId: selected.id,
+        reason,
+        requestDate,
+        clientPath,
+        withdrawalRequestFileName: withdrawalPdf.name,
+        withdrawalRequestFileData: withdrawalPdf.data,
+      }),
     });
     const data = await res.json();
     if (res.ok) router.push(`/bajas/${data.id}`);
@@ -403,12 +431,53 @@ export default function NuevaBajaPage() {
                 </table>
               </section>
 
+              <section className="rounded-xl border-2 border-[#0B1F3A]/15 bg-white p-5 shadow-sm">
+                <h2 className="font-semibold text-[#0B1F3A]">{WITHDRAWAL_REQUEST_PDF_LABEL} *</h2>
+                <p className="mt-1 text-xs text-slate-600">
+                  Adjunte el documento firmado por el cliente. Se archiva en el sistema y queda
+                  disponible en la gestión de la baja.
+                </p>
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  required
+                  className="mt-3 block w-full text-sm"
+                  onChange={async (e) => {
+                    const file = e.target.files?.[0];
+                    setPdfMsg("");
+                    setError("");
+                    if (!file) {
+                      setWithdrawalPdf(null);
+                      return;
+                    }
+                    try {
+                      const uploaded = await readPdfAsDataUrl(file);
+                      setWithdrawalPdf(uploaded);
+                      setPdfMsg(`Archivo listo: ${uploaded.name}`);
+                    } catch {
+                      setWithdrawalPdf(null);
+                      setPdfMsg("Solo se permiten archivos PDF");
+                    }
+                  }}
+                />
+                {pdfMsg && (
+                  <p
+                    className={`mt-2 text-xs ${
+                      pdfMsg.includes("Solo") ? "text-red-600" : "text-teal-800"
+                    }`}
+                  >
+                    {pdfMsg}
+                  </p>
+                )}
+              </section>
+
               <button
                 onClick={submit}
                 disabled={
                   loading ||
                   selected.hasCancellation ||
                   !reason ||
+                  !withdrawalPdf ||
                   (permanence !== null && !permanence.canCalculate)
                 }
                 className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50"

@@ -5,7 +5,12 @@ import { audit } from "@/lib/audit";
 import { getClientIp } from "@/lib/request-ip";
 import { customerHasCancellation } from "@/lib/services/cancellations";
 import { getBajaEligibility } from "@/lib/services/collections";
-import { resolveOverdueSinceOnBalanceChange } from "@/lib/services/overdue";
+import {
+  prepareCustomerUpdate,
+  syncCustomerEquipment,
+  type CustomerPatchBody,
+} from "@/lib/services/customer-update";
+import { formatCustomerPayload } from "@/lib/customer-form";
 
 export async function GET(
   _req: NextRequest,
@@ -40,68 +45,38 @@ export async function PATCH(
   try {
     const session = await requirePermission("customers:manage");
     const { id } = await params;
-    const body = await request.json();
+    const body = (await request.json()) as CustomerPatchBody;
 
-    const existing = await prisma.customer.findUnique({ where: { id } });
+    const existing = await prisma.customer.findUnique({
+      where: { id },
+      include: { equipment: true },
+    });
     if (!existing) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
 
-    const data: Record<string, unknown> = {};
-    if (body.pendingBalance !== undefined) {
-      data.pendingBalance = body.pendingBalance;
-      const newBalance = Number(body.pendingBalance);
-      data.overdueSince = resolveOverdueSinceOnBalanceChange(
-        Number(existing.pendingBalance),
-        newBalance,
-        existing.overdueSince
-      );
-      if (newBalance > 0) {
-        data.inCollectionWhitelist = false;
-      } else if (newBalance <= 0) {
-        data.inCollectionWhitelist = true;
-        data.overdueSince = null;
-      }
-    }
-    if (body.overdueSince !== undefined) {
-      data.overdueSince = body.overdueSince ? new Date(body.overdueSince) : null;
-    }
-    if (body.planName !== undefined) data.planName = body.planName;
-    if (body.status !== undefined) data.status = body.status;
-    if (body.openTechnicalClaim !== undefined) data.openTechnicalClaim = Boolean(body.openTechnicalClaim);
-    if (body.hasTvStreaming !== undefined) {
-      data.hasTvStreaming = body.hasTvStreaming;
-      if (!body.hasTvStreaming) data.tvStreamingSince = null;
-    }
-    if (body.tvStreamingSince !== undefined && body.hasTvStreaming) {
-      data.tvStreamingSince = new Date(body.tvStreamingSince);
-    }
-    if (body.originTechnology !== undefined) {
-      data.originTechnology = body.originTechnology === "RADIOENLACE" ? "RADIOENLACE" : "FIBRA";
-    }
-    if (body.currentTechnology !== undefined) {
-      data.currentTechnology =
-        body.currentTechnology === "RADIOENLACE" ? "RADIOENLACE" : "FIBRA";
-    }
-    if (body.fiberInstallDate !== undefined) {
-      data.fiberInstallDate = body.fiberInstallDate ? new Date(body.fiberInstallDate) : null;
-    }
-    if (body.fiberMigrationDate !== undefined) {
-      const migrationDate = body.fiberMigrationDate
-        ? new Date(body.fiberMigrationDate)
-        : null;
-      data.fiberMigrationDate = migrationDate;
-      if (migrationDate && existing.originTechnology === "RADIOENLACE") {
-        data.currentTechnology = "FIBRA";
-        data.fiberInstallDate = existing.fiberInstallDate ?? migrationDate;
-        data.migrationReviewRequired = false;
-      }
-    }
-    if (body.migrationReviewRequired !== undefined) {
-      data.migrationReviewRequired = Boolean(body.migrationReviewRequired);
-    }
+    const { data, error } = await prepareCustomerUpdate(existing, body);
+    if (error) return NextResponse.json({ error }, { status: 400 });
+
+    const formatted = formatCustomerPayload({
+      contract: body.contract ?? existing.contract,
+      name: body.name ?? existing.name,
+      cedula: body.cedula ?? existing.cedula,
+      address: body.address ?? existing.address,
+      zone: body.zone ?? existing.zone,
+      planName: body.planName ?? existing.planName,
+      phone: body.phone ?? existing.phone ?? undefined,
+      equipment: body.equipment,
+    });
 
     const customer = await prisma.customer.update({
       where: { id },
       data,
+      include: { equipment: true },
+    });
+
+    await syncCustomerEquipment(id, body.equipment, formatted.equipment);
+
+    const refreshed = await prisma.customer.findUnique({
+      where: { id },
       include: { equipment: true },
     });
 
@@ -110,19 +85,15 @@ export async function PATCH(
       action: "UPDATE",
       entity: "Customer",
       entityId: id,
-      detail: body.openTechnicalClaim !== undefined
-        ? `Reclamo técnico: ${body.openTechnicalClaim ? "abierto" : "cerrado"}`
-        : body.pendingBalance !== undefined
-          ? `Saldo: ${body.pendingBalance}`
-          : undefined,
+      detail: `Cliente ${customer.contract} actualizado`,
       ipAddress: getClientIp(request),
     });
 
-    return NextResponse.json(customer);
+    return NextResponse.json(refreshed);
   } catch (e) {
     if (e instanceof Error && e.message === "FORBIDDEN") {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }
-    return NextResponse.json({ error: "Error" }, { status: 500 });
+    return NextResponse.json({ error: "Error al actualizar cliente" }, { status: 500 });
   }
 }

@@ -13,6 +13,7 @@ import { formatUsd } from "@/lib/liquidation";
 import { PrelegalOverdueNotice } from "@/components/clientes/prelegal-notice";
 import { CollectionPaymentsPanel } from "@/components/clientes/collection-payments-panel";
 import { CollectionChargesPanel } from "@/components/clientes/collection-charges-panel";
+import { CustomerEditForm } from "@/components/clientes/customer-edit-form";
 
 interface CollectionAction {
   id: string;
@@ -62,6 +63,7 @@ interface CustomerDetail {
   cedula: string;
   address: string;
   zone: string;
+  phone: string | null;
   planName: string;
   status: string;
   pendingBalance: string;
@@ -78,7 +80,13 @@ interface CustomerDetail {
   hasTvStreaming: boolean;
   tvStreamingSince: string | null;
   serviceStartDate: string;
-  equipment: { type: string; serial: string | null; brand: string | null; model: string | null }[];
+  equipment: {
+    id: string;
+    type: string;
+    serial: string | null;
+    brand: string | null;
+    model: string | null;
+  }[];
   hasCancellation: boolean;
   prelegalOverdue: boolean;
   eligibility: { allowed: boolean; blockers: string[] };
@@ -211,19 +219,6 @@ export function CustomerDetailView({
     }
   }
 
-  async function toggleTechnicalClaim() {
-    const res = await fetch(`/api/customers/${customer.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ openTechnicalClaim: !customer.openTechnicalClaim }),
-    });
-    if (res.ok) {
-      const updated = await res.json();
-      setCustomer((c) => ({ ...c, openTechnicalClaim: updated.openTechnicalClaim }));
-      await refreshCollections();
-    }
-  }
-
   const showPromise = form.result === "PROMESA_DE_PAGO";
 
   return (
@@ -313,7 +308,7 @@ export function CustomerDetailView({
 
       <div className="flex gap-2 border-b">
         <TabButton active={tab === "datos"} onClick={() => setTab("datos")}>
-          Datos del cliente
+          Editar cliente
         </TabButton>
         <TabButton active={tab === "cobranza"} onClick={() => setTab("cobranza")}>
           Gestión de Cobranza
@@ -321,94 +316,25 @@ export function CustomerDetailView({
       </div>
 
       {tab === "datos" && (
-        <Card title="Información del cliente">
-          <div className="grid gap-3 sm:grid-cols-2 text-sm">
-            <Info label="Plan" value={customer.planName} />
-            <Info label="Estado" value={customer.status} />
-            <Info label="Dirección" value={customer.address} />
-            <Info
-              label="Alta servicio (antigüedad)"
-              value={new Date(customer.serviceStartDate).toLocaleDateString("es-VE")}
-            />
-            <Info label="Tecnología origen" value={customer.originTechnology} />
-            <Info label="Tecnología actual" value={customer.currentTechnology} />
-            <Info
-              label="Instalación fibra"
-              value={
-                customer.fiberInstallDate
-                  ? new Date(customer.fiberInstallDate).toLocaleDateString("es-VE")
-                  : "—"
-              }
-            />
-            <Info
-              label="Migración a fibra"
-              value={
-                customer.fiberMigrationDate
-                  ? new Date(customer.fiberMigrationDate).toLocaleDateString("es-VE")
-                  : "—"
-              }
-            />
-            <Info
-              label="Equipos"
-              value={
-                customer.equipment.length
-                  ? customer.equipment.map((e) => e.type).join(", ")
-                  : "Sin registrar"
-              }
-            />
-          </div>
+        <Card title="Editar cliente">
           {customer.migrationReviewRequired && (
-            <p className="mt-3 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              REVISIÓN REQUERIDA — complete la fecha de migración a fibra para calcular permanencia en bajas.
+            <p className="mb-4 rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              REVISIÓN REQUERIDA — complete la fecha de migración a fibra para calcular permanencia
+              en bajas.
             </p>
           )}
-          <TechnologyMigrationSection
-            customerId={customer.id}
-            customer={customer}
-            onUpdated={(fields) => setCustomer((c) => ({ ...c, ...fields }))}
+          <CustomerEditForm
+            customer={{
+              ...customer,
+              phone: customer.phone ?? null,
+            }}
+            onMessage={setMsg}
+            onSaved={(fields) => {
+              setCustomer((c) => ({ ...c, ...fields }));
+              refreshCollections();
+            }}
           />
-          <label className="mt-4 flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={customer.openTechnicalClaim}
-              onChange={toggleTechnicalClaim}
-            />
-            Reclamo técnico abierto (bloquea envío a baja)
-          </label>
-          <div className="mt-4 grid gap-2 sm:grid-cols-2">
-            <Field label="Fecha inicio de mora">
-              <input
-                type="date"
-                value={customer.overdueSince ? customer.overdueSince.slice(0, 10) : ""}
-                onChange={async (e) => {
-                  const value = e.target.value;
-                  const res = await fetch(`/api/customers/${customer.id}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                      overdueSince: value || null,
-                    }),
-                  });
-                  if (res.ok) {
-                    const updated = await res.json();
-                    setCustomer((c) => ({
-                      ...c,
-                      overdueSince: updated.overdueSince
-                        ? new Date(updated.overdueSince).toISOString()
-                        : null,
-                    }));
-                    setMsg("Fecha de mora actualizada");
-                  }
-                }}
-                className="w-full rounded border px-2 py-1.5 text-sm"
-              />
-            </Field>
-            <Info
-              label="Saldo pendiente registrado"
-              value={formatUsd(Number(customer.pendingBalance))}
-            />
-          </div>
-          <p className="mt-2 text-xs text-slate-500">
+          <p className="mt-4 text-xs text-slate-500">
             El aviso prelegal (+90 días) usa la fecha de mora, el saldo pendiente y el detalle de
             conceptos registrados en cobranza.
           </p>
@@ -712,118 +638,11 @@ function Card({ title, children }: { title: string; children: React.ReactNode })
   );
 }
 
-function Info({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-xs text-slate-500">{label}</p>
-      <p className="font-medium">{value}</p>
-    </div>
-  );
-}
-
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
       <label className="text-xs text-slate-600">{label}</label>
       <div className="mt-1">{children}</div>
-    </div>
-  );
-}
-
-function TechnologyMigrationSection({
-  customerId,
-  customer,
-  onUpdated,
-}: {
-  customerId: string;
-  customer: {
-    originTechnology: string;
-    currentTechnology: string;
-    fiberMigrationDate: string | null;
-    migrationReviewRequired: boolean;
-  };
-  onUpdated: (fields: Record<string, unknown>) => void;
-}) {
-  const [migrationDate, setMigrationDate] = useState(
-    customer.fiberMigrationDate?.slice(0, 10) ?? ""
-  );
-  const [notes, setNotes] = useState("");
-  const [saving, setSaving] = useState(false);
-  const [localMsg, setLocalMsg] = useState("");
-
-  const canMigrate =
-    customer.originTechnology === "RADIOENLACE" || customer.currentTechnology === "RADIOENLACE";
-
-  if (!canMigrate && customer.currentTechnology === "FIBRA") {
-    return null;
-  }
-
-  async function registerMigration(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setLocalMsg("");
-    const res = await fetch(`/api/customers/${customerId}/migrate-fiber`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ fiberMigrationDate: migrationDate, notes }),
-    });
-    const json = await res.json();
-    if (!res.ok) {
-      setLocalMsg(json.error ?? "Error al registrar migración");
-      setSaving(false);
-      return;
-    }
-    onUpdated({
-      originTechnology: json.originTechnology,
-      currentTechnology: json.currentTechnology,
-      fiberMigrationDate: json.fiberMigrationDate
-        ? new Date(json.fiberMigrationDate).toISOString()
-        : null,
-      fiberInstallDate: json.fiberInstallDate
-        ? new Date(json.fiberInstallDate).toISOString()
-        : null,
-      migrationReviewRequired: json.migrationReviewRequired,
-    });
-    setLocalMsg("Migración registrada en el historial del cliente");
-    setSaving(false);
-  }
-
-  return (
-    <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50/80 p-4">
-      <p className="text-sm font-semibold text-[#0B1F3A]">Migración radioenlace → fibra</p>
-      <p className="mt-1 text-xs text-slate-600">
-        Registre la fecha de migración para calcular la permanencia de fibra en bajas.
-      </p>
-      {localMsg && <p className="mt-2 text-xs text-teal-800">{localMsg}</p>}
-      <form onSubmit={registerMigration} className="mt-3 grid gap-3 sm:grid-cols-2">
-        <Field label="Fecha migración a fibra *">
-          <input
-            type="date"
-            required
-            value={migrationDate}
-            onChange={(e) => setMigrationDate(e.target.value)}
-            className="w-full rounded border px-2 py-1.5 text-sm"
-          />
-        </Field>
-        <Field label="Observación">
-          <input
-            value={notes}
-            onChange={(e) => setNotes(e.target.value)}
-            placeholder="Cliente migrado de radioenlace a fibra."
-            className="w-full rounded border px-2 py-1.5 text-sm"
-          />
-        </Field>
-        <div className="sm:col-span-2">
-          <button
-            type="submit"
-            disabled={saving}
-            className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
-            style={{ backgroundColor: COLORS.brand }}
-          >
-            {saving ? "Guardando…" : "Registrar migración tecnológica"}
-          </button>
-        </div>
-      </form>
     </div>
   );
 }

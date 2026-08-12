@@ -17,11 +17,13 @@ export default async function GestionarBajaPage({ params }: Props) {
   const row = await getCancellation(id);
   if (!row) notFound();
 
+  const { withdrawalRequestFileData: _archivedPdf, ...rowSafe } = row;
+
   const permanenceRaw = await getPermanencePreviewForCustomer(row.customerId, row.requestDate);
   const permanenceSummary = serializePermanenceSummary(permanenceRaw);
 
   const detail = {
-    ...row,
+    ...rowSafe,
     requestDate: row.requestDate.toISOString(),
     closeDate: row.closeDate?.toISOString() ?? null,
     permanenceStartDate: row.permanenceStartDate?.toISOString() ?? null,
@@ -34,6 +36,8 @@ export default async function GestionarBajaPage({ params }: Props) {
     equipmentAmount: String(row.equipmentAmount),
     otherAmount: String(row.otherAmount),
     totalAmount: String(row.totalAmount),
+    withdrawalRequestFileName: row.withdrawalRequestFileName,
+    withdrawalRequestUploadedAt: row.withdrawalRequestUploadedAt?.toISOString() ?? null,
     customer: {
       ...row.customer,
       serviceStartDate: row.customer.serviceStartDate.toISOString(),

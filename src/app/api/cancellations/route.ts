@@ -14,6 +14,10 @@ import { buildPermanenceSummary, PERMANENCE_AUDIT_REASON } from "@/lib/permanenc
 import { validateClientPath, type BajaClientPath } from "@/lib/baja-client-path";
 import { getBajaEligibility } from "@/lib/services/collections";
 import { getClientIp } from "@/lib/request-ip";
+import {
+  sanitizePdfFileName,
+  validateWithdrawalRequestPdf,
+} from "@/lib/cancellation-withdrawal-document";
 import type { CancellationReason } from "@prisma/client";
 
 const VALID_REASONS: CancellationReason[] = [
@@ -49,6 +53,8 @@ export async function POST(request: NextRequest) {
       reason,
       requestDate: requestDateBody,
       clientPath,
+      withdrawalRequestFileName,
+      withdrawalRequestFileData,
     } = await request.json();
 
     if (!reason || !VALID_REASONS.includes(reason)) {
@@ -109,6 +115,17 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: permanencePreview.warning }, { status: 400 });
     }
 
+    const withdrawalPdfError = validateWithdrawalRequestPdf(
+      withdrawalRequestFileName,
+      withdrawalRequestFileData
+    );
+    if (withdrawalPdfError) {
+      return NextResponse.json({ error: withdrawalPdfError }, { status: 400 });
+    }
+
+    const archivedPdfName = sanitizePdfFileName(withdrawalRequestFileName);
+    const archivedPdfData = withdrawalRequestFileData.trim();
+
     const cancellation = await prisma.cancellation.create({
       data: {
         customerId,
@@ -117,6 +134,9 @@ export async function POST(request: NextRequest) {
         requestDate,
         createdById: session.userId,
         status: "SOLICITADA",
+        withdrawalRequestFileName: archivedPdfName,
+        withdrawalRequestFileData: archivedPdfData,
+        withdrawalRequestUploadedAt: new Date(),
       },
     });
 
@@ -139,7 +159,7 @@ export async function POST(request: NextRequest) {
       action: "CREATE",
       entity: "Cancellation",
       entityId: cancellation.id,
-      detail: `Baja ${customer.contract}`,
+      detail: `Baja ${customer.contract} · PDF solicitud de retiro archivado`,
       ipAddress: getClientIp(request),
     });
 

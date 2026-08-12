@@ -538,6 +538,22 @@ async function main() {
     END $$;
   `);
 
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'Cancellation'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Cancellation' AND column_name = 'withdrawalRequestFileName'
+      ) THEN
+        ALTER TABLE "Cancellation" ADD COLUMN "withdrawalRequestFileName" TEXT;
+        ALTER TABLE "Cancellation" ADD COLUMN "withdrawalRequestFileData" TEXT;
+        ALTER TABLE "Cancellation" ADD COLUMN "withdrawalRequestUploadedAt" TIMESTAMP(3);
+      END IF;
+    END $$;
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 
