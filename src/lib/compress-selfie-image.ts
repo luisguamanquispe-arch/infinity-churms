@@ -73,3 +73,14 @@ export async function compressSelfieImage(file: File): Promise<string> {
     "La imagen sigue siendo demasiado grande. Acérquese más o use mejor iluminación."
   );
 }
+
+/** Convierte data URL a Blob sin fetch (compatible con iOS Safari). */
+export function dataUrlToBlob(dataUrl: string): Blob {
+  const match = dataUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/i);
+  if (!match) throw new Error("Formato de imagen inválido.");
+  const mime = match[1].toLowerCase().includes("png") ? "image/png" : "image/jpeg";
+  const binary = atob(match[2]);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: mime });
+}

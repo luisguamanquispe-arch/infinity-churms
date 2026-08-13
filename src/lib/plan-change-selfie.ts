@@ -21,7 +21,8 @@ export function validateSelfieBuffer(buffer: Buffer, mime: string): string | nul
   if (buffer.length > MAX_SELFIE_BYTES) {
     return "La imagen es demasiado grande. Acérquese un poco más a la cámara.";
   }
-  if (!/^image\/(jpeg|jpg|png|webp)$/i.test(mime)) {
+  const normalized = (mime || "image/jpeg").toLowerCase();
+  if (!/^image\/(jpeg|jpg|png|webp)$/.test(normalized)) {
     return "La fotografía debe ser JPEG o PNG.";
   }
   return null;

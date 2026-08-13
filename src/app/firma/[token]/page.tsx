@@ -1,11 +1,11 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import { COLORS, OPERATION_TYPE_LABELS, PLAN_CHANGE_STATUS_LABELS } from "@/lib/constants";
+import { COLORS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { SignaturePad } from "@/components/cambio-plan/signature-pad";
-import { compressSelfieImage } from "@/lib/compress-selfie-image";
+import { compressSelfieImage, dataUrlToBlob } from "@/lib/compress-selfie-image";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -49,11 +49,33 @@ export default function FirmaRemotaPage() {
   const [finalConfirm, setFinalConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [msg, setMsg] = useState("");
+  const loadGenRef = useRef(0);
+  const stepRef = useRef<Step>(1);
+
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
+
+  function applySteps(steps: Session["steps"]) {
+    if (steps.signatureSaved) {
+      setStep((prev) => Math.max(prev, 5) as Step);
+    } else if (steps.selfieUploaded) {
+      setStep((prev) => Math.max(prev, 4) as Step);
+    } else if (steps.adendumAccepted) {
+      setStep((prev) => (prev >= 4 ? prev : 3));
+    } else if (steps.dataConfirmed) {
+      setStep((prev) => (prev >= 3 ? prev : 2));
+    } else {
+      setStep(1);
+    }
+  }
 
   const load = useCallback(async () => {
+    const gen = ++loadGenRef.current;
     setLoading(true);
     const r = await fetch(`/api/firma/${token}`);
     const data = await r.json();
+    if (gen !== loadGenRef.current) return;
     setLoading(false);
 
     if (data.error === "COMPLETED") {
@@ -77,11 +99,7 @@ export default function FirmaRemotaPage() {
     setSession(data);
     setDataConfirmed(data.steps.dataConfirmed);
     setAdendumAccepted(data.steps.adendumAccepted);
-    if (data.steps.signatureSaved) setStep(5);
-    else if (data.steps.selfieUploaded) setStep(4);
-    else if (data.steps.adendumAccepted) setStep(3);
-    else if (data.steps.dataConfirmed) setStep(2);
-    else setStep(1);
+    applySteps(data.steps);
   }, [token]);
 
   useEffect(() => {
@@ -91,47 +109,62 @@ export default function FirmaRemotaPage() {
   async function uploadSelfieBlob(dataUrl: string) {
     setSubmitting(true);
     setError(null);
-    setMsg("");
+    setMsg("Enviando foto…");
     try {
-      const blob = await (await fetch(dataUrl)).blob();
+      const blob = dataUrlToBlob(dataUrl);
       const fd = new FormData();
       fd.append("selfie", blob, "selfie.jpg");
 
-      const r = await fetch(`/api/firma/${token}/selfie`, {
+      let r = await fetch(`/api/firma/${token}/selfie`, {
         method: "POST",
         body: fd,
       });
 
-      let data: { error?: string; ok?: boolean; steps?: Session["steps"] };
+      let data: { error?: string; ok?: boolean; steps?: Session["steps"] } | null = null;
       try {
         data = await r.json();
       } catch {
-        setError(
-          r.status === 413
-            ? "La imagen es demasiado grande. Intente tomar la foto más cerca."
-            : "No se pudo enviar la foto. Verifique su conexión."
-        );
+        data = null;
+      }
+
+      // Fallback JSON si multipart no está disponible o falla en red
+      if (
+        !r.ok &&
+        (!data || r.status === 404 || r.status >= 500 || r.status === 413 || r.status === 415)
+      ) {
+        r = await fetch(`/api/firma/${token}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "upload_selfie", selfieData: dataUrl }),
+        });
+        try {
+          data = await r.json();
+        } catch {
+          setError("No se pudo enviar la foto. Verifique su conexión e intente de nuevo.");
+          return false;
+        }
+      }
+
+      if (!r.ok || !data?.ok) {
+        setError(data?.error ?? "No se pudo guardar la selfie.");
         return false;
       }
 
-      if (!r.ok) {
-        setError(data.error ?? "No se pudo guardar la selfie.");
-        return false;
-      }
-
+      loadGenRef.current++;
       setStep(4);
+      stepRef.current = 4;
       setSession((prev) =>
         prev
           ? {
               ...prev,
-              steps: data.steps ?? { ...prev.steps, selfieUploaded: true },
+              steps: data!.steps ?? { ...prev.steps, selfieUploaded: true },
             }
           : prev
       );
       setMsg("Identidad verificada. Continúe con su firma.");
       return true;
-    } catch {
-      setError("Error de conexión al enviar la foto.");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error al enviar la foto.");
       return false;
     } finally {
       setSubmitting(false);
@@ -179,7 +212,9 @@ export default function FirmaRemotaPage() {
     const res = await action("confirm_data", { confirmed: true });
     if (res) {
       setStep(2);
-      load();
+      setSession((prev) =>
+        prev ? { ...prev, steps: { ...prev.steps, dataConfirmed: true } } : prev
+      );
     }
   }
 
@@ -188,7 +223,9 @@ export default function FirmaRemotaPage() {
     const res = await action("accept_adendum", { accepted: true });
     if (res) {
       setStep(3);
-      load();
+      setSession((prev) =>
+        prev ? { ...prev, steps: { ...prev.steps, adendumAccepted: true } } : prev
+      );
     }
   }
 
@@ -408,6 +445,12 @@ export default function FirmaRemotaPage() {
         {step === 3 && (
           <section className="space-y-4 rounded-xl border bg-white p-4 shadow-sm">
             <h2 className="font-semibold">Verificación de identidad</h2>
+            {error && (
+              <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>
+            )}
+            {msg && !error && (
+              <div className="rounded-lg bg-teal-50 px-3 py-2 text-sm text-teal-800">{msg}</div>
+            )}
             <p className="text-sm text-slate-600">
               Toma una selfie sosteniendo tu documento de identidad junto a tu rostro.
             </p>
@@ -423,7 +466,10 @@ export default function FirmaRemotaPage() {
                 capture="user"
                 className="hidden"
                 id="selfie-input"
-                onChange={(e) => handleSelfieFile(e.target.files?.[0] ?? null)}
+                onChange={(e) => {
+                  handleSelfieFile(e.target.files?.[0] ?? null);
+                  e.target.value = "";
+                }}
               />
               <span
                 className="block w-full cursor-pointer rounded-xl py-3 text-center text-sm font-semibold text-white"
