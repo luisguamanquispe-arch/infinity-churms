@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission, requireSession } from "@/lib/auth";
+import { requireAdmin, requirePermission, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import {
@@ -42,7 +42,7 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requirePermission("cancellations:delete");
+    const session = await requireAdmin();
     const { id } = await params;
     const removed = await deleteCancellation(id);
 
@@ -58,7 +58,7 @@ export async function DELETE(
     return NextResponse.json({ ok: true });
   } catch (e) {
     if (e instanceof Error && e.message === "FORBIDDEN") {
-      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+      return NextResponse.json({ error: "Solo administradores pueden eliminar bajas" }, { status: 403 });
     }
     if (e instanceof Error && e.message === "NOT_FOUND") {
       return NextResponse.json({ error: "No encontrado" }, { status: 404 });
@@ -107,7 +107,7 @@ export async function PATCH(
     }
 
     if (body.action === "delete_charge") {
-      const session = await requirePermission("cancellations:edit");
+      const session = await requireAdmin();
       if (!body.chargeId) {
         return NextResponse.json({ error: "Cargo no indicado" }, { status: 400 });
       }
@@ -123,7 +123,7 @@ export async function PATCH(
     }
 
     if (body.action === "update") {
-      const session = await requirePermission("cancellations:edit");
+      const session = await requireAdmin();
       const updateData: Parameters<typeof updateCancellationAdmin>[1] = {};
 
       if (body.reason !== undefined) updateData.reason = body.reason as CancellationReason;

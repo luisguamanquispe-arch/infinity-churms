@@ -3,10 +3,13 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import type { UserRole } from "@prisma/client";
 import { COLORS, OPERATION_TYPE_LABELS, PLAN_CHANGE_STATUS_LABELS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { SignaturePad } from "@/components/cambio-plan/signature-pad";
 import { RemoteSignaturePanel } from "@/components/cambio-plan/remote-signature-panel";
+import { PlanChangeAdminPanel } from "@/components/cambio-plan/plan-change-admin-panel";
+import { getPlanChangePermissions } from "@/lib/plan-change-permissions";
 
 interface PlanChangeDetail {
   id: string;
@@ -23,10 +26,12 @@ interface PlanChangeDetail {
   previousPermanenceStart: string | null;
   previousPermanenceEnd: string | null;
   newPlanName: string;
+  newPlanId: string | null;
   newSpeedMbps: number;
   newMonthlyUsd: string;
   standardMonthlyUsd: string;
   discountReason: string | null;
+  notes: string | null;
   newPermanenceStart: string | null;
   newPermanenceEnd: string | null;
   permanenceMonths: number;
@@ -111,6 +116,7 @@ export default function PlanChangeDetailPage() {
 
   const canSign = data.status === "PENDIENTE_DE_FIRMA";
   const isActive = ["ACTIVO", "FIRMADO"].includes(data.status);
+  const permissions = role ? getPlanChangePermissions(role as UserRole) : null;
   const perms = role ? (() => {
     const isAdmin = role === "ADMIN";
     const isSupervisor = role === "SUPERVISOR";
@@ -139,6 +145,34 @@ export default function PlanChangeDetailPage() {
 
       {msg && <div className="rounded-lg bg-teal-50 px-4 py-3 text-sm text-teal-800">{msg}</div>}
       {error && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+      {permissions && (
+        <PlanChangeAdminPanel
+          data={{
+            id: data.id,
+            operationType: data.operationType,
+            status: data.status,
+            addendumNumber: data.addendumNumber,
+            newPlanId: data.newPlanId,
+            newPlanName: data.newPlanName,
+            newSpeedMbps: data.newSpeedMbps,
+            newMonthlyUsd: data.newMonthlyUsd,
+            standardMonthlyUsd: data.standardMonthlyUsd,
+            discountReason: data.discountReason,
+            notes: data.notes,
+            customer: { contract: data.customer.contract, name: data.customer.name },
+          }}
+          permissions={{
+            canEdit: permissions.canEdit,
+            canDelete: permissions.canDelete,
+            canVoid: permissions.canVoid,
+            canConfirm: permissions.canConfirm,
+            canApproveDiscount: permissions.canApproveDiscount,
+          }}
+          onMessage={setMsg}
+          onUpdated={reload}
+        />
+      )}
 
       <section className="rounded-xl border bg-white p-5 space-y-3 text-sm">
         <div className="flex flex-wrap justify-between gap-2">
@@ -193,6 +227,10 @@ export default function PlanChangeDetailPage() {
             {data.newPermanenceEnd ? new Date(data.newPermanenceEnd).toLocaleDateString("es-VE") : "—"}
             {" "}({data.permanenceMonths} meses)
           </p>
+        )}
+
+        {data.notes && (
+          <p><strong>Observaciones:</strong> {data.notes}</p>
         )}
 
         {data.voidReason && (

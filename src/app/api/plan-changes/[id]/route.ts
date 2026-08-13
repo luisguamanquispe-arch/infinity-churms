@@ -5,8 +5,10 @@ import { getClientIp } from "@/lib/request-ip";
 import {
   cancelPlanChange,
   confirmPlanChange,
+  deletePlanChange,
   getPlanChange,
   signPlanChange,
+  updatePlanChange,
   voidPlanChange,
 } from "@/lib/services/plan-changes";
 import { getPlanChangePermissions } from "@/lib/plan-change-permissions";
@@ -101,6 +103,28 @@ export async function PATCH(
       return NextResponse.json(row);
     }
 
+    if (body.action === "update") {
+      if (!perms.canEdit) return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+      const row = await updatePlanChange(id, {
+        newPlanId: body.newPlanId,
+        approvedMonthlyUsd:
+          body.approvedMonthlyUsd !== undefined ? Number(body.approvedMonthlyUsd) : undefined,
+        discountReason: body.discountReason,
+        notes: body.notes,
+        userId: session.userId,
+        canApproveDiscount: perms.canApproveDiscount,
+      });
+      await audit({
+        userId: session.userId,
+        action: "UPDATE",
+        entity: "PlanChange",
+        entityId: id,
+        detail: "Edición administrativa",
+        ipAddress: ip,
+      });
+      return NextResponse.json(row);
+    }
+
     return NextResponse.json({ error: "Acción no válida" }, { status: 400 });
   } catch (e) {
     if (e instanceof Error && e.message === "FORBIDDEN") {
@@ -108,6 +132,37 @@ export async function PATCH(
     }
     return NextResponse.json(
       { error: e instanceof Error ? e.message : "Error" },
+      { status: 400 }
+    );
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requirePermission("plan-changes:delete");
+    const { id } = await params;
+    const removed = await deletePlanChange(id);
+    await audit({
+      userId: session.userId,
+      action: "DELETE",
+      entity: "PlanChange",
+      entityId: id,
+      detail: `Operación contractual eliminada · ${removed.operationType}`,
+      ipAddress: getClientIp(request),
+    });
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    if (e instanceof Error && e.message === "FORBIDDEN") {
+      return NextResponse.json({ error: "Solo administradores pueden eliminar operaciones" }, { status: 403 });
+    }
+    if (e instanceof Error && e.message === "NOT_FOUND") {
+      return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+    }
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Error al eliminar" },
       { status: 400 }
     );
   }

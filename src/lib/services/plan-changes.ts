@@ -435,15 +435,172 @@ export async function voidPlanChange(id: string, userId: string, reason: string)
   }
   if (!reason.trim()) throw new Error("Motivo de anulación requerido.");
 
-  return prisma.planChange.update({
-    where: { id },
-    data: {
-      status: "ANULADO",
-      voidedAt: new Date(),
-      voidedById: userId,
-      voidReason: reason.trim(),
-    },
+  return prisma.$transaction(async (tx) => {
+    if (pc.status === "ACTIVO") {
+      const latestActive = await tx.planChange.findFirst({
+        where: { customerId: pc.customerId, status: "ACTIVO" },
+        orderBy: { activatedAt: "desc" },
+      });
+      if (latestActive?.id !== pc.id) {
+        throw new Error("Solo se puede anular la operación activa más reciente del cliente.");
+      }
+
+      await tx.customer.update({
+        where: { id: pc.customerId },
+        data: {
+          planName: pc.previousPlanName,
+          planSpeedMbps: pc.previousSpeedMbps,
+          planMonthlyUsd: pc.previousMonthlyUsd,
+          activeServicePlanId: pc.previousPlanId,
+          contractPermanenceStart: pc.previousPermanenceStart,
+          contractPermanenceEnd: pc.previousPermanenceEnd,
+        },
+      });
+    }
+
+    return tx.planChange.update({
+      where: { id },
+      data: {
+        status: "ANULADO",
+        voidedAt: new Date(),
+        voidedById: userId,
+        voidReason: reason.trim(),
+      },
+    });
   });
+}
+
+export type PlanChangeAdminUpdate = {
+  newPlanId?: string;
+  approvedMonthlyUsd?: number;
+  discountReason?: string | null;
+  notes?: string | null;
+  discountAuthorizedById?: string | null;
+};
+
+function planChangeNeedsPlanSelection(operationType: ContractOperationType) {
+  return operationType === "CAMBIO_PLAN" || operationType === "RENOVACION_CAMBIO_PLAN";
+}
+
+export async function updatePlanChange(
+  id: string,
+  params: PlanChangeAdminUpdate & {
+    userId: string;
+    canApproveDiscount: boolean;
+  }
+) {
+  const pc = await prisma.planChange.findUnique({ where: { id } });
+  if (!pc) throw new Error("Operación contractual no encontrada.");
+
+  const editableFull = pc.status === "BORRADOR";
+  const editableLimited = pc.status === "PENDIENTE_DE_FIRMA";
+  const notesOnly = ["FIRMADO", "ACTIVO", "ANULADO", "CANCELADO"].includes(pc.status);
+
+  if (!editableFull && !editableLimited && !notesOnly) {
+    throw new Error("No se puede editar en este estado.");
+  }
+
+  const data: Prisma.PlanChangeUpdateInput = {};
+  let invalidateTokens = false;
+
+  if (params.notes !== undefined) {
+    data.notes = params.notes?.trim() || null;
+  }
+
+  const wantsStructuralChange =
+    params.newPlanId !== undefined ||
+    params.approvedMonthlyUsd !== undefined ||
+    params.discountReason !== undefined;
+
+  if (wantsStructuralChange && !editableFull && !editableLimited) {
+    throw new Error("Solo se pueden editar las observaciones en este estado.");
+  }
+
+  let standardUsd = Number(pc.standardMonthlyUsd);
+
+  if (params.newPlanId !== undefined && (editableFull || editableLimited)) {
+    if (!planChangeNeedsPlanSelection(pc.operationType)) {
+      throw new Error("No se puede cambiar el plan en una renovación sin cambio de plan.");
+    }
+    if (params.newPlanId !== pc.newPlanId) {
+      const newPlan = await prisma.servicePlan.findFirst({
+        where: { id: params.newPlanId, active: true },
+      });
+      if (!newPlan) throw new Error("Plan no válido o inactivo.");
+      data.newPlan = { connect: { id: newPlan.id } };
+      data.newPlanName = newPlan.name;
+      data.newSpeedMbps = newPlan.speedMbps;
+      standardUsd = Number(newPlan.monthlyUsd);
+      data.standardMonthlyUsd = standardUsd;
+      invalidateTokens = true;
+    }
+  }
+
+  if (params.approvedMonthlyUsd !== undefined && (editableFull || editableLimited)) {
+    const approvedUsd = params.approvedMonthlyUsd;
+    if (approvedUsd <= 0) throw new Error("Precio inválido.");
+    const discountReason =
+      params.discountReason !== undefined ? params.discountReason : pc.discountReason;
+    if (approvedUsd < standardUsd && !discountReason?.trim()) {
+      throw new Error("Debe indicar el motivo del descuento especial.");
+    }
+    if (approvedUsd < standardUsd && !params.canApproveDiscount) {
+      throw new Error("Se requiere autorización de supervisor o administrador para aplicar descuento.");
+    }
+    if (approvedUsd !== Number(pc.newMonthlyUsd)) {
+      invalidateTokens = true;
+    }
+    data.newMonthlyUsd = approvedUsd;
+    if (approvedUsd < standardUsd) {
+      data.discountReason = discountReason?.trim() || null;
+      data.discountAuthorizedBy = { connect: { id: params.userId } };
+      data.discountAuthorizedAt = new Date();
+    } else {
+      data.discountReason = null;
+      data.discountAuthorizedBy = { disconnect: true };
+      data.discountAuthorizedAt = null;
+    }
+  } else if (params.discountReason !== undefined && (editableFull || editableLimited)) {
+    data.discountReason = params.discountReason?.trim() || null;
+  }
+
+  if (Object.keys(data).length === 0) {
+    throw new Error("No hay cambios para guardar.");
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    const row = await tx.planChange.update({
+      where: { id },
+      data,
+      include: {
+        customer: { select: { contract: true, name: true } },
+        createdBy: { select: { name: true } },
+        discountAuthorizedBy: { select: { name: true } },
+        newPlan: true,
+      },
+    });
+
+    if (invalidateTokens && editableLimited) {
+      await tx.planChangeSignatureToken.updateMany({
+        where: { planChangeId: id, isActive: true },
+        data: { isActive: false, status: "CANCELADO", cancelledAt: new Date() },
+      });
+    }
+
+    return row;
+  });
+
+  return updated;
+}
+
+export async function deletePlanChange(id: string) {
+  const pc = await prisma.planChange.findUnique({ where: { id } });
+  if (!pc) throw new Error("NOT_FOUND");
+  if (!["BORRADOR", "CANCELADO"].includes(pc.status)) {
+    throw new Error("Solo se pueden eliminar borradores o solicitudes canceladas.");
+  }
+  await prisma.planChange.delete({ where: { id } });
+  return pc;
 }
 
 export async function getPlanChange(id: string) {

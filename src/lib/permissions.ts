@@ -22,6 +22,8 @@ export type Permission =
   | "plan-changes:list"
   | "plan-changes:create"
   | "plan-changes:manage"
+  | "plan-changes:edit"
+  | "plan-changes:delete"
   | "plan-changes:send-link"
   | "plan-changes:view-identity"
   | "reports:view"
@@ -50,6 +52,8 @@ const ALL: Permission[] = [
   "plan-changes:list",
   "plan-changes:create",
   "plan-changes:manage",
+  "plan-changes:edit",
+  "plan-changes:delete",
   "plan-changes:send-link",
   "plan-changes:view-identity",
   "reports:view",
@@ -64,7 +68,8 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
       p !== "config:manage" &&
       p !== "reports:view" &&
       p !== "cancellations:edit" &&
-      p !== "cancellations:delete"
+      p !== "cancellations:delete" &&
+      p !== "plan-changes:delete"
   ),
   COBRANZAS: [
     "dashboard:view",
@@ -97,7 +102,23 @@ export function hasPermission(role: UserRole, permission: Permission): boolean {
   return ROLE_PERMISSIONS[role].includes(permission);
 }
 
-export function canAccessRoute(role: UserRole, pathname: string): boolean {
+export function isAdminRole(role: UserRole): boolean {
+  return role === "ADMIN";
+}
+
+export function canAccessRoute(role: UserRole, pathname: string, method?: string): boolean {
+  if (
+    method === "DELETE" &&
+    /^\/api\/cancellations\/[^/]+$/.test(pathname)
+  ) {
+    return isAdminRole(role);
+  }
+  if (
+    method === "DELETE" &&
+    /^\/api\/plan-changes\/[^/]+$/.test(pathname)
+  ) {
+    return isAdminRole(role);
+  }
   if (pathname === "/" || pathname.startsWith("/api/dashboard")) {
     return hasPermission(role, "dashboard:view");
   }

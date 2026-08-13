@@ -1,10 +1,11 @@
 import type { UserRole } from "@prisma/client";
-import { hasPermission } from "./permissions";
+import { hasPermission, isAdminRole } from "./permissions";
 
 export function getCancellationPermissions(role: UserRole) {
   const equipment = hasPermission(role, "cancellations:equipment");
   const charges = hasPermission(role, "cancellations:charges");
   const create = hasPermission(role, "cancellations:create");
+  const adminOnly = isAdminRole(role);
   return {
     charges,
     payment: hasPermission(role, "cancellations:payment"),
@@ -12,8 +13,8 @@ export function getCancellationPermissions(role: UserRole) {
     advanceEquipment: hasPermission(role, "cancellations:advance_equipment"),
     close: hasPermission(role, "cancellations:close"),
     manageEquipment: equipment || charges || create,
-    edit: hasPermission(role, "cancellations:edit"),
-    delete: hasPermission(role, "cancellations:delete"),
+    edit: adminOnly,
+    delete: adminOnly,
     preliquidate: hasPermission(role, "cancellations:preliquidate"),
     preliquidateEdit: hasPermission(role, "cancellations:preliquidate_edit"),
     preliquidateSend: hasPermission(role, "cancellations:preliquidate_send"),

@@ -1,8 +1,8 @@
 import type { UserRole } from "@prisma/client";
-import { hasPermission } from "@/lib/permissions";
+import { hasPermission, isAdminRole } from "./permissions";
 
 export function getPlanChangePermissions(role: UserRole) {
-  const isAdmin = role === "ADMIN";
+  const isAdmin = isAdminRole(role);
   const isSupervisor = role === "SUPERVISOR";
   const canManage = hasPermission(role, "plan-changes:manage");
   const canCreate = hasPermission(role, "plan-changes:create");
@@ -21,5 +21,7 @@ export function getPlanChangePermissions(role: UserRole) {
     canVoid,
     canApproveDiscount,
     canViewReports: hasPermission(role, "reports:view"),
+    canEdit: hasPermission(role, "plan-changes:edit"),
+    canDelete: hasPermission(role, "plan-changes:delete"),
   };
 }

@@ -33,7 +33,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  if (!canAccessRoute(session.role, pathname)) {
+  if (!canAccessRoute(session.role, pathname, request.method)) {
     if (pathname.startsWith("/api/")) {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }
