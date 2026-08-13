@@ -192,8 +192,17 @@ export async function getPublicSignatureSession(rawToken: string) {
     return { error };
   }
 
-  const pc = record.planChange;
+  const freshPc = await prisma.planChange.findUnique({
+    where: { id: record.planChangeId },
+    include: { customer: true },
+  });
+  if (!freshPc) {
+    return { error: "INVALID" as const };
+  }
+
+  const pc = freshPc;
   const customer = pc.customer;
+  const selfieUploaded = isSelfieRecorded(pc);
 
   if (!record.openedAt) {
     await prisma.planChangeSignatureToken.update({
@@ -229,7 +238,7 @@ export async function getPublicSignatureSession(rawToken: string) {
     steps: {
       dataConfirmed: !!pc.dataConfirmedAt,
       adendumAccepted: !!pc.adendumAcceptedAt,
-      selfieUploaded: !!pc.identitySelfieAt,
+      selfieUploaded,
       signatureSaved: !!pc.signatureImageData,
     },
   };
@@ -291,7 +300,7 @@ export async function processRemoteSignatureAction(
     const image = body.signatureImageData as string;
     if (!image?.startsWith("data:image")) throw new Error("Firma inválida.");
     const pc = await prisma.planChange.findUnique({ where: { id: pcId } });
-    if (!pc?.identitySelfieAt) throw new Error("Debe cargar la selfie primero.");
+    if (!pc || !isSelfieRecorded(pc)) throw new Error("Debe cargar la selfie primero.");
     await prisma.planChange.update({
       where: { id: pcId },
       data: { signatureImageData: image },
@@ -307,7 +316,7 @@ export async function processRemoteSignatureAction(
     if (!pc) throw new Error("Solicitud no encontrada.");
     if (!pc.dataConfirmedAt) throw new Error("Confirme los datos.");
     if (!pc.adendumAcceptedAt) throw new Error("Debe aceptar el adendum.");
-    if (!pc.identitySelfieAt || !pc.identitySelfieData) throw new Error("Selfie requerida.");
+    if (!isSelfieRecorded(pc)) throw new Error("Selfie requerida.");
     if (!pc.signatureImageData) throw new Error("Firma requerida.");
     if (!body.finalConfirm) throw new Error("Confirme el proceso final.");
 
@@ -358,6 +367,64 @@ export async function processRemoteSignatureAction(
   throw new Error("Acción no válida.");
 }
 
+function isSelfieRecorded(pc: {
+  identitySelfieAt: Date | null;
+  identitySelfieData: string | null;
+}): boolean {
+  return !!pc.identitySelfieAt || !!pc.identitySelfieData?.trim();
+}
+
+async function persistIdentitySelfie(pcId: string, selfieData: string, fileId: string) {
+  const trimmed = selfieData.trim();
+  const now = new Date();
+
+  try {
+    await prisma.planChange.update({
+      where: { id: pcId },
+      data: {
+        identitySelfieData: trimmed,
+        identitySelfieId: fileId,
+        identitySelfieAt: now,
+      },
+    });
+  } catch (prismaErr) {
+    console.error("[persistIdentitySelfie] prisma update failed, trying raw SQL", prismaErr);
+    try {
+      await prisma.$executeRaw`
+        UPDATE "PlanChange"
+        SET "identitySelfieData" = ${trimmed},
+            "identitySelfieId" = ${fileId},
+            "identitySelfieAt" = ${now}
+        WHERE "id" = ${pcId}
+      `;
+    } catch (rawErr) {
+      console.error("[persistIdentitySelfie] raw SQL failed", rawErr);
+      throw new Error(
+        "No se pudo guardar la selfie en el servidor. Solicite un nuevo enlace al asesor."
+      );
+    }
+  }
+
+  const verified = await prisma.planChange.findUnique({
+    where: { id: pcId },
+    select: {
+      identitySelfieAt: true,
+      identitySelfieData: true,
+      dataConfirmedAt: true,
+      adendumAcceptedAt: true,
+      signatureImageData: true,
+    },
+  });
+
+  if (!verified || !isSelfieRecorded(verified)) {
+    throw new Error(
+      "La selfie no quedó registrada en el sistema. Intente enviar la foto nuevamente."
+    );
+  }
+
+  return verified;
+}
+
 async function saveRemoteIdentitySelfie(params: {
   pcId: string;
   recordId: string;
@@ -371,21 +438,15 @@ async function saveRemoteIdentitySelfie(params: {
   if (!pc?.adendumAcceptedAt) throw new Error("Debe aceptar el adendum primero.");
 
   const fileId = pc.identitySelfieId ?? generateIdentityFileId();
-  try {
-    await prisma.planChange.update({
-      where: { id: params.pcId },
-      data: {
-        identitySelfieData: params.selfieData.trim(),
-        identitySelfieId: fileId,
-        identitySelfieAt: new Date(),
-      },
-    });
-  } catch (e) {
-    console.error("[saveRemoteIdentitySelfie]", e);
-    throw new Error(
-      "No se pudo guardar la selfie en el servidor. Solicite un nuevo enlace al asesor."
-    );
-  }
+  const verified = await persistIdentitySelfie(params.pcId, params.selfieData, fileId);
+
+  await prisma.planChangeSignatureToken.update({
+    where: { id: params.recordId },
+    data: {
+      status: "EN_PROCESO",
+      processStartedAt: new Date(),
+    },
+  });
 
   await audit({
     action: "SELFIE_RECEIVED",
@@ -399,10 +460,10 @@ async function saveRemoteIdentitySelfie(params: {
     ok: true,
     nextStep: 4 as const,
     steps: {
-      dataConfirmed: !!pc.dataConfirmedAt,
-      adendumAccepted: true,
+      dataConfirmed: !!verified.dataConfirmedAt,
+      adendumAccepted: !!verified.adendumAcceptedAt,
       selfieUploaded: true,
-      signatureSaved: !!pc.signatureImageData,
+      signatureSaved: !!verified.signatureImageData,
     },
   };
 }

@@ -1,5 +1,5 @@
 const MAX_SIDE_PX = 1024;
-const TARGET_MAX_LENGTH = 600_000;
+const TARGET_MAX_LENGTH = 480_000;
 
 function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {

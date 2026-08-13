@@ -130,7 +130,13 @@ export default function FirmaRemotaPage() {
   async function syncSelfieAndContinue() {
     setSubmitting(true);
     setError(null);
+    setMsg("");
     try {
+      if (selfiePreview) {
+        const sent = await uploadSelfieBlob(selfiePreview);
+        if (sent) return;
+      }
+
       const r = await fetch(`/api/firma/${token}`);
       const data = await r.json();
       if (data.error) {
@@ -146,7 +152,9 @@ export default function FirmaRemotaPage() {
       if (data.steps?.selfieUploaded) {
         advanceToSignatureStep(data);
       } else {
-        setError("La selfie aún no se registró. Tome la foto nuevamente o pulse Reintentar envío.");
+        setError(
+          "La selfie aún no se registró. Pulse «Reintentar envío» o tome la foto nuevamente."
+        );
       }
     } catch {
       setError("No se pudo verificar el estado. Intente de nuevo.");
@@ -155,16 +163,18 @@ export default function FirmaRemotaPage() {
     }
   }
 
-  async function uploadSelfieBlob(dataUrl: string) {
+  async function uploadSelfieBlob(dataUrl: string): Promise<boolean> {
     setSubmitting(true);
     setError(null);
     setMsg("Enviando foto…");
     try {
-      // 1) JSON PATCH — más compatible en móviles/proxies
-      let r = await fetch(`/api/firma/${token}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "upload_selfie", selfieData: dataUrl }),
+      const blob = dataUrlToBlob(dataUrl);
+      const fd = new FormData();
+      fd.append("selfie", blob, "selfie.jpg");
+
+      let r = await fetch(`/api/firma/${token}/selfie`, {
+        method: "POST",
+        body: fd,
       });
 
       let data: { error?: string; ok?: boolean; steps?: Session["steps"] } | null = null;
@@ -174,14 +184,11 @@ export default function FirmaRemotaPage() {
         data = null;
       }
 
-      // 2) Multipart fallback
       if (!r.ok || !data?.ok) {
-        const blob = dataUrlToBlob(dataUrl);
-        const fd = new FormData();
-        fd.append("selfie", blob, "selfie.jpg");
-        r = await fetch(`/api/firma/${token}/selfie`, {
-          method: "POST",
-          body: fd,
+        r = await fetch(`/api/firma/${token}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "upload_selfie", selfieData: dataUrl }),
         });
         try {
           data = await r.json();
