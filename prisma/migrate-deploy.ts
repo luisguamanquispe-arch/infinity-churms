@@ -1141,6 +1141,68 @@ async function main() {
       AND EXISTS (SELECT 1 FROM "CancellationPreliquidacion" p WHERE p."id" = 'legacy_' || c."id");
   `);
 
+  // --- Firma remota acta final post-liquidación ---
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'CancellationFinalLiquidation')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'CancellationFinalLiquidation' AND column_name = 'signatureImageData') THEN
+        ALTER TABLE "CancellationFinalLiquidation" ADD COLUMN "signatureImageData" TEXT;
+      END IF;
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'CancellationFinalLiquidation')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'CancellationFinalLiquidation' AND column_name = 'actaAcceptedAt') THEN
+        ALTER TABLE "CancellationFinalLiquidation" ADD COLUMN "actaAcceptedAt" TIMESTAMP(3);
+      END IF;
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'CancellationFinalLiquidation')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'CancellationFinalLiquidation' AND column_name = 'signatureMode') THEN
+        ALTER TABLE "CancellationFinalLiquidation" ADD COLUMN "signatureMode" TEXT DEFAULT 'PRESENCIAL';
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "CancellationActaSignatureToken" (
+      "id" TEXT NOT NULL,
+      "cancellationId" TEXT NOT NULL,
+      "finalLiquidationId" TEXT NOT NULL,
+      "tokenHash" TEXT NOT NULL,
+      "status" "SignatureLinkStatus" NOT NULL DEFAULT 'GENERADO',
+      "expiresAt" TIMESTAMP(3) NOT NULL,
+      "isActive" BOOLEAN NOT NULL DEFAULT true,
+      "generatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "sentAt" TIMESTAMP(3),
+      "openedAt" TIMESTAMP(3),
+      "signedAt" TIMESTAMP(3),
+      "completedAt" TIMESTAMP(3),
+      "cancelledAt" TIMESTAMP(3),
+      "generatedById" TEXT NOT NULL,
+      "openIp" TEXT,
+      "openUserAgent" TEXT,
+      "signIp" TEXT,
+      "signUserAgent" TEXT,
+      CONSTRAINT "CancellationActaSignatureToken_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationActaSignatureToken_tokenHash_key') THEN
+        ALTER TABLE "CancellationActaSignatureToken" ADD CONSTRAINT "CancellationActaSignatureToken_tokenHash_key" UNIQUE ("tokenHash");
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationActaSignatureToken_cancellationId_fkey') THEN
+        ALTER TABLE "CancellationActaSignatureToken" ADD CONSTRAINT "CancellationActaSignatureToken_cancellationId_fkey"
+          FOREIGN KEY ("cancellationId") REFERENCES "Cancellation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationActaSignatureToken_finalLiquidationId_fkey') THEN
+        ALTER TABLE "CancellationActaSignatureToken" ADD CONSTRAINT "CancellationActaSignatureToken_finalLiquidationId_fkey"
+          FOREIGN KEY ("finalLiquidationId") REFERENCES "CancellationFinalLiquidation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationActaSignatureToken_generatedById_fkey') THEN
+        ALTER TABLE "CancellationActaSignatureToken" ADD CONSTRAINT "CancellationActaSignatureToken_generatedById_fkey"
+          FOREIGN KEY ("generatedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 

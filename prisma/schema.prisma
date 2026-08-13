@@ -164,6 +164,7 @@ model User {
   planChangeSignatureTokens PlanChangeSignatureToken[]
   preliquidacionesCreated CancellationPreliquidacion[] @relation("PreliquidacionCreatedBy")
   preliquidacionTokensGenerated PreliquidacionApprovalToken[] @relation("PreliquidacionTokenGeneratedBy")
+  actaSignatureTokensGenerated CancellationActaSignatureToken[] @relation("ActaTokenGeneratedBy")
 }
 
 model Customer {
@@ -393,6 +394,7 @@ model Cancellation {
   payments  CancellationPayment[]
   preliquidaciones CancellationPreliquidacion[] @relation("CancellationPreliquidaciones")
   finalLiquidations CancellationFinalLiquidation[]
+  actaSignatureTokens CancellationActaSignatureToken[]
 }
 
 model CancellationPreliquidacion {
@@ -482,12 +484,41 @@ model CancellationFinalLiquidation {
   notes                 String?
   createdAt             DateTime @default(now())
   clientSignature       String?
+  signatureImageData    String?
+  actaAcceptedAt        DateTime?
+  signatureMode         String?              @default("PRESENCIAL")
   signedAt              DateTime?
   signIp                String?
   signUserAgent         String?
 
   cancellation   Cancellation             @relation(fields: [cancellationId], references: [id], onDelete: Cascade)
   preliquidacion CancellationPreliquidacion @relation(fields: [preliquidacionId], references: [id])
+  actaSignatureTokens CancellationActaSignatureToken[]
+}
+
+model CancellationActaSignatureToken {
+  id                 String              @id @default(cuid())
+  cancellationId     String
+  finalLiquidationId String
+  tokenHash          String              @unique
+  status             SignatureLinkStatus @default(GENERADO)
+  expiresAt          DateTime
+  isActive           Boolean             @default(true)
+  generatedAt        DateTime            @default(now())
+  sentAt             DateTime?
+  openedAt           DateTime?
+  signedAt           DateTime?
+  completedAt        DateTime?
+  cancelledAt        DateTime?
+  generatedById      String
+  openIp             String?
+  openUserAgent      String?
+  signIp             String?
+  signUserAgent      String?
+
+  cancellation     Cancellation               @relation(fields: [cancellationId], references: [id], onDelete: Cascade)
+  finalLiquidation CancellationFinalLiquidation @relation(fields: [finalLiquidationId], references: [id], onDelete: Cascade)
+  generatedBy      User                       @relation("ActaTokenGeneratedBy", fields: [generatedById], references: [id])
 }
 
 model CancellationEquipment {

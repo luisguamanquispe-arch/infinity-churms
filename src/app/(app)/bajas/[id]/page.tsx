@@ -82,6 +82,9 @@ export default async function GestionarBajaPage({ params }: Props) {
       totalAmount: String(fl.totalAmount),
       equipmentAdjustment: String(fl.equipmentAdjustment),
       preliquidacionTotal: String(fl.preliquidacionTotal),
+      signedAt: fl.signedAt?.toISOString() ?? null,
+      clientSignature: fl.clientSignature,
+      signatureMode: fl.signatureMode,
     })),
   };
 

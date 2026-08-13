@@ -9,6 +9,7 @@ import { formatUsd } from "@/lib/liquidation";
 import { PermanenceSummaryPanel } from "@/components/bajas/permanence-summary-panel";
 import { CancellationAdminPanel } from "@/components/bajas/cancellation-admin-panel";
 import { PreliquidacionPanel } from "@/components/bajas/preliquidacion-panel";
+import { ActaRemoteSignaturePanel } from "@/components/bajas/acta-remote-signature-panel";
 import type { PermanenceSummary } from "@/lib/permanence";
 import { technologyLabel } from "@/lib/permanence";
 
@@ -79,7 +80,16 @@ interface Detail {
     lineItems: { id: string; category: string; concept: string; amount: string }[];
     approvalTokens?: { status: string; expiresAt: string; sentAt: string | null; openedAt: string | null }[];
   } | null;
-  finalLiquidations?: { id: string; totalAmount: string; equipmentAdjustment: string; preliquidacionTotal: string; version: number }[];
+  finalLiquidations?: {
+    id: string;
+    totalAmount: string;
+    equipmentAdjustment: string;
+    preliquidacionTotal: string;
+    version: number;
+    signedAt?: string | null;
+    clientSignature?: string | null;
+    signatureMode?: string | null;
+  }[];
 }
 
 interface Permissions {
@@ -96,6 +106,7 @@ interface Permissions {
   preliquidateSend: boolean;
   preliquidateView: boolean;
   liquidate: boolean;
+  actaSend: boolean;
 }
 
 interface AuditEntry {
@@ -121,6 +132,9 @@ const ACTION_LABELS: Record<string, string> = {
   PRELIQUIDACION_APPROVED: "Cliente aprobó preliquidación",
   PRELIQUIDACION_REJECTED: "Cliente rechazó preliquidación",
   FINAL_LIQUIDATION: "Liquidación final generada",
+  ACTA_SIGNATURE_LINK: "Enlace firma acta generado",
+  ACTA_LINK_SENT: "Enlace acta enviado",
+  ACTA_SIGNED_REMOTE: "Cliente firmó acta remotamente",
   PDF_PRELIQUIDACION: "Pre-liquidación PDF generada",
   UPDATE: "Baja editada",
   DELETE: "Baja eliminada",
@@ -561,8 +575,20 @@ export function CancellationDetail({
             {data.actaPhysicalCode ?? "Se asignará al generar PDF (formato IDF-AAAA-000001)"}
           </span>
         </p>
+
+        <ActaRemoteSignaturePanel
+          cancellationId={data.id}
+          status={data.status}
+          customerName={data.customer.name}
+          customerPhone={data.customer.phone ?? null}
+          finalLiquidation={data.finalLiquidations?.[0] ?? null}
+          canSendLink={permissions.actaSend}
+          onRefresh={refresh}
+          onMessage={setMsg}
+        />
+
         <div className="mt-3">
-          <label className="text-xs text-slate-600">Firma del cliente (nombre completo)</label>
+          <label className="text-xs text-slate-600">Firma del cliente (nombre completo — presencial)</label>
           <input
             value={signature}
             onChange={(e) => setSignature(e.target.value)}
@@ -571,15 +597,27 @@ export function CancellationDetail({
           />
         </div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button onClick={saveSignature} className="rounded-lg border px-4 py-2 text-sm">Guardar firma</button>
+          <button onClick={saveSignature} className="rounded-lg border px-4 py-2 text-sm">Guardar firma presencial</button>
           <a href={`/api/cancellations/${data.id}/acta`} target="_blank" className="rounded-lg px-4 py-2 text-sm font-medium text-white" style={{ backgroundColor: COLORS.navy }}>
             Descargar acta PDF + QR
           </a>
         </div>
         {data.status === "LIQUIDACION_FINAL" && permissions.close && (
-          <button onClick={advance} className="mt-4 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: COLORS.brand }}>
-            Completar baja
-          </button>
+          <>
+            {!data.finalLiquidations?.[0]?.signedAt && (
+              <p className="mt-3 text-sm text-amber-800">
+                Debe obtener la firma del cliente (remota o presencial) antes de completar la baja.
+              </p>
+            )}
+            <button
+              onClick={advance}
+              disabled={!data.finalLiquidations?.[0]?.signedAt && !data.clientSignature?.trim()}
+              className="mt-4 rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+              style={{ backgroundColor: COLORS.brand }}
+            >
+              Completar baja
+            </button>
+          </>
         )}
       </Card>
 

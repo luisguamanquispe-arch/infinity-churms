@@ -11,6 +11,7 @@ import {
 } from "@/lib/services/cancellations";
 import { computeFinalLiquidation } from "@/lib/services/preliquidaciones";
 import { assertPreliquidacionApproved } from "@/lib/preliquidacion-guards";
+import { assertActaSigned, recordPresencialActaSignature } from "@/lib/services/cancellation-acta-remote-signature";
 import type { CancellationReason, CancellationStatus } from "@prisma/client";
 import { getClientIp } from "@/lib/request-ip";
 
@@ -76,15 +77,21 @@ export async function PATCH(
 
     if (body.action === "save_signature") {
       const session = await requireSession();
+      const name = body.clientSignature?.trim() || null;
       await prisma.cancellation.update({
         where: { id },
-        data: { clientSignature: body.clientSignature?.trim() || null },
+        data: { clientSignature: name },
       });
+      const current = await prisma.cancellation.findUnique({ where: { id }, select: { status: true } });
+      if (current?.status === "LIQUIDACION_FINAL" && name) {
+        await recordPresencialActaSignature(id, name);
+      }
       await audit({
         userId: session.userId,
         action: "SIGNATURE",
         entity: "Cancellation",
         entityId: id,
+        ipAddress: getClientIp(request),
       });
       return NextResponse.json({ ok: true });
     }
@@ -239,6 +246,19 @@ export async function PATCH(
       }
 
       if (next === "BAJA_COMPLETADA") {
+        if (current.status === "LIQUIDACION_FINAL") {
+          try {
+            await assertActaSigned(id);
+          } catch (e) {
+            if (e instanceof Error && e.message === "ACTA_NOT_SIGNED") {
+              return NextResponse.json(
+                { error: "El acta debe estar firmada por el cliente antes de completar la baja." },
+                { status: 403 }
+              );
+            }
+            throw e;
+          }
+        }
         const invoice = current.invoiceNumber ?? (await prisma.cancellationPayment.findFirst({ where: { cancellationId: id } }))?.invoiceNumber;
         if (!invoice) {
           return NextResponse.json({ error: "Factura obligatoria para cerrar la baja" }, { status: 400 });

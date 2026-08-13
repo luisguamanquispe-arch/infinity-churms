@@ -9,6 +9,7 @@ export type Permission =
   | "cancellations:preliquidate_send"
   | "cancellations:preliquidate_view"
   | "cancellations:liquidate"
+  | "cancellations:acta_send"
   | "cancellations:cancel"
   | "cancellations:charges"
   | "cancellations:payment"
@@ -36,6 +37,7 @@ const ALL: Permission[] = [
   "cancellations:preliquidate_send",
   "cancellations:preliquidate_view",
   "cancellations:liquidate",
+  "cancellations:acta_send",
   "cancellations:cancel",
   "cancellations:charges",
   "cancellations:payment",
@@ -73,6 +75,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "cancellations:preliquidate_send",
     "cancellations:preliquidate_view",
     "cancellations:liquidate",
+    "cancellations:acta_send",
     "cancellations:charges",
     "cancellations:payment",
     "cancellations:equipment",

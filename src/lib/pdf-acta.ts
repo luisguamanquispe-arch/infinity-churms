@@ -19,6 +19,14 @@ export async function generateActaPdf(params: {
   verifyUrl: string;
   qrDataUrl?: string;
   reasonLabel: string;
+  finalLiquidation?: {
+    preliquidacionTotal: number;
+    equipmentAdjustment: number;
+    totalAmount: number;
+    preliquidacionVersion?: number;
+    signatureImageData?: string | null;
+    clientSignature?: string | null;
+  } | null;
 }) {
   const doc = new jsPDF();
   const { cancellation: c, customer, equipment, charges, payment } = params;
@@ -70,16 +78,27 @@ export async function generateActaPdf(params: {
 
   const y1 = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 8;
 
+  const fl = params.finalLiquidation;
+  const liquidationBody = fl
+    ? [
+        [`Preliquidación aprobada (V${fl.preliquidacionVersion ?? 1})`, fl.preliquidacionTotal.toFixed(2)],
+        ...(fl.equipmentAdjustment !== 0
+          ? [["Ajuste por equipos devueltos", fl.equipmentAdjustment.toFixed(2)]]
+          : []),
+        ["TOTAL LIQUIDACIÓN FINAL", fl.totalAmount.toFixed(2)],
+      ]
+    : [
+        [INSTALLATION_PRORATION_LABEL, Number(c.permanenceAmount).toFixed(2)],
+        [STREAMS_SUPPORT_LABEL, Number(c.tvAmount).toFixed(2)],
+        ["Mensualidades", Number(c.monthlyAmount).toFixed(2)],
+        ...charges.map((ch) => [ch.concept, Number(ch.amount).toFixed(2)]),
+        ["TOTAL", Number(c.totalAmount).toFixed(2)],
+      ];
+
   autoTable(doc, {
     startY: y1,
     head: [["Concepto liquidación", "Valor USD"]],
-    body: [
-      [INSTALLATION_PRORATION_LABEL, Number(c.permanenceAmount).toFixed(2)],
-      [STREAMS_SUPPORT_LABEL, Number(c.tvAmount).toFixed(2)],
-      ["Mensualidades", Number(c.monthlyAmount).toFixed(2)],
-      ...charges.map((ch) => [ch.concept, Number(ch.amount).toFixed(2)]),
-      ["TOTAL", Number(c.totalAmount).toFixed(2)],
-    ],
+    body: liquidationBody,
     styles: { fontSize: 9 },
   });
 
@@ -88,11 +107,20 @@ export async function generateActaPdf(params: {
   doc.text(`Factura pago: ${payment?.invoiceNumber ?? c.invoiceNumber ?? "—"}`, 14, y2);
 
   const sigY = y2 + 20;
+  const sigName = fl?.clientSignature?.trim() || c.clientSignature?.trim() || "";
   doc.line(14, sigY, 90, sigY);
   doc.setFontSize(9);
   doc.text("Firma del cliente", 14, sigY + 6);
-  doc.text(c.clientSignature?.trim() || "_______________________________", 14, sigY + 12);
-  doc.text(`C.I.: ${customer.cedula}`, 14, sigY + 18);
+  if (fl?.signatureImageData?.startsWith("data:image")) {
+    try {
+      doc.addImage(fl.signatureImageData, "PNG", 14, sigY + 8, 70, 28);
+    } catch {
+      doc.text(sigName || "_______________________________", 14, sigY + 12);
+    }
+  } else {
+    doc.text(sigName || "_______________________________", 14, sigY + 12);
+  }
+  doc.text(`C.I.: ${customer.cedula}`, 14, sigY + (fl?.signatureImageData ? 40 : 18));
 
   doc.line(110, sigY, 190, sigY);
   doc.text("Firma Infinity / Técnico", 110, sigY + 6);

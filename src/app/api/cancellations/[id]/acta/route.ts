@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { nextActaNumber, nextActaPhysicalCode } from "@/lib/acta-number";
 import { getCancellation } from "@/lib/services/cancellations";
+import { getLatestFinalLiquidation } from "@/lib/services/cancellation-acta-remote-signature";
 import { generateActaPdf } from "@/lib/pdf-acta";
 import { getAppBaseUrl } from "@/lib/app-url";
 import { REASON_LABELS } from "@/lib/constants";
@@ -34,6 +35,7 @@ export async function GET(
 
     const qrDataUrl = await QRCode.toDataURL(verifyUrl, { width: 200 });
     const payment = row.payments[0] ?? null;
+    const finalLiq = await getLatestFinalLiquidation(id);
 
     const pdf = await generateActaPdf({
       cancellation: { ...row, actaNumber, actaPhysicalCode },
@@ -44,6 +46,16 @@ export async function GET(
       verifyUrl,
       qrDataUrl,
       reasonLabel: REASON_LABELS[row.reason] ?? row.reason,
+      finalLiquidation: finalLiq
+        ? {
+            preliquidacionTotal: Number(finalLiq.preliquidacionTotal),
+            equipmentAdjustment: Number(finalLiq.equipmentAdjustment),
+            totalAmount: Number(finalLiq.totalAmount),
+            preliquidacionVersion: finalLiq.preliquidacion.version,
+            signatureImageData: finalLiq.signatureImageData,
+            clientSignature: finalLiq.clientSignature,
+          }
+        : null,
     });
 
     await audit({ action: "PDF_ACTA", entity: "Cancellation", entityId: id });
