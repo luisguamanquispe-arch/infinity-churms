@@ -88,18 +88,54 @@ export default function FirmaRemotaPage() {
     load();
   }, [load]);
 
-  async function refreshSession() {
-    const r = await fetch(`/api/firma/${token}`);
-    const data = await r.json();
-    if (data.error) return;
-    setSession(data);
-    setDataConfirmed(data.steps.dataConfirmed);
-    setAdendumAccepted(data.steps.adendumAccepted);
-    if (data.steps.signatureSaved) setStep(5);
-    else if (data.steps.selfieUploaded) setStep(4);
-    else if (data.steps.adendumAccepted) setStep(3);
-    else if (data.steps.dataConfirmed) setStep(2);
-    else setStep(1);
+  async function uploadSelfieBlob(dataUrl: string) {
+    setSubmitting(true);
+    setError(null);
+    setMsg("");
+    try {
+      const blob = await (await fetch(dataUrl)).blob();
+      const fd = new FormData();
+      fd.append("selfie", blob, "selfie.jpg");
+
+      const r = await fetch(`/api/firma/${token}/selfie`, {
+        method: "POST",
+        body: fd,
+      });
+
+      let data: { error?: string; ok?: boolean; steps?: Session["steps"] };
+      try {
+        data = await r.json();
+      } catch {
+        setError(
+          r.status === 413
+            ? "La imagen es demasiado grande. Intente tomar la foto más cerca."
+            : "No se pudo enviar la foto. Verifique su conexión."
+        );
+        return false;
+      }
+
+      if (!r.ok) {
+        setError(data.error ?? "No se pudo guardar la selfie.");
+        return false;
+      }
+
+      setStep(4);
+      setSession((prev) =>
+        prev
+          ? {
+              ...prev,
+              steps: data.steps ?? { ...prev.steps, selfieUploaded: true },
+            }
+          : prev
+      );
+      setMsg("Identidad verificada. Continúe con su firma.");
+      return true;
+    } catch {
+      setError("Error de conexión al enviar la foto.");
+      return false;
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function action(actionName: string, body: Record<string, unknown> = {}) {
@@ -159,11 +195,13 @@ export default function FirmaRemotaPage() {
   async function handleSelfieFile(file: File | null) {
     if (!file) return;
     setError(null);
+    setMsg("");
     setSelfieProcessing(true);
     setSelfiePreview("");
     try {
       const compressed = await compressSelfieImage(file);
       setSelfiePreview(compressed);
+      await uploadSelfieBlob(compressed);
     } catch (e) {
       setError(e instanceof Error ? e.message : "No se pudo procesar la foto.");
     } finally {
@@ -171,16 +209,12 @@ export default function FirmaRemotaPage() {
     }
   }
 
-  async function uploadSelfie() {
+  async function retryUploadSelfie() {
     if (!selfiePreview) {
       setError("Debe tomar o seleccionar una foto primero.");
       return;
     }
-    const res = await action("upload_selfie", { selfieData: selfiePreview });
-    if (res) {
-      setStep(4);
-      await refreshSession();
-    }
+    await uploadSelfieBlob(selfiePreview);
   }
 
   async function saveSignature() {
@@ -188,7 +222,9 @@ export default function FirmaRemotaPage() {
     const res = await action("save_signature", { signatureImageData: signatureImage });
     if (res) {
       setStep(5);
-      load();
+      setSession((prev) =>
+        prev ? { ...prev, steps: { ...prev.steps, signatureSaved: true } } : prev
+      );
     }
   }
 
@@ -398,36 +434,43 @@ export default function FirmaRemotaPage() {
               </span>
             </label>
             {selfieProcessing && (
-              <p className="text-sm text-slate-500 text-center">Procesando foto…</p>
+              <p className="text-sm text-slate-500 text-center">Procesando y enviando foto…</p>
             )}
-            {selfiePreview && (
+            {submitting && selfiePreview && !selfieProcessing && (
+              <p className="text-sm text-slate-500 text-center">Enviando foto…</p>
+            )}
+            {selfiePreview && step === 3 && (
               <div className="space-y-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={selfiePreview} alt="Vista previa selfie" className="max-h-64 w-full rounded-lg object-contain" />
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setSelfiePreview("")}
-                    disabled={submitting}
-                    className="flex-1 rounded-lg border py-2 text-sm"
+                    onClick={() => {
+                      setSelfiePreview("");
+                      setError(null);
+                      setMsg("");
+                    }}
+                    disabled={submitting || selfieProcessing}
+                    className="flex-1 rounded-lg border py-2 text-sm disabled:opacity-50"
                   >
                     Repetir foto
                   </button>
                   <button
                     type="button"
                     disabled={submitting || selfieProcessing}
-                    onClick={uploadSelfie}
+                    onClick={retryUploadSelfie}
                     className="flex-1 rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50"
                     style={{ backgroundColor: COLORS.brand }}
                   >
-                    {submitting ? "Enviando…" : "Aceptar foto"}
+                    {submitting ? "Enviando…" : "Reintentar envío"}
                   </button>
                 </div>
               </div>
             )}
             {!selfiePreview && !selfieProcessing && (
               <p className="text-xs text-center text-slate-500">
-                Después de tomar la foto, pulse <strong>Aceptar foto</strong> para continuar.
+                Al tomar la foto, se enviará automáticamente y pasará al paso de firma.
               </p>
             )}
           </section>

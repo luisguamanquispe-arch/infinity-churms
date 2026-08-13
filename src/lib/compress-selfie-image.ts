@@ -1,6 +1,5 @@
-import { MAX_SELFIE_DATA_URL_LENGTH } from "@/lib/plan-change-selfie";
-
-const MAX_SIDE_PX = 1600;
+const MAX_SIDE_PX = 1200;
+const TARGET_MAX_LENGTH = 900_000;
 
 function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -50,9 +49,22 @@ export async function compressSelfieImage(file: File): Promise<string> {
 
   ctx.drawImage(img, 0, 0, width, height);
 
-  for (const quality of [0.85, 0.7, 0.55, 0.4]) {
+  for (const quality of [0.8, 0.65, 0.5, 0.35, 0.25]) {
     const dataUrl = canvasToJpeg(canvas, quality);
-    if (dataUrl.length <= MAX_SELFIE_DATA_URL_LENGTH) {
+    if (dataUrl.length <= TARGET_MAX_LENGTH) {
+      return dataUrl;
+    }
+  }
+
+  for (let side = MAX_SIDE_PX; side >= 640; side -= 160) {
+    const scale = side / Math.max(img.naturalWidth || img.width, img.naturalHeight || img.height);
+    const w = Math.max(1, Math.round((img.naturalWidth || img.width) * scale));
+    const h = Math.max(1, Math.round((img.naturalHeight || img.height) * scale));
+    canvas.width = w;
+    canvas.height = h;
+    ctx.drawImage(img, 0, 0, w, h);
+    const dataUrl = canvasToJpeg(canvas, 0.35);
+    if (dataUrl.length <= TARGET_MAX_LENGTH) {
       return dataUrl;
     }
   }

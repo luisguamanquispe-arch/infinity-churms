@@ -7,7 +7,11 @@ import {
   generateSignatureToken,
   hashSignatureToken,
 } from "@/lib/plan-change-signature-token";
-import { validateIdentitySelfie } from "@/lib/plan-change-selfie";
+import {
+  validateIdentitySelfie,
+  validateSelfieBuffer,
+  bufferToSelfieDataUrl,
+} from "@/lib/plan-change-selfie";
 import { signPlanChange, getTariffConfig } from "@/lib/services/plan-changes";
 import { audit } from "@/lib/audit";
 
@@ -265,27 +269,12 @@ export async function processRemoteSignatureAction(
   }
 
   if (action === "upload_selfie") {
-    const err = validateIdentitySelfie(body.selfieData as string);
-    if (err) throw new Error(err);
-    const pc = await prisma.planChange.findUnique({ where: { id: pcId } });
-    if (!pc?.adendumAcceptedAt) throw new Error("Debe aceptar el adendum primero.");
-    const fileId = pc.identitySelfieId ?? generateIdentityFileId();
-    await prisma.planChange.update({
-      where: { id: pcId },
-      data: {
-        identitySelfieData: (body.selfieData as string).trim(),
-        identitySelfieId: fileId,
-        identitySelfieAt: new Date(),
-      },
+    return saveRemoteIdentitySelfie({
+      pcId,
+      recordId: record.id,
+      selfieData: body.selfieData as string,
+      meta,
     });
-    await audit({
-      action: "SELFIE_RECEIVED",
-      entity: "PlanChange",
-      entityId: pcId,
-      detail: `Selfie identidad · ${fileId}`,
-      ipAddress: meta?.ip,
-    });
-    return { ok: true };
   }
 
   if (action === "save_signature") {
@@ -357,6 +346,73 @@ export async function processRemoteSignatureAction(
   }
 
   throw new Error("Acción no válida.");
+}
+
+async function saveRemoteIdentitySelfie(params: {
+  pcId: string;
+  recordId: string;
+  selfieData: string;
+  meta?: { ip?: string; userAgent?: string };
+}) {
+  const err = validateIdentitySelfie(params.selfieData);
+  if (err) throw new Error(err);
+
+  const pc = await prisma.planChange.findUnique({ where: { id: params.pcId } });
+  if (!pc?.adendumAcceptedAt) throw new Error("Debe aceptar el adendum primero.");
+
+  const fileId = pc.identitySelfieId ?? generateIdentityFileId();
+  await prisma.planChange.update({
+    where: { id: params.pcId },
+    data: {
+      identitySelfieData: params.selfieData.trim(),
+      identitySelfieId: fileId,
+      identitySelfieAt: new Date(),
+    },
+  });
+
+  await audit({
+    action: "SELFIE_RECEIVED",
+    entity: "PlanChange",
+    entityId: params.pcId,
+    detail: `Selfie identidad · ${fileId}`,
+    ipAddress: params.meta?.ip,
+  });
+
+  return {
+    ok: true,
+    steps: {
+      dataConfirmed: !!pc.dataConfirmedAt,
+      adendumAccepted: true,
+      selfieUploaded: true,
+      signatureSaved: !!pc.signatureImageData,
+    },
+  };
+}
+
+export async function processRemoteSelfieUpload(
+  rawToken: string,
+  buffer: Buffer,
+  mime: string,
+  meta?: { ip?: string; userAgent?: string }
+) {
+  const resolved = await resolveSignatureToken(rawToken);
+  if ("error" in resolved && resolved.error !== undefined) {
+    if (resolved.error === "COMPLETED") throw new Error("SOLICITUD_COMPLETADA");
+    if (resolved.error === "EXPIRED") throw new Error("ENLACE_EXPIRADO");
+    if (resolved.error === "CANCELLED") throw new Error("ENLACE_CANCELADO");
+    throw new Error("Enlace no válido.");
+  }
+
+  const err = validateSelfieBuffer(buffer, mime);
+  if (err) throw new Error(err);
+
+  const dataUrl = bufferToSelfieDataUrl(buffer, mime);
+  return saveRemoteIdentitySelfie({
+    pcId: resolved.record.planChangeId,
+    recordId: resolved.record.id,
+    selfieData: dataUrl,
+    meta,
+  });
 }
 
 export async function regenerateSignatureLink(planChangeId: string, userId: string, baseUrl?: string) {
