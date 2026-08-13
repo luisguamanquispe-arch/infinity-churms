@@ -8,7 +8,7 @@ export function validateIdentitySelfie(dataUrl: string | undefined | null): stri
     return "La fotografía debe ser una imagen válida (JPEG o PNG).";
   }
   if (data.length > MAX_SELFIE_DATA_URL_LENGTH) {
-    return "La imagen excede el tamaño máximo permitido.";
+    return "La imagen excede el tamaño máximo permitido. Intente de nuevo; la app comprimirá la foto automáticamente.";
   }
   return null;
 }

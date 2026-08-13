@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import { COLORS, OPERATION_TYPE_LABELS, PLAN_CHANGE_STATUS_LABELS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { SignaturePad } from "@/components/cambio-plan/signature-pad";
+import { compressSelfieImage } from "@/lib/compress-selfie-image";
 
 type Step = 1 | 2 | 3 | 4 | 5;
 
@@ -43,6 +44,7 @@ export default function FirmaRemotaPage() {
   const [dataConfirmed, setDataConfirmed] = useState(false);
   const [adendumAccepted, setAdendumAccepted] = useState(false);
   const [selfiePreview, setSelfiePreview] = useState("");
+  const [selfieProcessing, setSelfieProcessing] = useState(false);
   const [signatureImage, setSignatureImage] = useState("");
   const [finalConfirm, setFinalConfirm] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -86,22 +88,54 @@ export default function FirmaRemotaPage() {
     load();
   }, [load]);
 
+  async function refreshSession() {
+    const r = await fetch(`/api/firma/${token}`);
+    const data = await r.json();
+    if (data.error) return;
+    setSession(data);
+    setDataConfirmed(data.steps.dataConfirmed);
+    setAdendumAccepted(data.steps.adendumAccepted);
+    if (data.steps.signatureSaved) setStep(5);
+    else if (data.steps.selfieUploaded) setStep(4);
+    else if (data.steps.adendumAccepted) setStep(3);
+    else if (data.steps.dataConfirmed) setStep(2);
+    else setStep(1);
+  }
+
   async function action(actionName: string, body: Record<string, unknown> = {}) {
     setSubmitting(true);
     setMsg("");
     setError(null);
-    const r = await fetch(`/api/firma/${token}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: actionName, ...body }),
-    });
-    const data = await r.json();
-    setSubmitting(false);
-    if (!r.ok) {
-      setError(data.error ?? "Error");
+    try {
+      const r = await fetch(`/api/firma/${token}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: actionName, ...body }),
+      });
+
+      let data: { error?: string; ok?: boolean };
+      try {
+        data = await r.json();
+      } catch {
+        setError(
+          r.status === 413
+            ? "La imagen es demasiado grande. Intente tomar la foto más cerca o con menos zoom."
+            : "No se pudo enviar la información. Verifique su conexión e intente de nuevo."
+        );
+        return null;
+      }
+
+      if (!r.ok) {
+        setError(data.error ?? "Error al procesar la solicitud.");
+        return null;
+      }
+      return data;
+    } catch {
+      setError("Error de conexión. Intente de nuevo.");
       return null;
+    } finally {
+      setSubmitting(false);
     }
-    return data;
   }
 
   async function handleConfirmData() {
@@ -122,21 +156,30 @@ export default function FirmaRemotaPage() {
     }
   }
 
-  function handleSelfieFile(file: File | null) {
+  async function handleSelfieFile(file: File | null) {
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      setSelfiePreview(result);
-    };
-    reader.readAsDataURL(file);
+    setError(null);
+    setSelfieProcessing(true);
+    setSelfiePreview("");
+    try {
+      const compressed = await compressSelfieImage(file);
+      setSelfiePreview(compressed);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo procesar la foto.");
+    } finally {
+      setSelfieProcessing(false);
+    }
   }
 
   async function uploadSelfie() {
+    if (!selfiePreview) {
+      setError("Debe tomar o seleccionar una foto primero.");
+      return;
+    }
     const res = await action("upload_selfie", { selfieData: selfiePreview });
     if (res) {
       setStep(4);
-      load();
+      await refreshSession();
     }
   }
 
@@ -354,25 +397,38 @@ export default function FirmaRemotaPage() {
                 Abrir cámara / seleccionar foto
               </span>
             </label>
+            {selfieProcessing && (
+              <p className="text-sm text-slate-500 text-center">Procesando foto…</p>
+            )}
             {selfiePreview && (
               <div className="space-y-2">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={selfiePreview} alt="Vista previa selfie" className="max-h-64 w-full rounded-lg object-contain" />
                 <div className="flex gap-2">
-                  <button type="button" onClick={() => setSelfiePreview("")} className="flex-1 rounded-lg border py-2 text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setSelfiePreview("")}
+                    disabled={submitting}
+                    className="flex-1 rounded-lg border py-2 text-sm"
+                  >
                     Repetir foto
                   </button>
                   <button
                     type="button"
-                    disabled={submitting}
+                    disabled={submitting || selfieProcessing}
                     onClick={uploadSelfie}
-                    className="flex-1 rounded-lg py-2 text-sm font-semibold text-white"
+                    className="flex-1 rounded-lg py-2 text-sm font-semibold text-white disabled:opacity-50"
                     style={{ backgroundColor: COLORS.brand }}
                   >
-                    Aceptar foto
+                    {submitting ? "Enviando…" : "Aceptar foto"}
                   </button>
                 </div>
               </div>
+            )}
+            {!selfiePreview && !selfieProcessing && (
+              <p className="text-xs text-center text-slate-500">
+                Después de tomar la foto, pulse <strong>Aceptar foto</strong> para continuar.
+              </p>
             )}
           </section>
         )}
