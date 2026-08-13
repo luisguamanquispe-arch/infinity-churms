@@ -910,6 +910,237 @@ async function main() {
     END $$;
   `);
 
+  // --- Preliquidación obligatoria de bajas ---
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'PreliquidacionStatus') THEN
+        CREATE TYPE "PreliquidacionStatus" AS ENUM (
+          'BORRADOR', 'GENERADA', 'ENVIADA', 'PENDIENTE_APROBACION',
+          'APROBADA', 'RECHAZADA', 'SUPERSEDED'
+        );
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'PreliquidacionLineCategory') THEN
+        CREATE TYPE "PreliquidacionLineCategory" AS ENUM (
+          'PERMANENCIA', 'MENSUALIDAD', 'EQUIPO', 'TV', 'OTRO', 'CREDITO'
+        );
+      END IF;
+    END $$;
+  `);
+
+  const newCancellationStatuses = [
+    'PRELIQUIDACION_EN_PROCESO',
+    'PRELIQUIDACION_GENERADA',
+    'PRELIQUIDACION_ENVIADA',
+    'PRELIQUIDACION_PENDIENTE',
+    'PRELIQUIDACION_RECHAZADA',
+    'PRELIQUIDACION_APROBADA',
+    'BAJA_AUTORIZADA',
+    'EN_DEVOLUCION_EQUIPOS',
+    'LIQUIDACION_FINAL',
+    'CANCELADA',
+  ];
+  for (const val of newCancellationStatuses) {
+    await run(`
+      DO $$ BEGIN
+        IF EXISTS (SELECT 1 FROM pg_type WHERE typname = 'CancellationStatus') AND NOT EXISTS (
+          SELECT 1 FROM pg_enum e JOIN pg_type t ON e.enumtypid = t.oid
+          WHERE t.typname = 'CancellationStatus' AND e.enumlabel = '${val}'
+        ) THEN
+          ALTER TYPE "CancellationStatus" ADD VALUE '${val}';
+        END IF;
+      END $$;
+    `);
+  }
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'Cancellation')
+         AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'Cancellation' AND column_name = 'activePreliquidacionId') THEN
+        ALTER TABLE "Cancellation" ADD COLUMN "activePreliquidacionId" TEXT;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "CancellationPreliquidacion" (
+      "id" TEXT NOT NULL,
+      "cancellationId" TEXT NOT NULL,
+      "version" INTEGER NOT NULL,
+      "status" "PreliquidacionStatus" NOT NULL DEFAULT 'GENERADA',
+      "docNumber" TEXT,
+      "permanenceAmount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+      "tvAmount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+      "monthlyAmount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+      "equipmentAmount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+      "otherAmount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+      "creditsAmount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+      "subtotal" DECIMAL(10,2) NOT NULL DEFAULT 0,
+      "totalAmount" DECIMAL(10,2) NOT NULL DEFAULT 0,
+      "rejectionReason" TEXT,
+      "rejectedAt" TIMESTAMP(3),
+      "rejectedIp" TEXT,
+      "rejectedUserAgent" TEXT,
+      "approvedAt" TIMESTAMP(3),
+      "approvedIp" TEXT,
+      "approvedUserAgent" TEXT,
+      "approvedTotal" DECIMAL(10,2),
+      "sentAt" TIMESTAMP(3),
+      "notes" TEXT,
+      "createdById" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "CancellationPreliquidacion_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "PreliquidacionLineItem" (
+      "id" TEXT NOT NULL,
+      "preliquidacionId" TEXT NOT NULL,
+      "category" "PreliquidacionLineCategory" NOT NULL,
+      "concept" TEXT NOT NULL,
+      "amount" DECIMAL(10,2) NOT NULL,
+      "sortOrder" INTEGER NOT NULL DEFAULT 0,
+      "metadata" TEXT,
+      CONSTRAINT "PreliquidacionLineItem_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "PreliquidacionApprovalToken" (
+      "id" TEXT NOT NULL,
+      "preliquidacionId" TEXT NOT NULL,
+      "tokenHash" TEXT NOT NULL,
+      "status" "SignatureLinkStatus" NOT NULL DEFAULT 'GENERADO',
+      "expiresAt" TIMESTAMP(3) NOT NULL,
+      "isActive" BOOLEAN NOT NULL DEFAULT true,
+      "generatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "sentAt" TIMESTAMP(3),
+      "openedAt" TIMESTAMP(3),
+      "approvedAt" TIMESTAMP(3),
+      "rejectedAt" TIMESTAMP(3),
+      "cancelledAt" TIMESTAMP(3),
+      "generatedById" TEXT NOT NULL,
+      "openIp" TEXT,
+      "openUserAgent" TEXT,
+      "approveIp" TEXT,
+      "approveUserAgent" TEXT,
+      "rejectIp" TEXT,
+      "rejectUserAgent" TEXT,
+      "rejectionReason" TEXT,
+      CONSTRAINT "PreliquidacionApprovalToken_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "CancellationFinalLiquidation" (
+      "id" TEXT NOT NULL,
+      "cancellationId" TEXT NOT NULL,
+      "preliquidacionId" TEXT NOT NULL,
+      "version" INTEGER NOT NULL DEFAULT 1,
+      "preliquidacionTotal" DECIMAL(10,2) NOT NULL,
+      "equipmentAdjustment" DECIMAL(10,2) NOT NULL DEFAULT 0,
+      "otherAdjustments" DECIMAL(10,2) NOT NULL DEFAULT 0,
+      "totalAmount" DECIMAL(10,2) NOT NULL,
+      "notes" TEXT,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "clientSignature" TEXT,
+      "signedAt" TIMESTAMP(3),
+      "signIp" TEXT,
+      "signUserAgent" TEXT,
+      CONSTRAINT "CancellationFinalLiquidation_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationPreliquidacion_cancellationId_version_key') THEN
+        ALTER TABLE "CancellationPreliquidacion" ADD CONSTRAINT "CancellationPreliquidacion_cancellationId_version_key" UNIQUE ("cancellationId", "version");
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PreliquidacionApprovalToken_tokenHash_key') THEN
+        ALTER TABLE "PreliquidacionApprovalToken" ADD CONSTRAINT "PreliquidacionApprovalToken_tokenHash_key" UNIQUE ("tokenHash");
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Cancellation_activePreliquidacionId_key') THEN
+        ALTER TABLE "Cancellation" ADD CONSTRAINT "Cancellation_activePreliquidacionId_key" UNIQUE ("activePreliquidacionId");
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationPreliquidacion_cancellationId_fkey') THEN
+        ALTER TABLE "CancellationPreliquidacion" ADD CONSTRAINT "CancellationPreliquidacion_cancellationId_fkey"
+          FOREIGN KEY ("cancellationId") REFERENCES "Cancellation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationPreliquidacion_createdById_fkey') THEN
+        ALTER TABLE "CancellationPreliquidacion" ADD CONSTRAINT "CancellationPreliquidacion_createdById_fkey"
+          FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PreliquidacionLineItem_preliquidacionId_fkey') THEN
+        ALTER TABLE "PreliquidacionLineItem" ADD CONSTRAINT "PreliquidacionLineItem_preliquidacionId_fkey"
+          FOREIGN KEY ("preliquidacionId") REFERENCES "CancellationPreliquidacion"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PreliquidacionApprovalToken_preliquidacionId_fkey') THEN
+        ALTER TABLE "PreliquidacionApprovalToken" ADD CONSTRAINT "PreliquidacionApprovalToken_preliquidacionId_fkey"
+          FOREIGN KEY ("preliquidacionId") REFERENCES "CancellationPreliquidacion"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PreliquidacionApprovalToken_generatedById_fkey') THEN
+        ALTER TABLE "PreliquidacionApprovalToken" ADD CONSTRAINT "PreliquidacionApprovalToken_generatedById_fkey"
+          FOREIGN KEY ("generatedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationFinalLiquidation_cancellationId_fkey') THEN
+        ALTER TABLE "CancellationFinalLiquidation" ADD CONSTRAINT "CancellationFinalLiquidation_cancellationId_fkey"
+          FOREIGN KEY ("cancellationId") REFERENCES "Cancellation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationFinalLiquidation_preliquidacionId_fkey') THEN
+        ALTER TABLE "CancellationFinalLiquidation" ADD CONSTRAINT "CancellationFinalLiquidation_preliquidacionId_fkey"
+          FOREIGN KEY ("preliquidacionId") REFERENCES "CancellationPreliquidacion"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Cancellation_activePreliquidacionId_fkey') THEN
+        ALTER TABLE "Cancellation" ADD CONSTRAINT "Cancellation_activePreliquidacionId_fkey"
+          FOREIGN KEY ("activePreliquidacionId") REFERENCES "CancellationPreliquidacion"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  // Pre-aprobar preliquidaciones sintéticas para bajas ya en flujo de pago
+  await run(`
+    INSERT INTO "CancellationPreliquidacion" (
+      "id", "cancellationId", "version", "status", "permanenceAmount", "tvAmount",
+      "monthlyAmount", "equipmentAmount", "otherAmount", "creditsAmount", "subtotal",
+      "totalAmount", "approvedAt", "approvedTotal", "createdById", "createdAt"
+    )
+    SELECT
+      'legacy_' || c."id",
+      c."id",
+      1,
+      'APROBADA'::"PreliquidacionStatus",
+      c."permanenceAmount",
+      c."tvAmount",
+      c."monthlyAmount",
+      c."equipmentAmount",
+      c."otherAmount",
+      0,
+      c."totalAmount",
+      c."totalAmount",
+      COALESCE(c."updatedAt", c."createdAt"),
+      c."totalAmount",
+      c."createdById",
+      c."createdAt"
+    FROM "Cancellation" c
+    WHERE c."status" IN ('PENDIENTE_DE_PAGO', 'PAGADA', 'EQUIPOS_RECUPERADOS', 'BAJA_COMPLETADA')
+      AND NOT EXISTS (
+        SELECT 1 FROM "CancellationPreliquidacion" p WHERE p."cancellationId" = c."id"
+      );
+  `);
+
+  await run(`
+    UPDATE "Cancellation" c
+    SET "activePreliquidacionId" = 'legacy_' || c."id"
+    WHERE c."status" IN ('PENDIENTE_DE_PAGO', 'PAGADA', 'EQUIPOS_RECUPERADOS', 'BAJA_COMPLETADA')
+      AND c."activePreliquidacionId" IS NULL
+      AND EXISTS (SELECT 1 FROM "CancellationPreliquidacion" p WHERE p."id" = 'legacy_' || c."id");
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 

@@ -3,6 +3,7 @@ import { calculateLiquidation } from "@/lib/liquidation";
 import { buildPermanenceSummary, validatePermanenceForCancellation, calculatePermanenceFromStartDate } from "@/lib/permanence";
 import type { CancellationReason, CancellationStatus, EquipmentCondition, EquipmentType } from "@prisma/client";
 import { deliveryStateForEquipment, isEquipmentReceptionComplete } from "@/lib/equipment-reception";
+import { assertPreliquidacionApproved } from "@/lib/preliquidacion-guards";
 
 export async function customerHasCancellation(customerId: string) {
   const count = await prisma.cancellation.count({ where: { customerId } });
@@ -15,22 +16,36 @@ export async function getDashboardKpis() {
 
   const [
     pendingRequests,
+    pendingPreliquidacion,
+    preliquidacionApproved,
+    preliquidacionRejected,
+    bajaAutorizada,
     pendingEquipment,
     pendingAmount,
+    pendingFinalLiquidation,
     completedMonth,
     activePermanence,
     notRecovered,
   ] = await Promise.all([
     prisma.cancellation.count({
-      where: { status: { in: ["SOLICITADA", "EN_REVISION", "PENDIENTE_DE_PAGO"] } },
+      where: { status: { in: ["SOLICITADA", "PRELIQUIDACION_EN_PROCESO", "PRELIQUIDACION_GENERADA", "PRELIQUIDACION_ENVIADA", "PRELIQUIDACION_PENDIENTE", "EN_REVISION"] } },
     }),
+    prisma.cancellation.count({
+      where: { status: { in: ["PRELIQUIDACION_GENERADA", "PRELIQUIDACION_ENVIADA", "PRELIQUIDACION_PENDIENTE"] } },
+    }),
+    prisma.cancellation.count({
+      where: { status: { in: ["PRELIQUIDACION_APROBADA", "BAJA_AUTORIZADA"] } },
+    }),
+    prisma.cancellation.count({ where: { status: "PRELIQUIDACION_RECHAZADA" } }),
+    prisma.cancellation.count({ where: { status: "BAJA_AUTORIZADA" } }),
     prisma.cancellationEquipment.count({
       where: { delivered: false, cancellation: { status: { not: "BAJA_COMPLETADA" } } },
     }),
     prisma.cancellation.aggregate({
-      where: { status: { in: ["PENDIENTE_DE_PAGO", "EN_REVISION"] } },
+      where: { status: { in: ["PENDIENTE_DE_PAGO", "BAJA_AUTORIZADA", "EN_REVISION"] } },
       _sum: { totalAmount: true },
     }),
+    prisma.cancellation.count({ where: { status: "LIQUIDACION_FINAL" } }),
     prisma.cancellation.count({
       where: { status: "BAJA_COMPLETADA", closeDate: { gte: monthStart } },
     }),
@@ -47,8 +62,13 @@ export async function getDashboardKpis() {
 
   return {
     pendingRequests,
+    pendingPreliquidacion,
+    preliquidacionApproved,
+    preliquidacionRejected,
+    bajaAutorizada,
     pendingEquipment,
     pendingAmount: Number(pendingAmount._sum.totalAmount ?? 0),
+    pendingFinalLiquidation,
     completedMonth,
     activePermanence,
     notRecovered,
@@ -64,6 +84,26 @@ export async function getCancellation(id: string) {
       equipment: true,
       charges: true,
       payments: { orderBy: { createdAt: "desc" } },
+      activePreliquidacion: {
+        include: {
+          lineItems: { orderBy: { sortOrder: "asc" } },
+          createdBy: { select: { name: true } },
+          approvalTokens: {
+            where: { isActive: true },
+            orderBy: { generatedAt: "desc" },
+            take: 1,
+            include: { generatedBy: { select: { name: true } } },
+          },
+        },
+      },
+      preliquidaciones: {
+        orderBy: { version: "desc" },
+        include: {
+          lineItems: { orderBy: { sortOrder: "asc" } },
+          createdBy: { select: { name: true } },
+        },
+      },
+      finalLiquidations: { orderBy: { createdAt: "desc" } },
     },
   });
 }
@@ -370,11 +410,21 @@ const VALID_REASONS: CancellationReason[] = [
 
 const VALID_STATUSES: CancellationStatus[] = [
   "SOLICITADA",
+  "PRELIQUIDACION_EN_PROCESO",
+  "PRELIQUIDACION_GENERADA",
+  "PRELIQUIDACION_ENVIADA",
+  "PRELIQUIDACION_PENDIENTE",
+  "PRELIQUIDACION_RECHAZADA",
+  "PRELIQUIDACION_APROBADA",
+  "BAJA_AUTORIZADA",
   "EN_REVISION",
   "PENDIENTE_DE_PAGO",
   "PAGADA",
+  "EN_DEVOLUCION_EQUIPOS",
+  "LIQUIDACION_FINAL",
   "EQUIPOS_RECUPERADOS",
   "BAJA_COMPLETADA",
+  "CANCELADA",
 ];
 
 export interface AdminCancellationUpdate {
@@ -440,6 +490,17 @@ export async function updateCancellationAdmin(id: string, data: AdminCancellatio
   if (data.requestDate !== undefined) scalarData.requestDate = data.requestDate;
   if (data.closeDate !== undefined) scalarData.closeDate = data.closeDate;
   if (data.status !== undefined) {
+    const requiresApproval = [
+      "PENDIENTE_DE_PAGO",
+      "PAGADA",
+      "EN_DEVOLUCION_EQUIPOS",
+      "LIQUIDACION_FINAL",
+      "EQUIPOS_RECUPERADOS",
+      "BAJA_COMPLETADA",
+    ];
+    if (requiresApproval.includes(data.status) && data.status !== current.status) {
+      await assertPreliquidacionApproved(id);
+    }
     scalarData.status = data.status;
     if (data.status === "BAJA_COMPLETADA" && data.closeDate === undefined) {
       scalarData.closeDate = current.closeDate ?? new Date();

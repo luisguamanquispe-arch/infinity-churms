@@ -8,6 +8,7 @@ import { isEquipmentReceptionComplete } from "@/lib/equipment-reception";
 import { formatUsd } from "@/lib/liquidation";
 import { PermanenceSummaryPanel } from "@/components/bajas/permanence-summary-panel";
 import { CancellationAdminPanel } from "@/components/bajas/cancellation-admin-panel";
+import { PreliquidacionPanel } from "@/components/bajas/preliquidacion-panel";
 import type { PermanenceSummary } from "@/lib/permanence";
 import { technologyLabel } from "@/lib/permanence";
 
@@ -43,6 +44,7 @@ interface Detail {
     zone?: string;
     serviceStartDate: string;
     planName: string;
+    phone?: string | null;
     pendingBalance: string;
     originTechnology?: string;
     currentTechnology?: string;
@@ -63,6 +65,21 @@ interface Detail {
   }[];
   charges: { id: string; concept: string; amount: string }[];
   payments: { id: string; invoiceNumber: string; amountPaid: string; method: string; paymentDate: string; notes: string | null }[];
+  activePreliquidacion?: {
+    id: string;
+    version: number;
+    status: string;
+    docNumber: string | null;
+    totalAmount: string;
+    creditsAmount: string;
+    subtotal: string;
+    rejectionReason?: string | null;
+    rejectedAt?: string | null;
+    approvedAt?: string | null;
+    lineItems: { id: string; category: string; concept: string; amount: string }[];
+    approvalTokens?: { status: string; expiresAt: string; sentAt: string | null; openedAt: string | null }[];
+  } | null;
+  finalLiquidations?: { id: string; totalAmount: string; equipmentAdjustment: string; preliquidacionTotal: string; version: number }[];
 }
 
 interface Permissions {
@@ -74,6 +91,11 @@ interface Permissions {
   manageEquipment: boolean;
   edit: boolean;
   delete: boolean;
+  preliquidate: boolean;
+  preliquidateEdit: boolean;
+  preliquidateSend: boolean;
+  preliquidateView: boolean;
+  liquidate: boolean;
 }
 
 interface AuditEntry {
@@ -92,6 +114,13 @@ const ACTION_LABELS: Record<string, string> = {
   ADD_EQUIPMENT: "Equipo agregado a la baja",
   STATUS: "Cambio de estado",
   SIGNATURE: "Firma registrada",
+  PRELIQUIDACION_GENERATED: "Preliquidación generada",
+  PRELIQUIDACION_REGENERATED: "Nueva versión de preliquidación",
+  PRELIQUIDACION_LINK: "Enlace de preliquidación generado",
+  PRELIQUIDACION_LINK_SENT: "Enlace enviado al cliente",
+  PRELIQUIDACION_APPROVED: "Cliente aprobó preliquidación",
+  PRELIQUIDACION_REJECTED: "Cliente rechazó preliquidación",
+  FINAL_LIQUIDATION: "Liquidación final generada",
   PDF_PRELIQUIDACION: "Pre-liquidación PDF generada",
   UPDATE: "Baja editada",
   DELETE: "Baja eliminada",
@@ -225,10 +254,17 @@ export function CancellationDetail({
   }
 
   const closed = data.status === "BAJA_COMPLETADA";
+  const preliqApproved =
+    data.activePreliquidacion?.status === "APROBADA" ||
+    ["BAJA_AUTORIZADA", "PENDIENTE_DE_PAGO", "PAGADA", "LIQUIDACION_FINAL", "EQUIPOS_RECUPERADOS"].includes(data.status);
   const equipmentPhaseOpen = !["EQUIPOS_RECUPERADOS", "BAJA_COMPLETADA"].includes(data.status);
-  const canAddEquipment = permissions.manageEquipment && !closed && equipmentPhaseOpen;
-  const canEditEquipmentDetails = canAddEquipment && data.status === "PENDIENTE_DE_PAGO";
+  const canAddEquipment = permissions.manageEquipment && !closed && equipmentPhaseOpen && preliqApproved;
+  const canEditEquipmentDetails = canAddEquipment && ["PENDIENTE_DE_PAGO", "BAJA_AUTORIZADA"].includes(data.status);
   const canReceiveEquipment = permissions.equipment && !closed && data.status === "PAGADA";
+  const canPay =
+    permissions.payment &&
+    preliqApproved &&
+    ["BAJA_AUTORIZADA", "PENDIENTE_DE_PAGO"].includes(data.status);
 
   return (
     <div className="space-y-6">
@@ -342,25 +378,38 @@ export function CancellationDetail({
         )}
       </Card>
 
-      <Card title="Pre-liquidación para el cliente">
-        <p className="text-sm text-slate-600">
-          Documento <strong>informativo de valores a pagar</strong>. En esta etapa el cliente aún no entrega equipos;
-          la recepción y el acta se tramitan después del pago.
+      {(permissions.preliquidateView || permissions.preliquidate || permissions.preliquidateSend) && (
+        <PreliquidacionPanel
+          cancellationId={data.id}
+          status={data.status}
+          customerName={data.customer.name}
+          customerPhone={data.customer.phone ?? null}
+          activePreliquidacion={data.activePreliquidacion}
+          canPreliquidate={permissions.preliquidateEdit || permissions.preliquidate}
+          canSendLink={permissions.preliquidateSend}
+          onRefresh={refresh}
+          onMessage={setMsg}
+        />
+      )}
+
+      {!preliqApproved && !closed && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          El pago, la devolución de equipos y el cierre de la baja permanecen bloqueados hasta que el cliente apruebe la preliquidación.
         </p>
-        <ul className="mt-3 list-inside list-disc space-y-1 text-xs text-amber-800">
-          {SUSPENSION_POLICIES.map((p) => (
-            <li key={p}>{p}</li>
+      )}
+
+      {data.finalLiquidations && data.finalLiquidations.length > 0 && (
+        <Card title="Liquidación final">
+          {data.finalLiquidations.map((fl) => (
+            <div key={fl.id} className="text-sm">
+              <p>Versión {fl.version}</p>
+              <p>Preliquidación aprobada: {formatUsd(Number(fl.preliquidacionTotal))}</p>
+              <p>Ajuste por equipos: {formatUsd(Number(fl.equipmentAdjustment))}</p>
+              <p className="mt-2 text-lg font-bold">Total final: {formatUsd(Number(fl.totalAmount))}</p>
+            </div>
           ))}
-        </ul>
-        <a
-          href={`/api/cancellations/${data.id}/preliquidacion`}
-          target="_blank"
-          className="mt-4 inline-block rounded-lg px-4 py-2 text-sm font-semibold text-white"
-          style={{ backgroundColor: COLORS.brand }}
-        >
-          Descargar pre-liquidación PDF
-        </a>
-      </Card>
+        </Card>
+      )}
 
       {!closed && permissions.charges && (
         <Card title="Otros valores">
@@ -527,9 +576,20 @@ export function CancellationDetail({
             Descargar acta PDF + QR
           </a>
         </div>
+        {data.status === "LIQUIDACION_FINAL" && permissions.close && (
+          <button onClick={advance} className="mt-4 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: COLORS.brand }}>
+            Completar baja
+          </button>
+        )}
       </Card>
 
-      {!closed && permissions.payment && !["PAGADA", "EQUIPOS_RECUPERADOS", "BAJA_COMPLETADA"].includes(data.status) && (
+      {!preliqApproved && !closed && permissions.payment && (
+        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          El registro de pago está bloqueado hasta que el cliente apruebe la preliquidación.
+        </p>
+      )}
+
+      {canPay && (
         <Card title="Registro de pago">
           <p className="mb-3 text-xs text-amber-700">Factura obligatoria para continuar el proceso</p>
           <div className="grid gap-3 sm:grid-cols-2">

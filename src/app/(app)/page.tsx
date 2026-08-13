@@ -6,8 +6,13 @@ import { COLORS } from "@/lib/constants";
 export default async function DashboardPage() {
   let kpis = {
     pendingRequests: 0,
+    pendingPreliquidacion: 0,
+    preliquidacionApproved: 0,
+    preliquidacionRejected: 0,
+    bajaAutorizada: 0,
     pendingEquipment: 0,
     pendingAmount: 0,
+    pendingFinalLiquidation: 0,
     completedMonth: 0,
     activePermanence: 0,
     notRecovered: 0,
@@ -20,8 +25,13 @@ export default async function DashboardPage() {
   }
 
   const cards = [
-    { label: "Solicitudes pendientes", value: kpis.pendingRequests },
-    { label: "Equipos por recuperar", value: kpis.pendingEquipment },
+    { label: "Solicitudes de baja", value: kpis.pendingRequests },
+    { label: "Preliquidaciones pendientes", value: kpis.pendingPreliquidacion },
+    { label: "Preliquidaciones aprobadas", value: kpis.preliquidacionApproved },
+    { label: "Preliquidaciones rechazadas", value: kpis.preliquidacionRejected },
+    { label: "Bajas autorizadas", value: kpis.bajaAutorizada },
+    { label: "Equipos pendientes", value: kpis.pendingEquipment },
+    { label: "Liquidaciones pendientes", value: kpis.pendingFinalLiquidation },
     { label: "Valores por cobrar", value: formatUsd(kpis.pendingAmount) },
     { label: "Bajas completadas (mes)", value: kpis.completedMonth },
     { label: "Con permanencia vigente", value: kpis.activePermanence },

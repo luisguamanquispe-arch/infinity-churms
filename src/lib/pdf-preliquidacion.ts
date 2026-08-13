@@ -11,6 +11,9 @@ export function generatePreliquidacionPdf(params: {
   equipment: CancellationEquipment[];
   charges: CancellationCharge[];
   reasonLabel: string;
+  lineItems?: { concept: string; amount: number }[];
+  version?: number;
+  totalOverride?: number;
 }) {
   const doc = new jsPDF();
   const { cancellation: c, customer, charges } = params;
@@ -27,9 +30,12 @@ export function generatePreliquidacionPdf(params: {
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(9);
   doc.text(`N° Documento: ${params.docNumber}`, 14, 34);
-  doc.text(`Fecha emisión: ${new Date().toLocaleDateString("es-VE")}`, 14, 40);
+  if (params.version) {
+    doc.text(`Versión: V${params.version}`, 14, 40);
+  }
+  doc.text(`Fecha emisión: ${new Date().toLocaleDateString("es-VE")}`, 14, params.version ? 46 : 40);
   doc.text(`Fecha solicitud: ${c.requestDate.toLocaleDateString("es-VE")}`, 120, 34);
-  doc.text(`Estado: Informativo — valores a pagar`, 120, 40);
+  doc.text(`Estado: Informativo — valores a pagar`, 120, params.version ? 46 : 40);
 
   doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
@@ -104,21 +110,32 @@ export function generatePreliquidacionPdf(params: {
   autoTable(doc, {
     startY: y,
     head: [["Concepto", "Detalle", "Valor USD"]],
-    body: [
-      [
-        INSTALLATION_PRORATION_LABEL,
-        installationProrationDetail(c.monthsCompleted),
-        Number(c.permanenceAmount).toFixed(2),
-      ],
-      [
-        STREAMS_SUPPORT_LABEL,
-        customer.hasTvStreaming ? "Soporte de Streams activo" : "No aplica",
-        Number(c.tvAmount).toFixed(2),
-      ],
-      ["Mensualidades pendientes", "Saldo de facturación pendiente", Number(c.monthlyAmount).toFixed(2)],
-      ...charges.map((ch) => ["Otros cargos", ch.concept, Number(ch.amount).toFixed(2)]),
-      [{ content: "TOTAL A PAGAR", colSpan: 2, styles: { fontStyle: "bold" } }, Number(c.totalAmount).toFixed(2)],
-    ],
+    body: params.lineItems?.length
+      ? [
+          ...params.lineItems.map((l) => [l.concept, "", l.amount.toFixed(2)]),
+          [
+            { content: "TOTAL PRELIQUIDADO", colSpan: 2, styles: { fontStyle: "bold" } },
+            (params.totalOverride ?? Number(c.totalAmount)).toFixed(2),
+          ],
+        ]
+      : [
+          [
+            INSTALLATION_PRORATION_LABEL,
+            installationProrationDetail(c.monthsCompleted),
+            Number(c.permanenceAmount).toFixed(2),
+          ],
+          [
+            STREAMS_SUPPORT_LABEL,
+            customer.hasTvStreaming ? "Soporte de Streams activo" : "No aplica",
+            Number(c.tvAmount).toFixed(2),
+          ],
+          ["Mensualidades pendientes", "Saldo de facturación pendiente", Number(c.monthlyAmount).toFixed(2)],
+          ...charges.map((ch) => ["Otros cargos", ch.concept, Number(ch.amount).toFixed(2)]),
+          [
+            { content: "TOTAL A PAGAR", colSpan: 2, styles: { fontStyle: "bold" } },
+            Number(c.totalAmount).toFixed(2),
+          ],
+        ],
     styles: { fontSize: 9 },
     headStyles: { fillColor: [11, 31, 58] },
   });

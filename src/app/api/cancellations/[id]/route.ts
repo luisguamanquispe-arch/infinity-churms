@@ -9,11 +9,15 @@ import {
   recalculateCancellation,
   updateCancellationAdmin,
 } from "@/lib/services/cancellations";
+import { computeFinalLiquidation } from "@/lib/services/preliquidaciones";
+import { assertPreliquidacionApproved } from "@/lib/preliquidacion-guards";
 import type { CancellationReason, CancellationStatus } from "@prisma/client";
 import { getClientIp } from "@/lib/request-ip";
 
 const FLOW: Partial<Record<CancellationStatus, CancellationStatus>> = {
+  BAJA_AUTORIZADA: "PENDIENTE_DE_PAGO",
   PAGADA: "EQUIPOS_RECUPERADOS",
+  LIQUIDACION_FINAL: "BAJA_COMPLETADA",
   EQUIPOS_RECUPERADOS: "BAJA_COMPLETADA",
 };
 
@@ -191,10 +195,26 @@ export async function PATCH(
         return NextResponse.json({ error: "Transición no permitida" }, { status: 400 });
       }
 
+      if (next === "PENDIENTE_DE_PAGO") {
+        try {
+          await assertPreliquidacionApproved(id);
+        } catch (e) {
+          if (e instanceof Error && e.message === "PRELIQUIDACION_NOT_APPROVED") {
+            return NextResponse.json(
+              { error: "La preliquidación debe estar aprobada por el cliente." },
+              { status: 403 }
+            );
+          }
+          throw e;
+        }
+      }
+
       const perm =
         next === "EQUIPOS_RECUPERADOS"
           ? "cancellations:advance_equipment"
-          : "cancellations:close";
+          : next === "PENDIENTE_DE_PAGO"
+            ? "cancellations:preliquidate"
+            : "cancellations:close";
       const session = await requirePermission(perm);
 
       if (next === "EQUIPOS_RECUPERADOS") {
@@ -203,6 +223,18 @@ export async function PATCH(
         });
         if (pending > 0) {
           return NextResponse.json({ error: "Registre todos los equipos primero" }, { status: 400 });
+        }
+        await computeFinalLiquidation(id);
+        const afterLiq = await prisma.cancellation.findUnique({ where: { id } });
+        if (afterLiq?.status === "LIQUIDACION_FINAL") {
+          await audit({
+            userId: session.userId,
+            action: "FINAL_LIQUIDATION",
+            entity: "Cancellation",
+            entityId: id,
+            ipAddress: getClientIp(request),
+          });
+          return NextResponse.json(afterLiq);
         }
       }
 
@@ -221,7 +253,7 @@ export async function PATCH(
         },
       });
 
-      await audit({ userId: session.userId, action: "STATUS", entity: "Cancellation", entityId: id, detail: next });
+      await audit({ userId: session.userId, action: "STATUS", entity: "Cancellation", entityId: id, detail: next, ipAddress: getClientIp(request) });
       return NextResponse.json(updated);
     }
 

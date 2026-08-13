@@ -40,6 +40,7 @@ export default async function GestionarBajaPage({ params }: Props) {
     withdrawalRequestUploadedAt: row.withdrawalRequestUploadedAt?.toISOString() ?? null,
     customer: {
       ...row.customer,
+      phone: row.customer.phone,
       serviceStartDate: row.customer.serviceStartDate.toISOString(),
       pendingBalance: String(row.customer.pendingBalance),
       originTechnology: row.customer.originTechnology,
@@ -55,6 +56,32 @@ export default async function GestionarBajaPage({ params }: Props) {
       ...p,
       amountPaid: String(p.amountPaid),
       paymentDate: p.paymentDate.toISOString(),
+    })),
+    activePreliquidacion: row.activePreliquidacion
+      ? {
+          ...row.activePreliquidacion,
+          totalAmount: String(row.activePreliquidacion.totalAmount),
+          creditsAmount: String(row.activePreliquidacion.creditsAmount),
+          subtotal: String(row.activePreliquidacion.subtotal),
+          rejectedAt: row.activePreliquidacion.rejectedAt?.toISOString() ?? null,
+          approvedAt: row.activePreliquidacion.approvedAt?.toISOString() ?? null,
+          lineItems: row.activePreliquidacion.lineItems.map((l) => ({
+            ...l,
+            amount: String(l.amount),
+          })),
+          approvalTokens: row.activePreliquidacion.approvalTokens.map((t) => ({
+            ...t,
+            expiresAt: t.expiresAt.toISOString(),
+            sentAt: t.sentAt?.toISOString() ?? null,
+            openedAt: t.openedAt?.toISOString() ?? null,
+          })),
+        }
+      : null,
+    finalLiquidations: row.finalLiquidations.map((fl) => ({
+      ...fl,
+      totalAmount: String(fl.totalAmount),
+      equipmentAdjustment: String(fl.equipmentAdjustment),
+      preliquidacionTotal: String(fl.preliquidacionTotal),
     })),
   };
 

@@ -14,5 +14,10 @@ export function getCancellationPermissions(role: UserRole) {
     manageEquipment: equipment || charges || create,
     edit: hasPermission(role, "cancellations:edit"),
     delete: hasPermission(role, "cancellations:delete"),
+    preliquidate: hasPermission(role, "cancellations:preliquidate"),
+    preliquidateEdit: hasPermission(role, "cancellations:preliquidate_edit"),
+    preliquidateSend: hasPermission(role, "cancellations:preliquidate_send"),
+    preliquidateView: hasPermission(role, "cancellations:preliquidate_view"),
+    liquidate: hasPermission(role, "cancellations:liquidate"),
   };
 }

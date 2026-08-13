@@ -10,6 +10,7 @@ import {
   validatePermanenceForCancellation,
   customerTechnologyInput,
 } from "@/lib/services/cancellations";
+import { createInitialPreliquidacion } from "@/lib/services/preliquidaciones";
 import { buildPermanenceSummary, PERMANENCE_AUDIT_REASON } from "@/lib/permanence";
 import { validateClientPath, type BajaClientPath } from "@/lib/baja-client-path";
 import { getBajaEligibility } from "@/lib/services/collections";
@@ -142,17 +143,9 @@ export async function POST(request: NextRequest) {
 
     await initEquipmentChecklist(cancellation.id, customerId);
 
-    await prisma.cancellation.update({
-      where: { id: cancellation.id },
-      data: { status: "EN_REVISION" },
-    });
-
     await recalculateCancellation(cancellation.id);
 
-    await prisma.cancellation.update({
-      where: { id: cancellation.id },
-      data: { status: "PENDIENTE_DE_PAGO" },
-    });
+    await createInitialPreliquidacion(cancellation.id, session.userId);
 
     await audit({
       userId: session.userId,

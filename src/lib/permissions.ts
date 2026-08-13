@@ -4,6 +4,12 @@ export type Permission =
   | "dashboard:view"
   | "cancellations:list"
   | "cancellations:create"
+  | "cancellations:preliquidate"
+  | "cancellations:preliquidate_edit"
+  | "cancellations:preliquidate_send"
+  | "cancellations:preliquidate_view"
+  | "cancellations:liquidate"
+  | "cancellations:cancel"
   | "cancellations:charges"
   | "cancellations:payment"
   | "cancellations:equipment"
@@ -25,6 +31,12 @@ const ALL: Permission[] = [
   "dashboard:view",
   "cancellations:list",
   "cancellations:create",
+  "cancellations:preliquidate",
+  "cancellations:preliquidate_edit",
+  "cancellations:preliquidate_send",
+  "cancellations:preliquidate_view",
+  "cancellations:liquidate",
+  "cancellations:cancel",
   "cancellations:charges",
   "cancellations:payment",
   "cancellations:equipment",
@@ -56,6 +68,11 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "dashboard:view",
     "cancellations:list",
     "cancellations:create",
+    "cancellations:preliquidate",
+    "cancellations:preliquidate_edit",
+    "cancellations:preliquidate_send",
+    "cancellations:preliquidate_view",
+    "cancellations:liquidate",
     "cancellations:charges",
     "cancellations:payment",
     "cancellations:equipment",

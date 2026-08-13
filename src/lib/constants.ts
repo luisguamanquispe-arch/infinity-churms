@@ -55,20 +55,50 @@ export const DEFAULT_RENEWAL_DECLARATION =
 
 export const STATUS_LABELS: Record<string, string> = {
   SOLICITADA: "Solicitada",
+  PRELIQUIDACION_EN_PROCESO: "Preliquidación en proceso",
+  PRELIQUIDACION_GENERADA: "Preliquidación generada",
+  PRELIQUIDACION_ENVIADA: "Enviada al cliente",
+  PRELIQUIDACION_PENDIENTE: "Pendiente de aprobación",
+  PRELIQUIDACION_RECHAZADA: "Preliquidación rechazada",
+  PRELIQUIDACION_APROBADA: "Preliquidación aprobada",
+  BAJA_AUTORIZADA: "Baja autorizada",
   EN_REVISION: "En revisión",
   PENDIENTE_DE_PAGO: "Pendiente de pago",
   PAGADA: "Pagada",
+  EN_DEVOLUCION_EQUIPOS: "En devolución de equipos",
+  LIQUIDACION_FINAL: "Liquidación final",
   EQUIPOS_RECUPERADOS: "Equipos recuperados",
   BAJA_COMPLETADA: "Baja completada",
+  CANCELADA: "Cancelada",
+};
+
+export const PRELIQUIDACION_STATUS_LABELS: Record<string, string> = {
+  BORRADOR: "Borrador",
+  GENERADA: "Generada",
+  ENVIADA: "Enviada",
+  PENDIENTE_APROBACION: "Pendiente de aprobación",
+  APROBADA: "Aprobada",
+  RECHAZADA: "Rechazada",
+  SUPERSEDED: "Reemplazada",
 };
 
 export const CANCELLATION_STATUSES = [
   "SOLICITADA",
+  "PRELIQUIDACION_EN_PROCESO",
+  "PRELIQUIDACION_GENERADA",
+  "PRELIQUIDACION_ENVIADA",
+  "PRELIQUIDACION_PENDIENTE",
+  "PRELIQUIDACION_RECHAZADA",
+  "PRELIQUIDACION_APROBADA",
+  "BAJA_AUTORIZADA",
   "EN_REVISION",
   "PENDIENTE_DE_PAGO",
   "PAGADA",
+  "EN_DEVOLUCION_EQUIPOS",
+  "LIQUIDACION_FINAL",
   "EQUIPOS_RECUPERADOS",
   "BAJA_COMPLETADA",
+  "CANCELADA",
 ] as const;
 
 export const SERVICE_TECHNOLOGIES = [
