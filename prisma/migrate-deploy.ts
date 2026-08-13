@@ -707,6 +707,140 @@ async function main() {
     END $$;
   `);
 
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'SignatureLinkStatus') THEN
+        CREATE TYPE "SignatureLinkStatus" AS ENUM (
+          'GENERADO', 'ENVIADO', 'ABIERTO', 'EN_PROCESO', 'FIRMADO', 'COMPLETADO', 'EXPIRADO', 'CANCELADO'
+        );
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'PlanChangeSignatureMode') THEN
+        CREATE TYPE "PlanChangeSignatureMode" AS ENUM ('PRESENCIAL', 'REMOTA');
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'PlanChange'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'PlanChange' AND column_name = 'signatureMode'
+      ) THEN
+        ALTER TABLE "PlanChange" ADD COLUMN "signatureMode" "PlanChangeSignatureMode" NOT NULL DEFAULT 'PRESENCIAL';
+        ALTER TABLE "PlanChange" ADD COLUMN "identitySelfieData" TEXT;
+        ALTER TABLE "PlanChange" ADD COLUMN "identitySelfieId" TEXT;
+        ALTER TABLE "PlanChange" ADD COLUMN "identitySelfieAt" TIMESTAMP(3);
+        ALTER TABLE "PlanChange" ADD COLUMN "dataConfirmedAt" TIMESTAMP(3);
+        ALTER TABLE "PlanChange" ADD COLUMN "adendumAcceptedAt" TIMESTAMP(3);
+        ALTER TABLE "PlanChange" ADD COLUMN "signatureUserAgent" TEXT;
+        ALTER TABLE "PlanChange" ADD COLUMN "signedDigitally" BOOLEAN NOT NULL DEFAULT false;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'TariffConfig'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'TariffConfig' AND column_name = 'signatureLinkExpiryHours'
+      ) THEN
+        ALTER TABLE "TariffConfig" ADD COLUMN "signatureLinkExpiryHours" INTEGER NOT NULL DEFAULT 24;
+        ALTER TABLE "TariffConfig" ADD COLUMN "whatsappSignatureMessage" TEXT;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "PlanChangeSignatureToken" (
+      "id" TEXT NOT NULL,
+      "planChangeId" TEXT NOT NULL,
+      "tokenHash" TEXT NOT NULL,
+      "status" "SignatureLinkStatus" NOT NULL DEFAULT 'GENERADO',
+      "expiresAt" TIMESTAMP(3) NOT NULL,
+      "isActive" BOOLEAN NOT NULL DEFAULT true,
+      "generatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "sentAt" TIMESTAMP(3),
+      "openedAt" TIMESTAMP(3),
+      "processStartedAt" TIMESTAMP(3),
+      "signedAt" TIMESTAMP(3),
+      "completedAt" TIMESTAMP(3),
+      "cancelledAt" TIMESTAMP(3),
+      "generatedById" TEXT NOT NULL,
+      "openIp" TEXT,
+      "openUserAgent" TEXT,
+      "signIp" TEXT,
+      "signUserAgent" TEXT,
+      CONSTRAINT "PlanChangeSignatureToken_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PlanChangeSignatureToken_tokenHash_key') THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS "PlanChangeSignatureToken_tokenHash_key"
+          ON "PlanChangeSignatureToken"("tokenHash");
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PlanChangeSignatureToken_planChangeId_fkey') THEN
+        ALTER TABLE "PlanChangeSignatureToken"
+          ADD CONSTRAINT "PlanChangeSignatureToken_planChangeId_fkey"
+          FOREIGN KEY ("planChangeId") REFERENCES "PlanChange"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PlanChangeSignatureToken_generatedById_fkey') THEN
+        ALTER TABLE "PlanChangeSignatureToken"
+          ADD CONSTRAINT "PlanChangeSignatureToken_generatedById_fkey"
+          FOREIGN KEY ("generatedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'ContractOperationType') THEN
+        CREATE TYPE "ContractOperationType" AS ENUM (
+          'CAMBIO_PLAN',
+          'RENOVACION',
+          'RENOVACION_CAMBIO_PLAN'
+        );
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'PlanChange'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'PlanChange' AND column_name = 'operationType'
+      ) THEN
+        ALTER TABLE "PlanChange" ADD COLUMN "operationType" "ContractOperationType" NOT NULL DEFAULT 'CAMBIO_PLAN';
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'TariffConfig'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'TariffConfig' AND column_name = 'renewalDeclarationText'
+      ) THEN
+        ALTER TABLE "TariffConfig" ADD COLUMN "renewalDeclarationText" TEXT;
+        ALTER TABLE "TariffConfig" ADD COLUMN "renewalMinMonthsCompleted" INTEGER NOT NULL DEFAULT 18;
+        ALTER TABLE "TariffConfig" ADD COLUMN "earlyRenewalEnabled" BOOLEAN NOT NULL DEFAULT true;
+        ALTER TABLE "TariffConfig" ADD COLUMN "earlyRenewalDaysBefore" INTEGER NOT NULL DEFAULT 30;
+        ALTER TABLE "TariffConfig" ADD COLUMN "renewalAlertDays60" INTEGER NOT NULL DEFAULT 60;
+        ALTER TABLE "TariffConfig" ADD COLUMN "renewalAlertDays30" INTEGER NOT NULL DEFAULT 30;
+        ALTER TABLE "TariffConfig" ADD COLUMN "renewalAlertDays15" INTEGER NOT NULL DEFAULT 15;
+      END IF;
+    END $$;
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 

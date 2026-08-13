@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { COLORS, DEFAULT_ADDENDUM_DECLARATION } from "@/lib/constants";
+import { COLORS, DEFAULT_ADDENDUM_DECLARATION, DEFAULT_RENEWAL_DECLARATION } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 
 interface ServicePlan {
@@ -141,6 +141,118 @@ export function ServicePlansPanel() {
             ))}
           </tbody>
         </table>
+      </div>
+    </div>
+  );
+}
+
+export function RenewalTextPanel({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+}) {
+  return (
+    <div className="space-y-2">
+      <h2 className="font-semibold" style={{ color: COLORS.navy }}>
+        Texto de renovación contractual
+      </h2>
+      <textarea
+        rows={6}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={DEFAULT_RENEWAL_DECLARATION}
+        className="w-full rounded-lg border px-3 py-2 text-sm"
+      />
+      <p className="text-xs text-slate-500">
+        Este texto aparece en el PDF de renovación. Si se deja vacío, se usa el texto predeterminado.
+      </p>
+    </div>
+  );
+}
+
+export function RenewalSettingsPanel({
+  tariff,
+  onChange,
+}: {
+  tariff: {
+    renewalMinMonthsCompleted?: number;
+    earlyRenewalEnabled?: boolean;
+    earlyRenewalDaysBefore?: number;
+    renewalAlertDays60?: number;
+    renewalAlertDays30?: number;
+    renewalAlertDays15?: number;
+  };
+  onChange: (patch: Partial<typeof tariff>) => void;
+}) {
+  return (
+    <div className="space-y-4 rounded-lg border p-4">
+      <h2 className="font-semibold" style={{ color: COLORS.navy }}>
+        Reglas de renovación
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="text-sm">
+          <span className="text-xs text-slate-600">Meses mínimos cumplidos para renovar</span>
+          <input
+            type="number"
+            min={1}
+            value={tariff.renewalMinMonthsCompleted ?? 18}
+            onChange={(e) => onChange({ renewalMinMonthsCompleted: parseInt(e.target.value) || 18 })}
+            className="mt-1 w-full rounded border px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="text-xs text-slate-600">Días antes del vencimiento (renovación anticipada)</span>
+          <input
+            type="number"
+            min={0}
+            value={tariff.earlyRenewalDaysBefore ?? 30}
+            onChange={(e) => onChange({ earlyRenewalDaysBefore: parseInt(e.target.value) || 0 })}
+            className="mt-1 w-full rounded border px-2 py-1.5 text-sm"
+            disabled={!tariff.earlyRenewalEnabled}
+          />
+        </label>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={tariff.earlyRenewalEnabled ?? true}
+          onChange={(e) => onChange({ earlyRenewalEnabled: e.target.checked })}
+        />
+        Permitir renovación anticipada antes del vencimiento
+      </label>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="text-sm">
+          <span className="text-xs text-slate-600">Alerta 1 (días)</span>
+          <input
+            type="number"
+            min={1}
+            value={tariff.renewalAlertDays60 ?? 60}
+            onChange={(e) => onChange({ renewalAlertDays60: parseInt(e.target.value) || 60 })}
+            className="mt-1 w-full rounded border px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="text-xs text-slate-600">Alerta 2 (días)</span>
+          <input
+            type="number"
+            min={1}
+            value={tariff.renewalAlertDays30 ?? 30}
+            onChange={(e) => onChange({ renewalAlertDays30: parseInt(e.target.value) || 30 })}
+            className="mt-1 w-full rounded border px-2 py-1.5 text-sm"
+          />
+        </label>
+        <label className="text-sm">
+          <span className="text-xs text-slate-600">Alerta 3 (días)</span>
+          <input
+            type="number"
+            min={1}
+            value={tariff.renewalAlertDays15 ?? 15}
+            onChange={(e) => onChange({ renewalAlertDays15: parseInt(e.target.value) || 15 })}
+            className="mt-1 w-full rounded border px-2 py-1.5 text-sm"
+          />
+        </label>
       </div>
     </div>
   );

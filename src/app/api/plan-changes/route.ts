@@ -4,8 +4,10 @@ import { audit } from "@/lib/audit";
 import { getClientIp } from "@/lib/request-ip";
 import {
   createPlanChange,
+  createContractRenewal,
   listPlanChanges,
 } from "@/lib/services/plan-changes";
+import { OPERATION_TYPE_LABELS } from "@/lib/constants";
 
 export async function GET(request: NextRequest) {
   try {
@@ -19,6 +21,7 @@ export async function GET(request: NextRequest) {
       customerId: sp.get("customerId") ?? undefined,
       previousPlanId: sp.get("previousPlanId") ?? undefined,
       newPlanId: sp.get("newPlanId") ?? undefined,
+      operationType: sp.get("operationType") ?? undefined,
       signed: sp.get("signed") ?? undefined,
     });
     return NextResponse.json(rows);
@@ -35,28 +38,51 @@ export async function POST(request: NextRequest) {
     const session = await requirePermission("plan-changes:create");
     const body = await request.json();
 
-    if (!body.customerId || !body.newPlanId) {
+    const operationType = body.operationType ?? "CAMBIO_PLAN";
+
+    if (!body.customerId) {
       return NextResponse.json({ error: "Datos incompletos" }, { status: 400 });
     }
 
-    const row = await createPlanChange({
-      customerId: body.customerId,
-      newPlanId: body.newPlanId,
-      approvedMonthlyUsd: body.approvedMonthlyUsd,
-      discountReason: body.discountReason,
-      userId: session.userId,
-      discountAuthorizedById:
-        body.approvedMonthlyUsd != null && body.discountReason
-          ? session.userId
-          : undefined,
-    });
+    let row;
+    if (operationType === "RENOVACION" || operationType === "RENOVACION_CAMBIO_PLAN") {
+      row = await createContractRenewal({
+        customerId: body.customerId,
+        operationType,
+        newPlanId: body.newPlanId,
+        approvedMonthlyUsd: body.approvedMonthlyUsd,
+        discountReason: body.discountReason,
+        userId: session.userId,
+        discountAuthorizedById:
+          body.approvedMonthlyUsd != null && body.discountReason
+            ? session.userId
+            : undefined,
+      });
+    } else {
+      if (!body.newPlanId) {
+        return NextResponse.json({ error: "Debe seleccionar un plan" }, { status: 400 });
+      }
+      row = await createPlanChange({
+        customerId: body.customerId,
+        newPlanId: body.newPlanId,
+        approvedMonthlyUsd: body.approvedMonthlyUsd,
+        discountReason: body.discountReason,
+        userId: session.userId,
+        discountAuthorizedById:
+          body.approvedMonthlyUsd != null && body.discountReason
+            ? session.userId
+            : undefined,
+      });
+    }
+
+    const opLabel = OPERATION_TYPE_LABELS[operationType] ?? operationType;
 
     await audit({
       userId: session.userId,
       action: "CREATE",
       entity: "PlanChange",
       entityId: row.id,
-      detail: `Cambio de plan borrador · ${row.customer.contract} · ${row.previousPlanName} → ${row.newPlanName}`,
+      detail: `${opLabel} borrador · ${row.customer.contract} · ${row.previousPlanName} → ${row.newPlanName}`,
       ipAddress: getClientIp(request),
     });
 

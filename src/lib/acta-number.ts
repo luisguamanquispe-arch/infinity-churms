@@ -34,3 +34,14 @@ export async function nextAddendumNumber(): Promise<string> {
   const seq = await nextSequence(`addendum-${year}`);
   return `ADD-${year}-${String(seq).padStart(6, "0")}`;
 }
+
+export async function nextRenewalNumber(): Promise<string> {
+  const year = new Date().getFullYear();
+  const seq = await nextSequence(`renewal-${year}`);
+  return `REN-${year}-${String(seq).padStart(6, "0")}`;
+}
+
+export async function nextContractDocumentNumber(operationType: string): Promise<string> {
+  if (operationType === "CAMBIO_PLAN") return nextAddendumNumber();
+  return nextRenewalNumber();
+}

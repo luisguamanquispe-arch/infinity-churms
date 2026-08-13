@@ -2,11 +2,10 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Customer, PlanChange } from "@prisma/client";
 
-const DEFAULT_DECLARATION =
-  "El cliente solicita y acepta voluntariamente la modificación de su plan de servicio. " +
-  "A partir de la aceptación y firma del presente adendum, se establece un nuevo período de permanencia " +
-  "asociado al nuevo plan contratado, manteniéndose vigentes las demás condiciones del contrato original " +
-  "que no hayan sido modificadas expresamente por este documento.";
+const DEFAULT_RENEWAL_DECLARATION =
+  "El cliente declara que desea continuar utilizando el servicio y acepta las condiciones " +
+  "correspondientes al nuevo período contractual de permanencia. Las demás condiciones del " +
+  "contrato original que no sean modificadas expresamente por este documento se mantienen vigentes.";
 
 function fmtDate(d: Date | null | undefined): string {
   if (!d) return "—";
@@ -17,7 +16,7 @@ function fmtUsd(n: number | string): string {
   return `$${Number(n).toFixed(2)}`;
 }
 
-export function generateAdendumPdf(params: {
+export function generateRenewalPdf(params: {
   planChange: PlanChange;
   customer: Customer;
   declarationText?: string | null;
@@ -26,15 +25,19 @@ export function generateAdendumPdf(params: {
 }) {
   const { planChange: pc, customer } = params;
   const doc = new jsPDF();
-  const declaration = params.declarationText?.trim() || DEFAULT_DECLARATION;
+  const declaration = params.declarationText?.trim() || DEFAULT_RENEWAL_DECLARATION;
   const digitallySigned = params.digitallySigned ?? pc.signedDigitally;
+  const isPlanChange =
+    pc.operationType === "RENOVACION_CAMBIO_PLAN" ||
+    (pc.previousPlanName !== pc.newPlanName ||
+      Number(pc.previousMonthlyUsd) !== Number(pc.newMonthlyUsd));
 
   doc.setFillColor(11, 31, 58);
   doc.rect(14, 12, 182, 28, "F");
   doc.setTextColor(255, 255, 255);
-  doc.setFontSize(12);
-  doc.text("ADENDUM AL CONTRATO DE PRESTACIÓN", 105, 22, { align: "center" });
-  doc.text("DE SERVICIO DE INTERNET", 105, 30, { align: "center" });
+  doc.setFontSize(11);
+  doc.text("RENOVACIÓN DEL CONTRATO DE PRESTACIÓN", 105, 22, { align: "center" });
+  doc.text("DEL SERVICIO DE INTERNET", 105, 30, { align: "center" });
   doc.setFontSize(9);
   doc.text(pc.addendumNumber ?? "BORRADOR", 105, 38, { align: "center" });
 
@@ -49,7 +52,7 @@ export function generateAdendumPdf(params: {
   }
 
   autoTable(doc, {
-    startY: 54,
+    startY: 60,
     head: [["DATOS DEL CLIENTE", ""]],
     body: [
       ["Nombre completo", customer.name],
@@ -67,19 +70,14 @@ export function generateAdendumPdf(params: {
 
   autoTable(doc, {
     startY: y,
-    head: [["CONTRATO ORIGINAL", ""]],
+    head: [["CONTRATO ANTERIOR", ""]],
     body: [
       ["N° Contrato", customer.contract],
-      ["Fecha contrato original", fmtDate(pc.originalContractDate)],
-      ["Plan anterior", pc.previousPlanName],
-      ["Velocidad anterior", pc.previousSpeedMbps ? `${pc.previousSpeedMbps} Mbps` : "—"],
-      ["Precio anterior", fmtUsd(Number(pc.previousMonthlyUsd))],
-      [
-        "Permanencia anterior",
-        pc.previousPermanenceStart
-          ? `${fmtDate(pc.previousPermanenceStart)} → ${fmtDate(pc.previousPermanenceEnd)}`
-          : "—",
-      ],
+      ["Fecha inicio", fmtDate(pc.previousPermanenceStart ?? pc.originalContractDate)],
+      ["Fecha finalización", fmtDate(pc.previousPermanenceEnd)],
+      ["Plan", pc.previousPlanName],
+      ["Velocidad", pc.previousSpeedMbps ? `${pc.previousSpeedMbps} Mbps` : "—"],
+      ["Precio mensual", fmtUsd(Number(pc.previousMonthlyUsd))],
     ],
     styles: { fontSize: 9 },
     columnStyles: { 0: { cellWidth: 55, fontStyle: "bold" } },
@@ -87,25 +85,29 @@ export function generateAdendumPdf(params: {
 
   y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
 
+  const renewalBody: string[][] = [
+    ["Fecha de renovación", fmtDate(pc.signedAt ?? pc.confirmedAt ?? pc.requestDate)],
+    ["Nuevo período", `${pc.permanenceMonths} meses`],
+    ["Inicio nueva permanencia", fmtDate(pc.newPermanenceStart)],
+    ["Fin nueva permanencia", fmtDate(pc.newPermanenceEnd)],
+    ["Plan", pc.newPlanName],
+    ["Velocidad", `${pc.newSpeedMbps} Mbps`],
+    ["Precio mensual", fmtUsd(Number(pc.newMonthlyUsd))],
+  ];
+
+  if (isPlanChange) {
+    renewalBody.unshift(
+      ["Tipo operación", "Renovación con cambio de plan"],
+      ["Plan anterior", `${pc.previousPlanName} · ${fmtUsd(Number(pc.previousMonthlyUsd))}`]
+    );
+  } else {
+    renewalBody.unshift(["Tipo operación", "Renovación sin cambio de plan"]);
+  }
+
   autoTable(doc, {
     startY: y,
-    head: [["MODIFICACIÓN SOLICITADA", ""]],
-    body: [
-      ["Nuevo plan", pc.newPlanName],
-      ["Nueva velocidad", `${pc.newSpeedMbps} Mbps`],
-      ["Nuevo precio mensual", fmtUsd(Number(pc.newMonthlyUsd))],
-      ...(Number(pc.newMonthlyUsd) < Number(pc.standardMonthlyUsd)
-        ? [
-            ["Precio estándar", fmtUsd(Number(pc.standardMonthlyUsd))],
-            ["Descuento aplicado", fmtUsd(Number(pc.standardMonthlyUsd) - Number(pc.newMonthlyUsd))],
-            ["Motivo descuento", pc.discountReason ?? "—"],
-          ]
-        : []),
-      ["Fecha de modificación", fmtDate(pc.signedAt ?? pc.confirmedAt ?? pc.requestDate)],
-      ["Nueva permanencia", `${pc.permanenceMonths} meses`],
-      ["Inicio nueva permanencia", fmtDate(pc.newPermanenceStart)],
-      ["Fin nueva permanencia", fmtDate(pc.newPermanenceEnd)],
-    ],
+    head: [["RENOVACIÓN", ""]],
+    body: renewalBody,
     styles: { fontSize: 9 },
     columnStyles: { 0: { cellWidth: 55, fontStyle: "bold" } },
   });
@@ -113,7 +115,7 @@ export function generateAdendumPdf(params: {
   y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
   doc.setFontSize(10);
   doc.setFont("helvetica", "bold");
-  doc.text("DECLARACIÓN CONTRACTUAL", 14, y);
+  doc.text("DECLARACIÓN", 14, y);
   doc.setFont("helvetica", "normal");
   doc.setFontSize(9);
   const lines = doc.splitTextToSize(declaration, 182);
@@ -138,15 +140,6 @@ export function generateAdendumPdf(params: {
   doc.line(110, sigY, 190, sigY);
   doc.text("Infinity Internet", 110, sigY + 6);
   doc.text(params.processedByName ?? "_______________________________", 110, sigY + 12);
-  doc.text(`Procesado: ${fmtDate(pc.signedAt ?? pc.confirmedAt)}`, 110, sigY + 18);
-
-  doc.setFontSize(7);
-  doc.setTextColor(100, 100, 100);
-  doc.text(
-    "Documento generado electrónicamente. El historial contractual original permanece vigente como referencia.",
-    14,
-    285
-  );
 
   return Buffer.from(doc.output("arraybuffer"));
 }

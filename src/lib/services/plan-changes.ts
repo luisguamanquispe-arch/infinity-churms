@@ -1,8 +1,9 @@
 import { addMonths, differenceInMonths } from "date-fns";
-import type { PlanChangeStatus, Prisma } from "@prisma/client";
+import type { PlanChangeStatus, Prisma, ContractOperationType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { nextAddendumNumber } from "@/lib/acta-number";
-import { generateAdendumPdf } from "@/lib/pdf-adendum";
+import { nextContractDocumentNumber } from "@/lib/acta-number";
+import { generateContractDocumentPdf } from "@/lib/pdf-contract-document";
+import { buildCustomerContractSummary, isEligibleForRenewal } from "@/lib/contract-eligibility";
 
 const ACTIVE_BLOCKING_STATUSES: PlanChangeStatus[] = [
   "BORRADOR",
@@ -18,6 +19,15 @@ export async function getTariffConfig() {
       installCostUsd: 200,
       tvMonthlyUsd: 2,
       addendumDeclarationText: null,
+      signatureLinkExpiryHours: 24,
+      whatsappSignatureMessage: null,
+      renewalDeclarationText: null,
+      renewalMinMonthsCompleted: 18,
+      earlyRenewalEnabled: true,
+      earlyRenewalDaysBefore: 30,
+      renewalAlertDays60: 60,
+      renewalAlertDays30: 30,
+      renewalAlertDays15: 15,
     }
   );
 }
@@ -87,19 +97,48 @@ export async function getCustomerPlanContext(customerId: string) {
   };
 }
 
-export async function validateCustomerForPlanChange(customerId: string) {
+export async function validateCustomerForContractOperation(
+  customerId: string,
+  operationType: ContractOperationType = "CAMBIO_PLAN"
+) {
   const ctx = await getCustomerPlanContext(customerId);
   if (!ctx) return { ok: false as const, error: "Cliente no encontrado" };
   if (ctx.customer.status !== "ACTIVO") {
-    return { ok: false as const, error: "El cliente debe estar activo para cambiar de plan." };
+    return { ok: false as const, error: "El cliente debe estar activo." };
   }
   if (ctx.pendingChange) {
     return {
       ok: false as const,
-      error: `Ya existe un cambio de plan en curso (${ctx.pendingChange.status}).`,
+      error: `Ya existe una operación contractual en curso (${ctx.pendingChange.status}).`,
     };
   }
+
+  if (operationType !== "CAMBIO_PLAN") {
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      include: {
+        planChanges: {
+          where: { status: { in: ACTIVE_BLOCKING_STATUSES } },
+          select: { id: true, status: true, operationType: true, activatedAt: true },
+        },
+      },
+    });
+    if (!customer) return { ok: false as const, error: "Cliente no encontrado" };
+    const summary = await buildCustomerContractSummary(customer);
+    if (!summary.eligibleForRenewal) {
+      return {
+        ok: false as const,
+        error: `Cliente no elegible para renovación (${summary.eligibilityStatus}).`,
+      };
+    }
+  }
+
   return { ok: true as const, ctx };
+}
+
+/** @deprecated use validateCustomerForContractOperation */
+export async function validateCustomerForPlanChange(customerId: string) {
+  return validateCustomerForContractOperation(customerId, "CAMBIO_PLAN");
 }
 
 export async function createPlanChange(params: {
@@ -110,7 +149,7 @@ export async function createPlanChange(params: {
   userId: string;
   discountAuthorizedById?: string;
 }) {
-  const validation = await validateCustomerForPlanChange(params.customerId);
+  const validation = await validateCustomerForContractOperation(params.customerId, "CAMBIO_PLAN");
   if (!validation.ok) throw new Error(validation.error);
 
   const { ctx } = validation;
@@ -138,6 +177,7 @@ export async function createPlanChange(params: {
   return prisma.planChange.create({
     data: {
       customerId: params.customerId,
+      operationType: "CAMBIO_PLAN",
       status: "BORRADOR",
       previousPlanName: ctx.currentPlan.planName,
       previousSpeedMbps: ctx.currentPlan.speedMbps,
@@ -165,23 +205,105 @@ export async function createPlanChange(params: {
   });
 }
 
+export async function createContractRenewal(params: {
+  customerId: string;
+  operationType: "RENOVACION" | "RENOVACION_CAMBIO_PLAN";
+  newPlanId?: string;
+  approvedMonthlyUsd?: number;
+  discountReason?: string;
+  userId: string;
+  discountAuthorizedById?: string;
+}) {
+  const validation = await validateCustomerForContractOperation(
+    params.customerId,
+    params.operationType
+  );
+  if (!validation.ok) throw new Error(validation.error);
+
+  const { ctx } = validation;
+  const config = await getTariffConfig();
+
+  let newPlanId = params.newPlanId ?? ctx.currentPlan.activeServicePlanId;
+  let newPlanName = ctx.currentPlan.planName;
+  let newSpeedMbps = ctx.currentPlan.speedMbps ?? 0;
+  let standardUsd = ctx.currentPlan.monthlyUsd ?? 0;
+
+  if (params.operationType === "RENOVACION_CAMBIO_PLAN") {
+    if (!params.newPlanId) throw new Error("Debe seleccionar el nuevo plan.");
+    const newPlan = await prisma.servicePlan.findFirst({
+      where: { id: params.newPlanId, active: true },
+    });
+    if (!newPlan) throw new Error("Plan no válido o inactivo.");
+    newPlanId = newPlan.id;
+    newPlanName = newPlan.name;
+    newSpeedMbps = newPlan.speedMbps;
+    standardUsd = Number(newPlan.monthlyUsd);
+  } else if (ctx.currentPlan.activeServicePlanId) {
+    const currentPlan = await prisma.servicePlan.findUnique({
+      where: { id: ctx.currentPlan.activeServicePlanId },
+    });
+    if (currentPlan) {
+      newPlanId = currentPlan.id;
+      newPlanName = currentPlan.name;
+      newSpeedMbps = currentPlan.speedMbps;
+      standardUsd = Number(currentPlan.monthlyUsd);
+    }
+  }
+
+  const approvedUsd = params.approvedMonthlyUsd ?? standardUsd;
+  if (approvedUsd <= 0) throw new Error("Precio inválido.");
+  if (approvedUsd < standardUsd && !params.discountReason?.trim()) {
+    throw new Error("Debe indicar el motivo del descuento especial.");
+  }
+
+  const previousMonthly = ctx.currentPlan.monthlyUsd ?? standardUsd;
+
+  return prisma.planChange.create({
+    data: {
+      customerId: params.customerId,
+      operationType: params.operationType,
+      status: "BORRADOR",
+      previousPlanName: ctx.currentPlan.planName,
+      previousSpeedMbps: ctx.currentPlan.speedMbps,
+      previousMonthlyUsd: previousMonthly,
+      previousPermanenceStart: ctx.currentPlan.permanenceStart,
+      previousPermanenceEnd: ctx.currentPlan.permanenceEnd,
+      previousPlanId: ctx.currentPlan.activeServicePlanId,
+      newPlanId,
+      newPlanName,
+      newSpeedMbps,
+      newMonthlyUsd: approvedUsd,
+      standardMonthlyUsd: standardUsd,
+      discountReason: params.discountReason?.trim() || null,
+      discountAuthorizedById: params.discountAuthorizedById ?? null,
+      discountAuthorizedAt: params.discountAuthorizedById ? new Date() : null,
+      permanenceMonths: config.permanenceMonths,
+      originalContractDate: ctx.customer.serviceStartDate,
+      createdById: params.userId,
+    },
+    include: {
+      customer: { select: { contract: true, name: true } },
+      createdBy: { select: { name: true } },
+      newPlan: true,
+    },
+  });
+}
+
 export async function confirmPlanChange(id: string) {
   const pc = await prisma.planChange.findUnique({ where: { id } });
-  if (!pc) throw new Error("Cambio de plan no encontrado.");
+  if (!pc) throw new Error("Operación contractual no encontrada.");
   if (pc.status !== "BORRADOR") throw new Error("Solo se puede confirmar un borrador.");
 
   const now = new Date();
-  const permanenceEnd = addMonths(now, pc.permanenceMonths);
-  const addendumNumber = pc.addendumNumber ?? (await nextAddendumNumber());
+  const docNumber =
+    pc.addendumNumber ?? (await nextContractDocumentNumber(pc.operationType));
 
   return prisma.planChange.update({
     where: { id },
     data: {
       status: "PENDIENTE_DE_FIRMA",
       confirmedAt: now,
-      addendumNumber,
-      newPermanenceStart: now,
-      newPermanenceEnd: permanenceEnd,
+      addendumNumber: docNumber,
     },
   });
 }
@@ -193,7 +315,10 @@ export async function signPlanChange(params: {
   signatureImageData: string;
   signatureConsent: boolean;
   signatureIp?: string;
+  signatureUserAgent?: string;
   processedByName: string;
+  signatureMode?: "PRESENCIAL" | "REMOTA";
+  signedDigitally?: boolean;
 }) {
   const pc = await prisma.planChange.findUnique({
     where: { id: params.id },
@@ -209,12 +334,21 @@ export async function signPlanChange(params: {
     throw new Error("Firma inválida.");
   }
 
+  if (params.signatureMode === "REMOTA") {
+    if (!pc.identitySelfieAt || !pc.identitySelfieData) {
+      throw new Error("Selfie de identidad requerida para firma remota.");
+    }
+    if (!pc.adendumAcceptedAt || !pc.dataConfirmedAt) {
+      throw new Error("El cliente debe completar la aceptación antes de firmar.");
+    }
+  }
+
   const signedAt = new Date();
   const permanenceStart = signedAt;
   const permanenceEnd = addMonths(signedAt, pc.permanenceMonths);
 
   const config = await getTariffConfig();
-  const signedPdf = generateAdendumPdf({
+  const signedPdf = generateContractDocumentPdf({
     planChange: {
       ...pc,
       signedAt,
@@ -225,8 +359,10 @@ export async function signPlanChange(params: {
       signatureImageData: params.signatureImageData,
     },
     customer: pc.customer,
-    declarationText: config.addendumDeclarationText,
+    addendumDeclarationText: config.addendumDeclarationText,
+    renewalDeclarationText: config.renewalDeclarationText,
     processedByName: params.processedByName,
+    digitallySigned: params.signedDigitally ?? params.signatureMode === "REMOTA",
   });
 
   const updated = await prisma.$transaction(async (tx) => {
@@ -242,6 +378,9 @@ export async function signPlanChange(params: {
         signatureImageData: params.signatureImageData,
         signatureConsent: true,
         signatureIp: params.signatureIp ?? null,
+        signatureUserAgent: params.signatureUserAgent ?? null,
+        signatureMode: params.signatureMode ?? "PRESENCIAL",
+        signedDigitally: params.signedDigitally ?? params.signatureMode === "REMOTA",
         signedPdfData: signedPdf.toString("base64"),
       },
     });
@@ -278,6 +417,10 @@ export async function cancelPlanChange(id: string) {
   if (!["BORRADOR", "PENDIENTE_DE_FIRMA"].includes(pc.status)) {
     throw new Error("No se puede cancelar en este estado.");
   }
+  await prisma.planChangeSignatureToken.updateMany({
+    where: { planChangeId: id, isActive: true },
+    data: { isActive: false, status: "CANCELADO", cancelledAt: new Date() },
+  });
   return prisma.planChange.update({
     where: { id },
     data: { status: "CANCELADO", cancelledAt: new Date() },
@@ -313,6 +456,12 @@ export async function getPlanChange(id: string) {
       createdBy: { select: { id: true, name: true } },
       discountAuthorizedBy: { select: { name: true } },
       voidedBy: { select: { name: true } },
+      signatureTokens: {
+        where: { isActive: true },
+        orderBy: { generatedAt: "desc" },
+        take: 1,
+        include: { generatedBy: { select: { name: true } } },
+      },
     },
   });
 }
@@ -325,9 +474,14 @@ export async function listPlanChanges(filters?: {
   customerId?: string;
   previousPlanId?: string;
   newPlanId?: string;
+  operationType?: string;
   signed?: string;
 }) {
   const where: Prisma.PlanChangeWhereInput = {};
+
+  if (filters?.operationType) {
+    where.operationType = filters.operationType as ContractOperationType;
+  }
 
   if (filters?.status) where.status = filters.status as PlanChangeStatus;
   if (filters?.userId) where.createdById = filters.userId;
@@ -403,7 +557,11 @@ export async function getContractHistory(customerId: string) {
       permanenceEnd: originalEnd,
     },
     addendums: changes.map((c, i) => ({
-      type: "ADENDUM" as const,
+      type:
+        c.operationType === "CAMBIO_PLAN"
+          ? ("ADENDUM" as const)
+          : ("RENOVACION" as const),
+      operationType: c.operationType,
       sequence: i + 1,
       addendumNumber: c.addendumNumber,
       id: c.id,
@@ -411,6 +569,7 @@ export async function getContractHistory(customerId: string) {
       planName: c.newPlanName,
       speedMbps: c.newSpeedMbps,
       monthlyUsd: Number(c.newMonthlyUsd),
+      previousPlanName: c.previousPlanName,
       permanenceStart: c.newPermanenceStart,
       permanenceEnd: c.newPermanenceEnd,
       status: c.status,
@@ -440,13 +599,15 @@ export async function generateAdendumPdfForChange(id: string, processedByName?: 
     where: { id },
     include: { customer: true },
   });
-  if (!pc) throw new Error("Cambio de plan no encontrado.");
+  if (!pc) throw new Error("Operación no encontrada.");
 
   const config = await getTariffConfig();
-  return generateAdendumPdf({
+  return generateContractDocumentPdf({
     planChange: pc,
     customer: pc.customer,
-    declarationText: config.addendumDeclarationText,
+    addendumDeclarationText: config.addendumDeclarationText,
+    renewalDeclarationText: config.renewalDeclarationText,
     processedByName,
+    digitallySigned: pc.signedDigitally,
   });
 }

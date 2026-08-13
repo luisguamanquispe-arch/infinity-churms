@@ -93,6 +93,20 @@ async function main() {
         "A partir de la aceptación y firma del presente adendum, se establece un nuevo período de permanencia " +
         "asociado al nuevo plan contratado, manteniéndose vigentes las demás condiciones del contrato original " +
         "que no hayan sido modificadas expresamente por este documento.",
+      renewalDeclarationText:
+        "El cliente declara que desea continuar utilizando el servicio y acepta las condiciones correspondientes " +
+        "al nuevo período contractual de permanencia de 18 meses. Las demás condiciones del contrato original " +
+        "que no sean modificadas expresamente deben mantenerse vigentes.",
+      renewalMinMonthsCompleted: 18,
+      earlyRenewalEnabled: true,
+      earlyRenewalDaysBefore: 30,
+      renewalAlertDays60: 60,
+      renewalAlertDays30: 30,
+      renewalAlertDays15: 15,
+      whatsappSignatureMessage:
+        "Hola [NOMBRE].\n\nInfinity Internet ha preparado el documento correspondiente a su cambio de plan.\n\n" +
+        "Para revisar las condiciones, realizar la verificación de identidad y firmar el documento, ingrese al siguiente enlace:\n\n" +
+        "[LINK]\n\nEste enlace es temporal y tiene una vigencia limitada.\n\nGracias por confiar en Infinity Internet.",
     },
   });
 

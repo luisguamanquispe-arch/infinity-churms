@@ -15,6 +15,8 @@ export function getPlanChangePermissions(role: UserRole) {
     canCreate,
     canConfirm: canCreate,
     canSign: canCreate,
+    canSendLink: hasPermission(role, "plan-changes:send-link") || canCreate,
+    canViewIdentity: hasPermission(role, "plan-changes:view-identity") || isAdmin || isSupervisor,
     canCancel,
     canVoid,
     canApproveDiscount,

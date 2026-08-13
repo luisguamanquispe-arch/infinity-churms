@@ -3,12 +3,14 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { COLORS, PLAN_CHANGE_STATUS_LABELS } from "@/lib/constants";
+import { COLORS, OPERATION_TYPE_LABELS, PLAN_CHANGE_STATUS_LABELS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { SignaturePad } from "@/components/cambio-plan/signature-pad";
+import { RemoteSignaturePanel } from "@/components/cambio-plan/remote-signature-panel";
 
 interface PlanChangeDetail {
   id: string;
+  operationType: string;
   addendumNumber: string | null;
   status: string;
   requestDate: string;
@@ -31,6 +33,20 @@ interface PlanChangeDetail {
   clientSignatureName: string | null;
   clientSignatureCedula: string | null;
   voidReason: string | null;
+  signatureMode: string;
+  identitySelfieAt: string | null;
+  signatureImageData: string | null;
+  signatureTokens: {
+    id: string;
+    status: string;
+    expiresAt: string;
+    generatedAt: string;
+    sentAt: string | null;
+    openedAt: string | null;
+    processStartedAt: string | null;
+    completedAt: string | null;
+    generatedBy: { name: string };
+  }[];
   customer: {
     id: string;
     contract: string;
@@ -54,6 +70,7 @@ export default function PlanChangeDetailPage() {
   const [msg, setMsg] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [role, setRole] = useState("");
 
   function reload() {
     fetch(`/api/plan-changes/${id}`)
@@ -67,6 +84,7 @@ export default function PlanChangeDetailPage() {
 
   useEffect(() => {
     reload();
+    fetch("/api/auth/me").then((r) => r.json()).then((u) => setRole(u.role ?? ""));
   }, [id]);
 
   async function action(type: string, body: Record<string, unknown> = {}) {
@@ -93,6 +111,17 @@ export default function PlanChangeDetailPage() {
 
   const canSign = data.status === "PENDIENTE_DE_FIRMA";
   const isActive = ["ACTIVO", "FIRMADO"].includes(data.status);
+  const perms = role ? (() => {
+    const isAdmin = role === "ADMIN";
+    const isSupervisor = role === "SUPERVISOR";
+    return {
+      canSendLink: ["ADMIN", "SUPERVISOR", "COBRANZAS"].includes(role),
+      canViewIdentity: isAdmin || isSupervisor,
+    };
+  })() : { canSendLink: false, canViewIdentity: false };
+
+  const opLabel = OPERATION_TYPE_LABELS[data.operationType] ?? "Gestión contractual";
+  const docLabel = data.operationType === "CAMBIO_PLAN" ? "Adendum" : "Documento";
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
@@ -101,7 +130,7 @@ export default function PlanChangeDetailPage() {
           ← Volver
         </Link>
         <h1 className="text-2xl font-bold" style={{ color: COLORS.navy }}>
-          Cambio de plan
+          {opLabel}
         </h1>
         <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-medium">
           {PLAN_CHANGE_STATUS_LABELS[data.status] ?? data.status}
@@ -114,7 +143,7 @@ export default function PlanChangeDetailPage() {
       <section className="rounded-xl border bg-white p-5 space-y-3 text-sm">
         <div className="flex flex-wrap justify-between gap-2">
           <div>
-            <p className="text-slate-500">Adendum</p>
+            <p className="text-slate-500">{docLabel}</p>
             <p className="font-semibold">{data.addendumNumber ?? "—"}</p>
           </div>
           <a
@@ -172,8 +201,22 @@ export default function PlanChangeDetailPage() {
       </section>
 
       {canSign && (
+        <RemoteSignaturePanel
+          planChangeId={id}
+          status={data.status}
+          customerPhone={data.customer.phone}
+          customerName={data.customer.name}
+          identitySelfieAt={data.identitySelfieAt}
+          signatureImageData={!!data.signatureImageData}
+          signedAt={data.signedAt}
+          canSendLink={perms.canSendLink}
+          canViewIdentity={perms.canViewIdentity}
+        />
+      )}
+
+      {canSign && (
         <section className="rounded-xl border bg-white p-5 space-y-4">
-          <h2 className="font-semibold">Firma del cliente</h2>
+          <h2 className="font-semibold">Firma presencial</h2>
           <p className="text-sm text-slate-600">
             El nuevo plan no se activará hasta que el cliente firme el adendum.
           </p>

@@ -4,13 +4,20 @@ import { useEffect, useState } from "react";
 import { COLORS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { UsersManagerPanel } from "@/components/config/users-manager-panel";
-import { ServicePlansPanel, AddendumTextPanel } from "@/components/config/service-plans-panel";
+import { ServicePlansPanel, AddendumTextPanel, RenewalTextPanel, RenewalSettingsPanel } from "@/components/config/service-plans-panel";
 
 interface TariffConfig {
   permanenceMonths: number;
   installCostUsd: string;
   tvMonthlyUsd: string;
   addendumDeclarationText?: string;
+  renewalDeclarationText?: string;
+  renewalMinMonthsCompleted?: number;
+  earlyRenewalEnabled?: boolean;
+  earlyRenewalDaysBefore?: number;
+  renewalAlertDays60?: number;
+  renewalAlertDays30?: number;
+  renewalAlertDays15?: number;
 }
 
 interface EquipmentTariff {
@@ -38,6 +45,13 @@ export default function ConfiguracionPage() {
             installCostUsd: String(data.tariff.installCostUsd),
             tvMonthlyUsd: String(data.tariff.tvMonthlyUsd),
             addendumDeclarationText: data.tariff.addendumDeclarationText ?? "",
+            renewalDeclarationText: data.tariff.renewalDeclarationText ?? "",
+            renewalMinMonthsCompleted: data.tariff.renewalMinMonthsCompleted ?? 18,
+            earlyRenewalEnabled: data.tariff.earlyRenewalEnabled ?? true,
+            earlyRenewalDaysBefore: data.tariff.earlyRenewalDaysBefore ?? 30,
+            renewalAlertDays60: data.tariff.renewalAlertDays60 ?? 60,
+            renewalAlertDays30: data.tariff.renewalAlertDays30 ?? 30,
+            renewalAlertDays15: data.tariff.renewalAlertDays15 ?? 15,
           });
         }
         setEquipment(
@@ -63,6 +77,13 @@ export default function ConfiguracionPage() {
           installCostUsd: parseFloat(tariff.installCostUsd),
           tvMonthlyUsd: parseFloat(tariff.tvMonthlyUsd),
           addendumDeclarationText: tariff.addendumDeclarationText?.trim() || null,
+          renewalDeclarationText: tariff.renewalDeclarationText?.trim() || null,
+          renewalMinMonthsCompleted: tariff.renewalMinMonthsCompleted ?? 18,
+          earlyRenewalEnabled: tariff.earlyRenewalEnabled ?? true,
+          earlyRenewalDaysBefore: tariff.earlyRenewalDaysBefore ?? 30,
+          renewalAlertDays60: tariff.renewalAlertDays60 ?? 60,
+          renewalAlertDays30: tariff.renewalAlertDays30 ?? 30,
+          renewalAlertDays15: tariff.renewalAlertDays15 ?? 15,
         },
         equipment: equipment.map((e) => ({
           type: e.type,
@@ -94,7 +115,7 @@ export default function ConfiguracionPage() {
           Tarifas
         </TabButton>
         <TabButton active={tab === "planes"} onClick={() => setTab("planes")}>
-          Planes y adendum
+          Planes y documentos
         </TabButton>
       </div>
 
@@ -102,17 +123,27 @@ export default function ConfiguracionPage() {
         <section className="rounded-xl border bg-white p-5 shadow-sm space-y-6">
           <ServicePlansPanel />
           {tariff && (
-            <AddendumTextPanel
-              value={tariff.addendumDeclarationText ?? ""}
-              onChange={(v) => setTariff({ ...tariff, addendumDeclarationText: v })}
-            />
+            <>
+              <AddendumTextPanel
+                value={tariff.addendumDeclarationText ?? ""}
+                onChange={(v) => setTariff({ ...tariff, addendumDeclarationText: v })}
+              />
+              <RenewalTextPanel
+                value={tariff.renewalDeclarationText ?? ""}
+                onChange={(v) => setTariff({ ...tariff, renewalDeclarationText: v })}
+              />
+              <RenewalSettingsPanel
+                tariff={tariff}
+                onChange={(patch) => setTariff({ ...tariff, ...patch })}
+              />
+            </>
           )}
           <button
             onClick={save}
             className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
             style={{ backgroundColor: COLORS.brand }}
           >
-            Guardar texto adendum
+            Guardar configuración contractual
           </button>
         </section>
       )}

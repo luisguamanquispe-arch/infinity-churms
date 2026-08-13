@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { addMonths } from "date-fns";
-import { COLORS } from "@/lib/constants";
+import { COLORS, OPERATION_TYPE_LABELS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 
 interface ServicePlan {
@@ -32,19 +32,25 @@ interface PlanContext {
     permanenceEnd: string;
     monthsCompleted: number;
     monthsRemaining: number;
+    activeServicePlanId: string | null;
   };
   permanenceMonths: number;
   pendingChange: { id: string; status: string } | null;
 }
 
-type Step = "search" | "select" | "confirm" | "done";
+type OperationType = "CAMBIO_PLAN" | "RENOVACION" | "RENOVACION_CAMBIO_PLAN";
+type Step = "type" | "search" | "select" | "confirm";
 
-export default function NuevoCambioPlanPage() {
+export default function NuevaGestionContractualPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedId = searchParams.get("customerId");
+  const preselectedOp = searchParams.get("operationType") as OperationType | null;
 
-  const [step, setStep] = useState<Step>("search");
+  const [operationType, setOperationType] = useState<OperationType>(
+    preselectedOp && OPERATION_TYPE_LABELS[preselectedOp] ? preselectedOp : "CAMBIO_PLAN"
+  );
+  const [step, setStep] = useState<Step>(preselectedId ? "search" : "type");
   const [query, setQuery] = useState("");
   const [customers, setCustomers] = useState<{ id: string; contract: string; name: string; cedula: string }[]>([]);
   const [ctx, setCtx] = useState<PlanContext | null>(null);
@@ -56,6 +62,8 @@ export default function NuevoCambioPlanPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const isRenewal = operationType === "RENOVACION";
+  const needsPlanSelection = operationType === "CAMBIO_PLAN" || operationType === "RENOVACION_CAMBIO_PLAN";
   const selectedPlan = plans.find((p) => p.id === selectedPlanId);
 
   const previewDates = useMemo(() => {
@@ -71,6 +79,12 @@ export default function NuevoCambioPlanPage() {
   useEffect(() => {
     if (preselectedId) loadCustomer(preselectedId);
   }, [preselectedId]);
+
+  useEffect(() => {
+    if (preselectedOp && OPERATION_TYPE_LABELS[preselectedOp]) {
+      setOperationType(preselectedOp);
+    }
+  }, [preselectedOp]);
 
   async function searchCustomers() {
     if (!query.trim()) return;
@@ -90,28 +104,50 @@ export default function NuevoCambioPlanPage() {
       return;
     }
     if (data.pendingChange) {
-      setError(`Ya existe un cambio en curso (${data.pendingChange.status}).`);
+      setError(`Ya existe una operación en curso (${data.pendingChange.status}).`);
       router.push(`/cambio-plan/${data.pendingChange.id}`);
       return;
     }
     setCtx(data);
-    setStep("select");
+    if (isRenewal && data.currentPlan.activeServicePlanId) {
+      setSelectedPlanId(data.currentPlan.activeServicePlanId);
+      setStep("confirm");
+    } else if (needsPlanSelection) {
+      setStep("select");
+    } else {
+      setStep("confirm");
+    }
+  }
+
+  function selectOperationType(op: OperationType) {
+    setOperationType(op);
+    setStep(preselectedId ? "search" : "search");
+    if (preselectedId) loadCustomer(preselectedId);
   }
 
   async function submitDraft() {
-    if (!ctx || !selectedPlan) return;
+    if (!ctx) return;
+    if (needsPlanSelection && !selectedPlan) return;
+
     setError("");
     setLoading(true);
     const approved = specialPrice ? Number(specialPrice) : undefined;
+    const body: Record<string, unknown> = {
+      customerId: ctx.customer.id,
+      operationType,
+      approvedMonthlyUsd: approved,
+      discountReason: discountReason || undefined,
+    };
+    if (needsPlanSelection && selectedPlan) {
+      body.newPlanId = selectedPlan.id;
+    } else if (isRenewal && ctx.currentPlan.activeServicePlanId) {
+      body.newPlanId = ctx.currentPlan.activeServicePlanId;
+    }
+
     const r = await fetch("/api/plan-changes", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        customerId: ctx.customer.id,
-        newPlanId: selectedPlan.id,
-        approvedMonthlyUsd: approved,
-        discountReason: discountReason || undefined,
-      }),
+      body: JSON.stringify(body),
     });
     const data = await r.json();
     setLoading(false);
@@ -139,26 +175,70 @@ export default function NuevoCambioPlanPage() {
     router.push(`/cambio-plan/${planChangeId}`);
   }
 
-  const approvedPrice = specialPrice ? Number(specialPrice) : selectedPlan ? Number(selectedPlan.monthlyUsd) : 0;
+  const approvedPrice = specialPrice
+    ? Number(specialPrice)
+    : selectedPlan
+      ? Number(selectedPlan.monthlyUsd)
+      : ctx?.currentPlan.monthlyUsd ?? 0;
   const currentPrice = ctx?.currentPlan.monthlyUsd ?? 0;
   const increment = approvedPrice - currentPrice;
+  const opLabel = OPERATION_TYPE_LABELS[operationType];
 
   return (
     <div className="mx-auto max-w-3xl space-y-6">
       <div className="flex items-center gap-3">
-        <Link href="/cambio-plan" className="text-sm text-slate-500 hover:underline">
-          ← Volver
-        </Link>
+        <Link href="/cambio-plan" className="text-sm text-slate-500 hover:underline">← Volver</Link>
         <h1 className="text-2xl font-bold" style={{ color: COLORS.navy }}>
-          Nuevo cambio de plan
+          Nueva gestión contractual
         </h1>
       </div>
 
-      {error && (
-        <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>
+      {error && <div className="rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+
+      {step === "type" && (
+        <section className="rounded-xl border bg-white p-5 space-y-4">
+          <h2 className="font-semibold">Tipo de operación</h2>
+          {(["CAMBIO_PLAN", "RENOVACION", "RENOVACION_CAMBIO_PLAN"] as OperationType[]).map((op) => (
+            <label
+              key={op}
+              className={`flex cursor-pointer items-center gap-3 rounded-lg border p-4 ${
+                operationType === op ? "border-[#00A9B5] bg-teal-50" : ""
+              }`}
+            >
+              <input
+                type="radio"
+                name="operationType"
+                checked={operationType === op}
+                onChange={() => setOperationType(op)}
+              />
+              <div>
+                <p className="font-medium">{OPERATION_TYPE_LABELS[op]}</p>
+                <p className="text-xs text-slate-500">
+                  {op === "CAMBIO_PLAN" && "Modificar plan con nuevo adendum y permanencia de 18 meses."}
+                  {op === "RENOVACION" && "Renovar contrato manteniendo el plan actual."}
+                  {op === "RENOVACION_CAMBIO_PLAN" && "Renovar y cambiar plan en un solo documento."}
+                </p>
+              </div>
+            </label>
+          ))}
+          <button
+            type="button"
+            onClick={() => selectOperationType(operationType)}
+            className="rounded-lg px-4 py-2 text-sm font-medium text-white"
+            style={{ backgroundColor: COLORS.brand }}
+          >
+            Continuar
+          </button>
+        </section>
       )}
 
-      {step === "search" && (
+      {(step === "search" || step === "select" || step === "confirm") && (
+        <div className="rounded-lg bg-slate-100 px-4 py-2 text-sm">
+          Operación: <strong>{opLabel}</strong>
+        </div>
+      )}
+
+      {step === "search" && !ctx && (
         <section className="rounded-xl border bg-white p-5 space-y-4">
           <h2 className="font-semibold">Buscar cliente</h2>
           <div className="flex gap-2">
@@ -187,9 +267,7 @@ export default function NuevoCambioPlanPage() {
                   className="w-full px-2 py-3 text-left hover:bg-slate-50"
                 >
                   <span className="font-medium">{c.name}</span>
-                  <span className="ml-2 text-sm text-slate-500">
-                    {c.contract} · {c.cedula}
-                  </span>
+                  <span className="ml-2 text-sm text-slate-500">{c.contract} · {c.cedula}</span>
                 </button>
               </li>
             ))}
@@ -197,16 +275,13 @@ export default function NuevoCambioPlanPage() {
         </section>
       )}
 
-      {ctx && step !== "search" && (
+      {ctx && step !== "type" && (
         <section className="rounded-xl border bg-white p-5">
           <h2 className="font-semibold text-[#0B1F3A]">Plan actual</h2>
           <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
             <div><dt className="text-slate-500">Cliente</dt><dd>{ctx.customer.name}</dd></div>
-            <div><dt className="text-slate-500">Cédula</dt><dd>{ctx.customer.cedula}</dd></div>
             <div><dt className="text-slate-500">Contrato</dt><dd>{ctx.customer.contract}</dd></div>
-            <div><dt className="text-slate-500">Dirección</dt><dd>{ctx.customer.address}</dd></div>
             <div><dt className="text-slate-500">Plan</dt><dd>{ctx.currentPlan.planName}</dd></div>
-            <div><dt className="text-slate-500">Velocidad</dt><dd>{ctx.currentPlan.speedMbps ? `${ctx.currentPlan.speedMbps} Mbps` : "—"}</dd></div>
             <div><dt className="text-slate-500">Precio</dt><dd>{ctx.currentPlan.monthlyUsd != null ? formatUsd(ctx.currentPlan.monthlyUsd) : "—"}</dd></div>
             <div><dt className="text-slate-500">Permanencia cumplida</dt><dd>{ctx.currentPlan.monthsCompleted} meses</dd></div>
             <div><dt className="text-slate-500">Permanencia restante</dt><dd>{ctx.currentPlan.monthsRemaining} meses</dd></div>
@@ -214,9 +289,9 @@ export default function NuevoCambioPlanPage() {
         </section>
       )}
 
-      {step === "select" && ctx && (
+      {step === "select" && ctx && needsPlanSelection && (
         <section className="rounded-xl border bg-white p-5 space-y-4">
-          <h2 className="font-semibold">Seleccionar nuevo plan</h2>
+          <h2 className="font-semibold">Seleccionar {operationType === "CAMBIO_PLAN" ? "nuevo plan" : "plan de renovación"}</h2>
           <div className="grid gap-2">
             {plans.map((p) => (
               <label
@@ -260,11 +335,8 @@ export default function NuevoCambioPlanPage() {
                 </div>
               </div>
               {increment !== 0 && (
-                <p className="text-sm">
-                  Incremento mensual: <strong>{formatUsd(increment)}</strong>
-                </p>
+                <p className="text-sm">Incremento mensual: <strong>{formatUsd(increment)}</strong></p>
               )}
-
               <div className="space-y-2 border-t pt-4">
                 <label className="text-sm font-medium">Precio especial (opcional)</label>
                 <input
@@ -277,20 +349,14 @@ export default function NuevoCambioPlanPage() {
                   className="w-full max-w-xs rounded-lg border px-3 py-2 text-sm"
                 />
                 {specialPrice && Number(specialPrice) < Number(selectedPlan.monthlyUsd) && (
-                  <div className="space-y-2 rounded-lg bg-amber-50 p-3 text-sm">
-                    <p>Precio estándar: {formatUsd(Number(selectedPlan.monthlyUsd))}</p>
-                    <p>Precio especial: {formatUsd(Number(specialPrice))}</p>
-                    <p>Descuento: {formatUsd(Number(selectedPlan.monthlyUsd) - Number(specialPrice))}</p>
-                    <input
-                      value={discountReason}
-                      onChange={(e) => setDiscountReason(e.target.value)}
-                      placeholder="Motivo del descuento *"
-                      className="w-full rounded-lg border px-3 py-2"
-                    />
-                  </div>
+                  <input
+                    value={discountReason}
+                    onChange={(e) => setDiscountReason(e.target.value)}
+                    placeholder="Motivo del descuento *"
+                    className="w-full rounded-lg border px-3 py-2 text-sm"
+                  />
                 )}
               </div>
-
               <button
                 type="button"
                 disabled={loading || !selectedPlanId}
@@ -305,29 +371,46 @@ export default function NuevoCambioPlanPage() {
         </section>
       )}
 
-      {step === "confirm" && ctx && selectedPlan && (
+      {step === "confirm" && ctx && (
         <section className="rounded-xl border bg-white p-5 space-y-4">
-          <h2 className="font-semibold">Confirmar cambio de plan</h2>
-          <p className="text-sm text-slate-600">Estoy cambiando:</p>
+          <h2 className="font-semibold">Confirmar {opLabel.toLowerCase()}</h2>
           <div className="rounded-lg bg-slate-50 p-4 text-sm space-y-2">
+            <p><strong>Operación:</strong> {opLabel}</p>
             <p><strong>Plan actual:</strong> {ctx.currentPlan.planName} – {ctx.currentPlan.monthlyUsd != null ? formatUsd(ctx.currentPlan.monthlyUsd) : "—"}</p>
-            <p><strong>Nuevo plan:</strong> {selectedPlan.name} – {formatUsd(approvedPrice)}</p>
+            <p><strong>{isRenewal ? "Plan renovado" : "Nuevo plan"}:</strong>{" "}
+              {selectedPlan?.name ?? ctx.currentPlan.planName} – {formatUsd(approvedPrice)}
+            </p>
+            {!isRenewal && selectedPlan && ctx.currentPlan.planName === selectedPlan.name && (
+              <p className="text-amber-700">Cambio: ninguno (mismo plan)</p>
+            )}
             <p><strong>Nueva permanencia:</strong> {ctx.permanenceMonths} meses</p>
-            <p><strong>Inicio nueva permanencia:</strong> {previewDates.start.toLocaleDateString("es-VE")}</p>
-            <p><strong>Fin nueva permanencia:</strong> {previewDates.end.toLocaleDateString("es-VE")}</p>
+            <p><strong>Inicio estimado:</strong> {previewDates.start.toLocaleDateString("es-VE")}</p>
+            <p><strong>Fin estimado:</strong> {previewDates.end.toLocaleDateString("es-VE")}</p>
           </div>
           <p className="text-xs text-slate-500">
-            La fecha exacta se calculará al momento de la firma del adendum.
+            La fecha exacta se calculará al momento de la firma del documento.
           </p>
-          <button
-            type="button"
-            disabled={loading}
-            onClick={confirmChange}
-            className="w-full rounded-lg py-3 text-sm font-semibold text-white disabled:opacity-50"
-            style={{ backgroundColor: COLORS.navy }}
-          >
-            CONFIRMAR CAMBIO DE PLAN
-          </button>
+          {!planChangeId ? (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={submitDraft}
+              className="w-full rounded-lg py-3 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ backgroundColor: COLORS.navy }}
+            >
+              CREAR BORRADOR
+            </button>
+          ) : (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={confirmChange}
+              className="w-full rounded-lg py-3 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ backgroundColor: COLORS.navy }}
+            >
+              CONFIRMAR Y GENERAR DOCUMENTO
+            </button>
+          )}
         </section>
       )}
     </div>

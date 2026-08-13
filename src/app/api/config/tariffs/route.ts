@@ -36,6 +36,33 @@ export async function PATCH(request: NextRequest) {
             ...(body.tariff.addendumDeclarationText !== undefined
               ? { addendumDeclarationText: body.tariff.addendumDeclarationText }
               : {}),
+            ...(body.tariff.signatureLinkExpiryHours !== undefined
+              ? { signatureLinkExpiryHours: body.tariff.signatureLinkExpiryHours }
+              : {}),
+            ...(body.tariff.whatsappSignatureMessage !== undefined
+              ? { whatsappSignatureMessage: body.tariff.whatsappSignatureMessage }
+              : {}),
+            ...(body.tariff.renewalDeclarationText !== undefined
+              ? { renewalDeclarationText: body.tariff.renewalDeclarationText }
+              : {}),
+            ...(body.tariff.renewalMinMonthsCompleted !== undefined
+              ? { renewalMinMonthsCompleted: body.tariff.renewalMinMonthsCompleted }
+              : {}),
+            ...(body.tariff.earlyRenewalEnabled !== undefined
+              ? { earlyRenewalEnabled: body.tariff.earlyRenewalEnabled }
+              : {}),
+            ...(body.tariff.earlyRenewalDaysBefore !== undefined
+              ? { earlyRenewalDaysBefore: body.tariff.earlyRenewalDaysBefore }
+              : {}),
+            ...(body.tariff.renewalAlertDays60 !== undefined
+              ? { renewalAlertDays60: body.tariff.renewalAlertDays60 }
+              : {}),
+            ...(body.tariff.renewalAlertDays30 !== undefined
+              ? { renewalAlertDays30: body.tariff.renewalAlertDays30 }
+              : {}),
+            ...(body.tariff.renewalAlertDays15 !== undefined
+              ? { renewalAlertDays15: body.tariff.renewalAlertDays15 }
+              : {}),
           },
         });
       }

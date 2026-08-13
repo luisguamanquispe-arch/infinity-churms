@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { COLORS } from "@/lib/constants";
+import { COLORS, OPERATION_TYPE_LABELS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 
 interface ContractHistoryProps {
@@ -22,6 +22,8 @@ export function ContractHistoryPanel({ customerId }: ContractHistoryProps) {
     };
     addendums: {
       id: string;
+      type: string;
+      operationType: string;
       sequence: number;
       addendumNumber: string | null;
       date: string | null;
@@ -45,6 +47,15 @@ export function ContractHistoryPanel({ customerId }: ContractHistoryProps) {
 
   if (!history) return <p className="text-sm text-slate-400">Cargando historial contractual…</p>;
 
+  type HistoryEntry = (typeof history)["addendums"][number];
+
+  function entryLabel(a: HistoryEntry) {
+    if (a.type === "RENOVACION") {
+      return `Renovación #${String(a.sequence).padStart(3, "0")} · ${a.addendumNumber ?? "—"}`;
+    }
+    return `Adendum #${String(a.sequence).padStart(3, "0")} · ${a.addendumNumber ?? "—"}`;
+  }
+
   return (
     <div className="space-y-4">
       <h3 className="font-semibold" style={{ color: COLORS.navy }}>
@@ -62,9 +73,16 @@ export function ContractHistoryPanel({ customerId }: ContractHistoryProps) {
         </div>
         {history.addendums.map((a) => (
           <div key={a.id} className="relative pb-6">
-            <span className="absolute -left-[1.65rem] top-1 h-3 w-3 rounded-full bg-[#00A9B5]" />
+            <span
+              className={`absolute -left-[1.65rem] top-1 h-3 w-3 rounded-full ${
+                a.type === "RENOVACION" ? "bg-emerald-600" : "bg-[#00A9B5]"
+              }`}
+            />
             <p className="text-xs font-medium uppercase text-slate-500">
-              Adendum #{String(a.sequence).padStart(3, "0")} · {a.addendumNumber ?? "—"}
+              {entryLabel(a)}
+            </p>
+            <p className="text-xs text-slate-400">
+              {OPERATION_TYPE_LABELS[a.operationType] ?? a.operationType}
             </p>
             <p className="font-medium">{a.planName} · {a.speedMbps} Mbps</p>
             <p className="text-sm text-slate-600">

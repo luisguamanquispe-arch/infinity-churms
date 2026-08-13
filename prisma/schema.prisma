@@ -90,6 +90,28 @@ enum PlanChangeStatus {
   ANULADO
 }
 
+enum SignatureLinkStatus {
+  GENERADO
+  ENVIADO
+  ABIERTO
+  EN_PROCESO
+  FIRMADO
+  COMPLETADO
+  EXPIRADO
+  CANCELADO
+}
+
+enum PlanChangeSignatureMode {
+  PRESENCIAL
+  REMOTA
+}
+
+enum ContractOperationType {
+  CAMBIO_PLAN
+  RENOVACION
+  RENOVACION_CAMBIO_PLAN
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -110,6 +132,7 @@ model User {
   planChangesCreated PlanChange[] @relation("PlanChangeCreatedBy")
   planChangesDiscountAuth PlanChange[] @relation("PlanChangeDiscountAuth")
   planChangesVoided PlanChange[] @relation("PlanChangeVoidedBy")
+  planChangeSignatureTokens PlanChangeSignatureToken[]
 }
 
 model Customer {
@@ -173,6 +196,15 @@ model TariffConfig {
   installCostUsd          Decimal @default(200) @db.Decimal(10, 2)
   tvMonthlyUsd            Decimal @default(2) @db.Decimal(10, 2)
   addendumDeclarationText String?
+  signatureLinkExpiryHours Int @default(24)
+  whatsappSignatureMessage String?
+  renewalDeclarationText   String?
+  renewalMinMonthsCompleted Int @default(18)
+  earlyRenewalEnabled      Boolean @default(true)
+  earlyRenewalDaysBefore   Int @default(30)
+  renewalAlertDays60       Int @default(60)
+  renewalAlertDays30       Int @default(30)
+  renewalAlertDays15       Int @default(15)
 }
 
 model ServicePlan {
@@ -194,6 +226,7 @@ model ServicePlan {
 model PlanChange {
   id                    String           @id @default(cuid())
   customerId            String
+  operationType         ContractOperationType @default(CAMBIO_PLAN)
   addendumNumber        String?          @unique
   status                PlanChangeStatus @default(BORRADOR)
   requestDate           DateTime         @default(now())
@@ -230,6 +263,15 @@ model PlanChange {
   signatureIp           String?
   signedPdfData         String?
 
+  signatureMode         PlanChangeSignatureMode @default(PRESENCIAL)
+  identitySelfieData    String?
+  identitySelfieId      String?
+  identitySelfieAt      DateTime?
+  dataConfirmedAt       DateTime?
+  adendumAcceptedAt     DateTime?
+  signatureUserAgent    String?
+  signedDigitally       Boolean          @default(false)
+
   voidReason            String?
   voidedById            String?
   notes                 String?
@@ -245,6 +287,31 @@ model PlanChange {
   createdBy             User             @relation("PlanChangeCreatedBy", fields: [createdById], references: [id])
   discountAuthorizedBy  User?            @relation("PlanChangeDiscountAuth", fields: [discountAuthorizedById], references: [id])
   voidedBy              User?            @relation("PlanChangeVoidedBy", fields: [voidedById], references: [id])
+  signatureTokens       PlanChangeSignatureToken[]
+}
+
+model PlanChangeSignatureToken {
+  id               String              @id @default(cuid())
+  planChangeId     String
+  tokenHash        String              @unique
+  status           SignatureLinkStatus @default(GENERADO)
+  expiresAt        DateTime
+  isActive         Boolean             @default(true)
+  generatedAt      DateTime            @default(now())
+  sentAt           DateTime?
+  openedAt         DateTime?
+  processStartedAt DateTime?
+  signedAt         DateTime?
+  completedAt      DateTime?
+  cancelledAt      DateTime?
+  generatedById    String
+  openIp           String?
+  openUserAgent    String?
+  signIp           String?
+  signUserAgent    String?
+
+  planChange  PlanChange @relation(fields: [planChangeId], references: [id], onDelete: Cascade)
+  generatedBy User       @relation(fields: [generatedById], references: [id])
 }
 
 model EquipmentTariff {

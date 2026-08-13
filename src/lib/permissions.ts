@@ -15,6 +15,8 @@ export type Permission =
   | "plan-changes:list"
   | "plan-changes:create"
   | "plan-changes:manage"
+  | "plan-changes:send-link"
+  | "plan-changes:view-identity"
   | "reports:view"
   | "config:manage"
   | "users:manage";
@@ -34,6 +36,8 @@ const ALL: Permission[] = [
   "plan-changes:list",
   "plan-changes:create",
   "plan-changes:manage",
+  "plan-changes:send-link",
+  "plan-changes:view-identity",
   "reports:view",
   "config:manage",
   "users:manage",
@@ -58,6 +62,7 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "customers:manage",
     "plan-changes:list",
     "plan-changes:create",
+    "plan-changes:send-link",
     "reports:view",
   ],
   TECNICO: [
@@ -85,6 +90,12 @@ export function canAccessRoute(role: UserRole, pathname: string): boolean {
     return hasPermission(role, "plan-changes:list");
   }
   if (pathname.startsWith("/api/plan-changes") || pathname.startsWith("/api/service-plans")) {
+    if (/\/identity/.test(pathname)) {
+      return hasPermission(role, "plan-changes:view-identity");
+    }
+    if (/\/signature-link/.test(pathname)) {
+      return hasPermission(role, "plan-changes:send-link") || hasPermission(role, "plan-changes:create");
+    }
     if (pathname === "/api/plan-changes" && pathname.endsWith("/plan-changes")) {
       return hasPermission(role, "plan-changes:list");
     }
@@ -104,6 +115,12 @@ export function canAccessRoute(role: UserRole, pathname: string): boolean {
   }
   if (pathname.startsWith("/api/reports/plan-changes")) {
     return hasPermission(role, "reports:view");
+  }
+  if (pathname.startsWith("/api/reports/renewals")) {
+    return hasPermission(role, "reports:view");
+  }
+  if (pathname.startsWith("/api/contractual")) {
+    return hasPermission(role, "plan-changes:list");
   }
   if (pathname === "/clientes" || pathname.startsWith("/clientes/") || pathname.startsWith("/api/customers")) {
     if (/\/api\/customers\/[^/]+\/permanence-preview/.test(pathname)) {
@@ -133,7 +150,7 @@ export const NAV_ITEMS = [
   { href: "/", label: "Dashboard", permission: "dashboard:view" as Permission },
   { href: "/bajas", label: "Bajas", permission: "cancellations:list" as Permission },
   { href: "/clientes", label: "Clientes · Cobranza", permission: "customers:manage" as Permission },
-  { href: "/cambio-plan", label: "Cambio de Plan", permission: "plan-changes:list" as Permission },
+  { href: "/cambio-plan", label: "Gestión Contractual", permission: "plan-changes:list" as Permission },
   { href: "/reportes", label: "Reportes", permission: "reports:view" as Permission },
   { href: "/configuracion", label: "Configuración", permission: "config:manage" as Permission },
 ];
