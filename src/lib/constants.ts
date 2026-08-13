@@ -5,6 +5,32 @@ export const COLORS = {
   brand: "#00A9B5",
 } as const;
 
+export const PLAN_CHANGE_STATUS_LABELS: Record<string, string> = {
+  BORRADOR: "Borrador",
+  PENDIENTE_DE_FIRMA: "Pendiente de firma",
+  FIRMADO: "Firmado",
+  ACTIVO: "Activo",
+  CANCELADO: "Cancelado",
+  RECHAZADO: "Rechazado",
+  ANULADO: "Anulado",
+};
+
+export const PLAN_CHANGE_STATUSES = [
+  "BORRADOR",
+  "PENDIENTE_DE_FIRMA",
+  "FIRMADO",
+  "ACTIVO",
+  "CANCELADO",
+  "RECHAZADO",
+  "ANULADO",
+] as const;
+
+export const DEFAULT_ADDENDUM_DECLARATION =
+  "El cliente solicita y acepta voluntariamente la modificación de su plan de servicio. " +
+  "A partir de la aceptación y firma del presente adendum, se establece un nuevo período de permanencia " +
+  "asociado al nuevo plan contratado, manteniéndose vigentes las demás condiciones del contrato original " +
+  "que no hayan sido modificadas expresamente por este documento.";
+
 export const STATUS_LABELS: Record<string, string> = {
   SOLICITADA: "Solicitada",
   EN_REVISION: "En revisión",

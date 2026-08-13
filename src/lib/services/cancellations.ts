@@ -118,7 +118,7 @@ export async function recalculateCancellation(
     tvMonthlyUsd: Number(config?.tvMonthlyUsd ?? 2),
   };
 
-  const permanence = buildPermanenceSummary(row.customer, row.requestDate, {
+  const permanence = buildPermanenceSummary(customerTechnologyInput(row.customer), row.requestDate, {
     permanenceMonths: tariff.permanenceMonths,
     installCostUsd: tariff.installCostUsd,
   });
@@ -172,6 +172,8 @@ export function customerTechnologyInput(customer: {
   fiberInstallDate: Date | null;
   fiberMigrationDate: Date | null;
   migrationReviewRequired: boolean;
+  contractPermanenceStart?: Date | null;
+  contractPermanenceEnd?: Date | null;
 }) {
   return {
     serviceStartDate: customer.serviceStartDate,
@@ -180,6 +182,8 @@ export function customerTechnologyInput(customer: {
     fiberInstallDate: customer.fiberInstallDate,
     fiberMigrationDate: customer.fiberMigrationDate,
     migrationReviewRequired: customer.migrationReviewRequired,
+    contractPermanenceStart: customer.contractPermanenceStart,
+    contractPermanenceEnd: customer.contractPermanenceEnd,
   };
 }
 
@@ -187,10 +191,20 @@ export async function getPermanencePreviewForCustomer(customerId: string, reques
   const customer = await prisma.customer.findUnique({ where: { id: customerId } });
   if (!customer) throw new Error("NOT_FOUND");
   const config = await prisma.tariffConfig.findFirst();
-  return buildPermanenceSummary(customer, requestDate, {
-    permanenceMonths: config?.permanenceMonths ?? 18,
-    installCostUsd: Number(config?.installCostUsd ?? 200),
+  const activePlanChange = await prisma.planChange.findFirst({
+    where: { customerId, status: "ACTIVO" },
+    orderBy: { activatedAt: "desc" },
+    select: { addendumNumber: true },
   });
+  return buildPermanenceSummary(
+    customerTechnologyInput(customer),
+    requestDate,
+    {
+      permanenceMonths: config?.permanenceMonths ?? 18,
+      installCostUsd: Number(config?.installCostUsd ?? 200),
+    },
+    { planChangeAddendum: activePlanChange?.addendumNumber ?? null }
+  );
 }
 
 export { validatePermanenceForCancellation };

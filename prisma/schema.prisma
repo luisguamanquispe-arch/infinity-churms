@@ -80,6 +80,16 @@ enum ServiceTechnology {
   RADIOENLACE
 }
 
+enum PlanChangeStatus {
+  BORRADOR
+  PENDIENTE_DE_FIRMA
+  FIRMADO
+  ACTIVO
+  CANCELADO
+  RECHAZADO
+  ANULADO
+}
+
 model User {
   id        String   @id @default(cuid())
   email     String   @unique
@@ -97,6 +107,9 @@ model User {
   collectionCharges CollectionCharge[]
   assignedCustomers Customer[] @relation("AssignedCollectionAgent")
   technologyEvents CustomerTechnologyEvent[]
+  planChangesCreated PlanChange[] @relation("PlanChangeCreatedBy")
+  planChangesDiscountAuth PlanChange[] @relation("PlanChangeDiscountAuth")
+  planChangesVoided PlanChange[] @relation("PlanChangeVoidedBy")
 }
 
 model Customer {
@@ -124,6 +137,12 @@ model Customer {
   fiberMigrationDate  DateTime?
   migrationReviewRequired Boolean @default(false)
   createdAt        DateTime @default(now())
+  email            String?
+  activeServicePlanId String?
+  planMonthlyUsd    Decimal? @db.Decimal(10, 2)
+  planSpeedMbps     Int?
+  contractPermanenceStart DateTime?
+  contractPermanenceEnd   DateTime?
 
   equipment     CustomerEquipment[]
   cancellations Cancellation[]
@@ -132,6 +151,8 @@ model Customer {
   collectionCharges CollectionCharge[]
   assignedAgent User? @relation("AssignedCollectionAgent", fields: [assignedAgentUserId], references: [id])
   technologyEvents CustomerTechnologyEvent[]
+  planChanges       PlanChange[]
+  activeServicePlan ServicePlan? @relation("CustomerActivePlan", fields: [activeServicePlanId], references: [id])
 }
 
 model CustomerEquipment {
@@ -147,10 +168,83 @@ model CustomerEquipment {
 }
 
 model TariffConfig {
-  id               String  @id @default(cuid())
-  permanenceMonths Int     @default(18)
-  installCostUsd   Decimal @default(200) @db.Decimal(10, 2)
-  tvMonthlyUsd     Decimal @default(2) @db.Decimal(10, 2)
+  id                      String  @id @default(cuid())
+  permanenceMonths        Int     @default(18)
+  installCostUsd          Decimal @default(200) @db.Decimal(10, 2)
+  tvMonthlyUsd            Decimal @default(2) @db.Decimal(10, 2)
+  addendumDeclarationText String?
+}
+
+model ServicePlan {
+  id          String   @id @default(cuid())
+  name        String
+  speedMbps   Int
+  monthlyUsd  Decimal  @db.Decimal(10, 2)
+  installUsd  Decimal  @default(0) @db.Decimal(10, 2)
+  active      Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  activeCustomers Customer[] @relation("CustomerActivePlan")
+  planChangesFrom PlanChange[] @relation("PlanChangeFrom")
+  planChangesTo   PlanChange[] @relation("PlanChangeTo")
+}
+
+model PlanChange {
+  id                    String           @id @default(cuid())
+  customerId            String
+  addendumNumber        String?          @unique
+  status                PlanChangeStatus @default(BORRADOR)
+  requestDate           DateTime         @default(now())
+  confirmedAt           DateTime?
+  signedAt              DateTime?
+  activatedAt           DateTime?
+  cancelledAt           DateTime?
+  voidedAt              DateTime?
+
+  previousPlanName      String
+  previousSpeedMbps     Int?
+  previousMonthlyUsd    Decimal          @db.Decimal(10, 2)
+  previousPermanenceStart DateTime?
+  previousPermanenceEnd   DateTime?
+
+  newPlanId             String?
+  newPlanName           String
+  newSpeedMbps          Int
+  newMonthlyUsd         Decimal          @db.Decimal(10, 2)
+  standardMonthlyUsd    Decimal          @db.Decimal(10, 2)
+  discountReason        String?
+  discountAuthorizedById String?
+  discountAuthorizedAt  DateTime?
+
+  newPermanenceStart    DateTime?
+  newPermanenceEnd      DateTime?
+  permanenceMonths      Int              @default(18)
+
+  originalContractDate  DateTime
+  clientSignatureName   String?
+  clientSignatureCedula String?
+  signatureImageData    String?
+  signatureConsent      Boolean          @default(false)
+  signatureIp           String?
+  signedPdfData         String?
+
+  voidReason            String?
+  voidedById            String?
+  notes                 String?
+
+  createdById           String
+  createdAt             DateTime         @default(now())
+  updatedAt             DateTime         @updatedAt
+
+  customer              Customer         @relation(fields: [customerId], references: [id])
+  newPlan               ServicePlan?     @relation("PlanChangeTo", fields: [newPlanId], references: [id])
+  previousPlan          ServicePlan?     @relation("PlanChangeFrom", fields: [previousPlanId], references: [id])
+  previousPlanId        String?
+  createdBy             User             @relation("PlanChangeCreatedBy", fields: [createdById], references: [id])
+  discountAuthorizedBy  User?            @relation("PlanChangeDiscountAuth", fields: [discountAuthorizedById], references: [id])
+  voidedBy              User?            @relation("PlanChangeVoidedBy", fields: [voidedById], references: [id])
 }
 
 model EquipmentTariff {

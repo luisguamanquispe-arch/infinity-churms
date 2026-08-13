@@ -14,6 +14,9 @@ export interface CustomerTechnologyInput {
   fiberInstallDate?: Date | string | null;
   fiberMigrationDate?: Date | string | null;
   migrationReviewRequired?: boolean;
+  /** Permanencia contractual vigente (p. ej. tras cambio de plan firmado). */
+  contractPermanenceStart?: Date | string | null;
+  contractPermanenceEnd?: Date | string | null;
 }
 
 export interface PermanenceConfig {
@@ -30,6 +33,8 @@ export interface PermanenceSummary {
   fiberMigrationDate: string | null;
   fiberInstallDate: string | null;
   permanenceStartDate: string | null;
+  contractPermanenceEnd: string | null;
+  planChangeAddendum: string | null;
   requestDate: string;
   monthsInFiber: number;
   monthsRemaining: number;
@@ -75,6 +80,10 @@ export function isMigratedRadioToFiber(customer: CustomerTechnologyInput): boole
 export function resolvePermanenceStartDate(
   customer: CustomerTechnologyInput
 ): Date | null {
+  if (customer.contractPermanenceStart) {
+    return new Date(customer.contractPermanenceStart);
+  }
+
   const origin = customer.originTechnology as ServiceTechnology;
   const current = customer.currentTechnology as ServiceTechnology;
 
@@ -152,7 +161,8 @@ export function calculatePermanenceFromStartDate(
 export function buildPermanenceSummary(
   customer: CustomerTechnologyInput,
   requestDate: Date,
-  config: PermanenceConfig
+  config: PermanenceConfig,
+  extras?: { planChangeAddendum?: string | null }
 ): PermanenceSummary {
   const validation = validatePermanenceForCancellation(customer);
   const permanenceStart = resolvePermanenceStartDate(customer);
@@ -184,6 +194,10 @@ export function buildPermanenceSummary(
       fiberMigrationDate: fiberMigrationDate?.toISOString() ?? null,
       fiberInstallDate: fiberInstallDate?.toISOString() ?? null,
       permanenceStartDate: null,
+      contractPermanenceEnd: customer.contractPermanenceEnd
+        ? new Date(customer.contractPermanenceEnd).toISOString()
+        : null,
+      planChangeAddendum: extras?.planChangeAddendum ?? null,
       requestDate: requestDate.toISOString(),
       monthsInFiber: 0,
       monthsRemaining: config.permanenceMonths,
@@ -213,6 +227,10 @@ export function buildPermanenceSummary(
     fiberMigrationDate: fiberMigrationDate?.toISOString() ?? null,
     fiberInstallDate: fiberInstallDate?.toISOString() ?? null,
     permanenceStartDate: permanenceStart.toISOString(),
+    contractPermanenceEnd: customer.contractPermanenceEnd
+      ? new Date(customer.contractPermanenceEnd).toISOString()
+      : null,
+    planChangeAddendum: extras?.planChangeAddendum ?? null,
     requestDate: requestDate.toISOString(),
     monthsInFiber: charge.monthsInFiber,
     monthsRemaining: charge.monthsRemaining,

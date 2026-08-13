@@ -28,3 +28,9 @@ export async function nextPreliquidacionNumber(): Promise<string> {
   const seq = await nextSequence(`preliq-${year}`);
   return `PRE-${year}-${String(seq).padStart(6, "0")}`;
 }
+
+export async function nextAddendumNumber(): Promise<string> {
+  const year = new Date().getFullYear();
+  const seq = await nextSequence(`addendum-${year}`);
+  return `ADD-${year}-${String(seq).padStart(6, "0")}`;
+}

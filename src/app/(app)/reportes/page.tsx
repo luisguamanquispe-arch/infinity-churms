@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { formatUsd } from "@/lib/liquidation";
 import { STATUS_LABELS, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL } from "@/lib/constants";
 import { CollectionReportSection } from "@/components/reportes/collection-report-section";
+import { PlanChangesReportSection } from "@/components/reportes/plan-changes-report-section";
 
 interface EquipoRow {
   contract: string;
@@ -53,6 +54,8 @@ export default function ReportesPage() {
       <h1 className="text-2xl font-bold text-[#0B1F3A]">Reportes</h1>
 
       <CollectionReportSection />
+
+      <PlanChangesReportSection />
 
       {isGerencia && causas && (
         <section className="rounded-xl border bg-white p-5">

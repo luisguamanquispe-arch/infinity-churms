@@ -554,6 +554,159 @@ async function main() {
     END $$;
   `);
 
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'PlanChangeStatus') THEN
+        CREATE TYPE "PlanChangeStatus" AS ENUM (
+          'BORRADOR',
+          'PENDIENTE_DE_FIRMA',
+          'FIRMADO',
+          'ACTIVO',
+          'CANCELADO',
+          'RECHAZADO',
+          'ANULADO'
+        );
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "ServicePlan" (
+      "id" TEXT NOT NULL,
+      "name" TEXT NOT NULL,
+      "speedMbps" INTEGER NOT NULL,
+      "monthlyUsd" DECIMAL(10,2) NOT NULL,
+      "installUsd" DECIMAL(10,2) NOT NULL DEFAULT 0,
+      "active" BOOLEAN NOT NULL DEFAULT true,
+      "sortOrder" INTEGER NOT NULL DEFAULT 0,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "ServicePlan_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'TariffConfig'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'TariffConfig' AND column_name = 'addendumDeclarationText'
+      ) THEN
+        ALTER TABLE "TariffConfig" ADD COLUMN "addendumDeclarationText" TEXT;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'Customer'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Customer' AND column_name = 'email'
+      ) THEN
+        ALTER TABLE "Customer" ADD COLUMN "email" TEXT;
+        ALTER TABLE "Customer" ADD COLUMN "activeServicePlanId" TEXT;
+        ALTER TABLE "Customer" ADD COLUMN "planMonthlyUsd" DECIMAL(10,2);
+        ALTER TABLE "Customer" ADD COLUMN "planSpeedMbps" INTEGER;
+        ALTER TABLE "Customer" ADD COLUMN "contractPermanenceStart" TIMESTAMP(3);
+        ALTER TABLE "Customer" ADD COLUMN "contractPermanenceEnd" TIMESTAMP(3);
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    CREATE TABLE IF NOT EXISTS "PlanChange" (
+      "id" TEXT NOT NULL,
+      "customerId" TEXT NOT NULL,
+      "addendumNumber" TEXT,
+      "status" "PlanChangeStatus" NOT NULL DEFAULT 'BORRADOR',
+      "requestDate" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "confirmedAt" TIMESTAMP(3),
+      "signedAt" TIMESTAMP(3),
+      "activatedAt" TIMESTAMP(3),
+      "cancelledAt" TIMESTAMP(3),
+      "voidedAt" TIMESTAMP(3),
+      "previousPlanName" TEXT NOT NULL,
+      "previousSpeedMbps" INTEGER,
+      "previousMonthlyUsd" DECIMAL(10,2) NOT NULL,
+      "previousPermanenceStart" TIMESTAMP(3),
+      "previousPermanenceEnd" TIMESTAMP(3),
+      "newPlanId" TEXT,
+      "newPlanName" TEXT NOT NULL,
+      "newSpeedMbps" INTEGER NOT NULL,
+      "newMonthlyUsd" DECIMAL(10,2) NOT NULL,
+      "standardMonthlyUsd" DECIMAL(10,2) NOT NULL,
+      "discountReason" TEXT,
+      "discountAuthorizedById" TEXT,
+      "discountAuthorizedAt" TIMESTAMP(3),
+      "newPermanenceStart" TIMESTAMP(3),
+      "newPermanenceEnd" TIMESTAMP(3),
+      "permanenceMonths" INTEGER NOT NULL DEFAULT 18,
+      "originalContractDate" TIMESTAMP(3) NOT NULL,
+      "clientSignatureName" TEXT,
+      "clientSignatureCedula" TEXT,
+      "signatureImageData" TEXT,
+      "signatureConsent" BOOLEAN NOT NULL DEFAULT false,
+      "signatureIp" TEXT,
+      "signedPdfData" TEXT,
+      "voidReason" TEXT,
+      "voidedById" TEXT,
+      "notes" TEXT,
+      "previousPlanId" TEXT,
+      "createdById" TEXT NOT NULL,
+      "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CONSTRAINT "PlanChange_pkey" PRIMARY KEY ("id")
+    );
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint WHERE conname = 'PlanChange_addendumNumber_key'
+      ) THEN
+        CREATE UNIQUE INDEX IF NOT EXISTS "PlanChange_addendumNumber_key" ON "PlanChange"("addendumNumber");
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PlanChange_customerId_fkey') THEN
+        ALTER TABLE "PlanChange" ADD CONSTRAINT "PlanChange_customerId_fkey"
+          FOREIGN KEY ("customerId") REFERENCES "Customer"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PlanChange_newPlanId_fkey') THEN
+        ALTER TABLE "PlanChange" ADD CONSTRAINT "PlanChange_newPlanId_fkey"
+          FOREIGN KEY ("newPlanId") REFERENCES "ServicePlan"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PlanChange_previousPlanId_fkey') THEN
+        ALTER TABLE "PlanChange" ADD CONSTRAINT "PlanChange_previousPlanId_fkey"
+          FOREIGN KEY ("previousPlanId") REFERENCES "ServicePlan"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PlanChange_createdById_fkey') THEN
+        ALTER TABLE "PlanChange" ADD CONSTRAINT "PlanChange_createdById_fkey"
+          FOREIGN KEY ("createdById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PlanChange_discountAuthorizedById_fkey') THEN
+        ALTER TABLE "PlanChange" ADD CONSTRAINT "PlanChange_discountAuthorizedById_fkey"
+          FOREIGN KEY ("discountAuthorizedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PlanChange_voidedById_fkey') THEN
+        ALTER TABLE "PlanChange" ADD CONSTRAINT "PlanChange_voidedById_fkey"
+          FOREIGN KEY ("voidedById") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Customer_activeServicePlanId_fkey') THEN
+        ALTER TABLE "Customer" ADD CONSTRAINT "Customer_activeServicePlanId_fkey"
+          FOREIGN KEY ("activeServicePlanId") REFERENCES "ServicePlan"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+      END IF;
+    END $$;
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 

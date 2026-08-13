@@ -71,6 +71,31 @@ async function main() {
     });
   }
 
+  const defaultPlans = [
+    { name: "200 MBPS", speedMbps: 200, monthlyUsd: 15, installUsd: 0, sortOrder: 1 },
+    { name: "400 MBPS", speedMbps: 400, monthlyUsd: 17, installUsd: 0, sortOrder: 2 },
+    { name: "550 MBPS", speedMbps: 550, monthlyUsd: 20, installUsd: 0, sortOrder: 3 },
+    { name: "700 MBPS", speedMbps: 700, monthlyUsd: 25, installUsd: 0, sortOrder: 4 },
+    { name: "1 GBPS", speedMbps: 1000, monthlyUsd: 30, installUsd: 0, sortOrder: 5 },
+  ];
+
+  for (const p of defaultPlans) {
+    const existing = await prisma.servicePlan.findFirst({ where: { speedMbps: p.speedMbps } });
+    if (!existing) {
+      await prisma.servicePlan.create({ data: { ...p, active: true } });
+    }
+  }
+
+  await prisma.tariffConfig.updateMany({
+    data: {
+      addendumDeclarationText:
+        "El cliente solicita y acepta voluntariamente la modificación de su plan de servicio. " +
+        "A partir de la aceptación y firma del presente adendum, se establece un nuevo período de permanencia " +
+        "asociado al nuevo plan contratado, manteniéndose vigentes las demás condiciones del contrato original " +
+        "que no hayan sido modificadas expresamente por este documento.",
+    },
+  });
+
   console.log("Seed OK — admin@infinity.net, cobranzas@infinity.net, supervisor@infinity.net");
 }
 

@@ -14,6 +14,8 @@ import { PrelegalOverdueNotice } from "@/components/clientes/prelegal-notice";
 import { CollectionPaymentsPanel } from "@/components/clientes/collection-payments-panel";
 import { CollectionChargesPanel } from "@/components/clientes/collection-charges-panel";
 import { CustomerEditForm } from "@/components/clientes/customer-edit-form";
+import { ContractHistoryPanel } from "@/components/cambio-plan/contract-history-panel";
+import { PlanChangeHistoryPanel } from "@/components/cambio-plan/plan-change-history-panel";
 
 interface CollectionAction {
   id: string;
@@ -122,7 +124,7 @@ export function CustomerDetailView({
   canCreateBaja: boolean;
   equipmentTariffs: { type: string; notReturnedUsd: number | string }[];
 }) {
-  const [tab, setTab] = useState<"datos" | "cobranza">("cobranza");
+  const [tab, setTab] = useState<"datos" | "cobranza" | "contrato">("cobranza");
   const [customer, setCustomer] = useState(initial);
   const [actions, setActions] = useState<CollectionAction[]>([]);
   const [agentHistory, setAgentHistory] = useState<CustomerAgentStage[]>([]);
@@ -246,8 +248,16 @@ export function CustomerDetailView({
             )}
           </p>
         </div>
-        <div className="rounded-xl border bg-white p-4 shadow-sm">
-          <p className="text-xs font-semibold uppercase text-slate-500">Enviar a Baja</p>
+        <div className="rounded-xl border bg-white p-4 shadow-sm space-y-3">
+          <p className="text-xs font-semibold uppercase text-slate-500">Acciones</p>
+          <Link
+            href={`/cambio-plan/nuevo?customerId=${customer.id}`}
+            className="block w-full rounded-lg border px-4 py-2 text-center text-sm font-semibold"
+            style={{ borderColor: COLORS.brand, color: COLORS.brand }}
+          >
+            Cambio de plan
+          </Link>
+          <p className="text-xs font-semibold uppercase text-slate-500 pt-2">Enviar a Baja</p>
           {customer.hasCancellation ? (
             <p className="mt-2 text-sm text-slate-600">Este cliente ya tiene una baja registrada.</p>
           ) : (
@@ -313,6 +323,9 @@ export function CustomerDetailView({
         <TabButton active={tab === "cobranza"} onClick={() => setTab("cobranza")}>
           Gestión de Cobranza
         </TabButton>
+        <TabButton active={tab === "contrato"} onClick={() => setTab("contrato")}>
+          Contrato y planes
+        </TabButton>
       </div>
 
       {tab === "datos" && (
@@ -339,6 +352,17 @@ export function CustomerDetailView({
             conceptos registrados en cobranza.
           </p>
         </Card>
+      )}
+
+      {tab === "contrato" && (
+        <div className="space-y-6">
+          <Card title="Historial contractual">
+            <ContractHistoryPanel customerId={customer.id} />
+          </Card>
+          <Card title="Historial de cambios de plan">
+            <PlanChangeHistoryPanel customerId={customer.id} />
+          </Card>
+        </div>
       )}
 
       {tab === "cobranza" && (

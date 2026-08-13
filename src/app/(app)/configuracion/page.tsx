@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import { COLORS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { UsersManagerPanel } from "@/components/config/users-manager-panel";
+import { ServicePlansPanel, AddendumTextPanel } from "@/components/config/service-plans-panel";
 
 interface TariffConfig {
   permanenceMonths: number;
   installCostUsd: string;
   tvMonthlyUsd: string;
+  addendumDeclarationText?: string;
 }
 
 interface EquipmentTariff {
@@ -17,7 +19,7 @@ interface EquipmentTariff {
   notReturnedUsd: string;
 }
 
-type ConfigTab = "tarifas" | "usuarios";
+type ConfigTab = "tarifas" | "usuarios" | "planes";
 
 export default function ConfiguracionPage() {
   const [tab, setTab] = useState<ConfigTab>("usuarios");
@@ -35,6 +37,7 @@ export default function ConfiguracionPage() {
             permanenceMonths: data.tariff.permanenceMonths,
             installCostUsd: String(data.tariff.installCostUsd),
             tvMonthlyUsd: String(data.tariff.tvMonthlyUsd),
+            addendumDeclarationText: data.tariff.addendumDeclarationText ?? "",
           });
         }
         setEquipment(
@@ -59,6 +62,7 @@ export default function ConfiguracionPage() {
           permanenceMonths: tariff.permanenceMonths,
           installCostUsd: parseFloat(tariff.installCostUsd),
           tvMonthlyUsd: parseFloat(tariff.tvMonthlyUsd),
+          addendumDeclarationText: tariff.addendumDeclarationText?.trim() || null,
         },
         equipment: equipment.map((e) => ({
           type: e.type,
@@ -89,7 +93,29 @@ export default function ConfiguracionPage() {
         <TabButton active={tab === "tarifas"} onClick={() => setTab("tarifas")}>
           Tarifas
         </TabButton>
+        <TabButton active={tab === "planes"} onClick={() => setTab("planes")}>
+          Planes y adendum
+        </TabButton>
       </div>
+
+      {tab === "planes" && (
+        <section className="rounded-xl border bg-white p-5 shadow-sm space-y-6">
+          <ServicePlansPanel />
+          {tariff && (
+            <AddendumTextPanel
+              value={tariff.addendumDeclarationText ?? ""}
+              onChange={(v) => setTariff({ ...tariff, addendumDeclarationText: v })}
+            />
+          )}
+          <button
+            onClick={save}
+            className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
+            style={{ backgroundColor: COLORS.brand }}
+          >
+            Guardar texto adendum
+          </button>
+        </section>
+      )}
 
       {tab === "usuarios" && <UsersManagerPanel />}
 
@@ -123,6 +149,10 @@ export default function ConfiguracionPage() {
               <p className="text-xs text-slate-500">
                 Prorrateo mensual: {formatUsd(Number(tariff.installCostUsd) / tariff.permanenceMonths)} / mes
               </p>
+              <AddendumTextPanel
+                value={tariff.addendumDeclarationText ?? ""}
+                onChange={(v) => setTariff({ ...tariff, addendumDeclarationText: v })}
+              />
             </section>
           )}
 

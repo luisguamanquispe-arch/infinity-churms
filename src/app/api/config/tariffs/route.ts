@@ -33,6 +33,9 @@ export async function PATCH(request: NextRequest) {
             permanenceMonths: body.tariff.permanenceMonths,
             installCostUsd: body.tariff.installCostUsd,
             tvMonthlyUsd: body.tariff.tvMonthlyUsd,
+            ...(body.tariff.addendumDeclarationText !== undefined
+              ? { addendumDeclarationText: body.tariff.addendumDeclarationText }
+              : {}),
           },
         });
       }

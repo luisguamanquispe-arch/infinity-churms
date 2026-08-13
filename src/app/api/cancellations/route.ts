@@ -107,7 +107,7 @@ export async function POST(request: NextRequest) {
     }
 
     const config = await prisma.tariffConfig.findFirst();
-    const permanencePreview = buildPermanenceSummary(customer, requestDate, {
+    const permanencePreview = buildPermanenceSummary(techInput, requestDate, {
       permanenceMonths: config?.permanenceMonths ?? 18,
       installCostUsd: Number(config?.installCostUsd ?? 200),
     });
