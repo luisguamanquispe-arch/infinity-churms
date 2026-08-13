@@ -90,7 +90,11 @@ export async function generateSignatureLink(planChangeId: string, userId: string
 
   await prisma.$transaction(async (tx) => {
     await tx.planChangeSignatureToken.updateMany({
-      where: { planChangeId, isActive: true },
+      where: {
+        planChangeId,
+        isActive: true,
+        status: { in: ["GENERADO", "ENVIADO", "ABIERTO"] },
+      },
       data: { isActive: false, status: "CANCELADO", cancelledAt: new Date() },
     });
     await tx.planChangeSignatureToken.create({
@@ -177,6 +181,12 @@ export async function getPublicSignatureSession(rawToken: string) {
   }
   if (error === "CANCELLED") {
     return { error: "CANCELLED" as const };
+  }
+  if (error === "INVALID_STATE") {
+    return { error: "INVALID_STATE" as const };
+  }
+  if (error === "INVALID") {
+    return { error: "INVALID" as const };
   }
   if (error) {
     return { error };
@@ -361,14 +371,21 @@ async function saveRemoteIdentitySelfie(params: {
   if (!pc?.adendumAcceptedAt) throw new Error("Debe aceptar el adendum primero.");
 
   const fileId = pc.identitySelfieId ?? generateIdentityFileId();
-  await prisma.planChange.update({
-    where: { id: params.pcId },
-    data: {
-      identitySelfieData: params.selfieData.trim(),
-      identitySelfieId: fileId,
-      identitySelfieAt: new Date(),
-    },
-  });
+  try {
+    await prisma.planChange.update({
+      where: { id: params.pcId },
+      data: {
+        identitySelfieData: params.selfieData.trim(),
+        identitySelfieId: fileId,
+        identitySelfieAt: new Date(),
+      },
+    });
+  } catch (e) {
+    console.error("[saveRemoteIdentitySelfie]", e);
+    throw new Error(
+      "No se pudo guardar la selfie en el servidor. Solicite un nuevo enlace al asesor."
+    );
+  }
 
   await audit({
     action: "SELFIE_RECEIVED",
@@ -380,6 +397,7 @@ async function saveRemoteIdentitySelfie(params: {
 
   return {
     ok: true,
+    nextStep: 4 as const,
     steps: {
       dataConfirmed: !!pc.dataConfirmedAt,
       adendumAccepted: true,

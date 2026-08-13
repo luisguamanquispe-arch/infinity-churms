@@ -1,5 +1,5 @@
-const MAX_SIDE_PX = 1200;
-const TARGET_MAX_LENGTH = 900_000;
+const MAX_SIDE_PX = 1024;
+const TARGET_MAX_LENGTH = 600_000;
 
 function loadImageFromFile(file: File): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
@@ -76,10 +76,12 @@ export async function compressSelfieImage(file: File): Promise<string> {
 
 /** Convierte data URL a Blob sin fetch (compatible con iOS Safari). */
 export function dataUrlToBlob(dataUrl: string): Blob {
-  const match = dataUrl.match(/^data:(image\/[a-z+]+);base64,(.+)$/i);
-  if (!match) throw new Error("Formato de imagen inválido.");
-  const mime = match[1].toLowerCase().includes("png") ? "image/png" : "image/jpeg";
-  const binary = atob(match[2]);
+  const comma = dataUrl.indexOf(",");
+  if (comma < 0) throw new Error("Formato de imagen inválido.");
+  const header = dataUrl.slice(0, comma);
+  const base64 = dataUrl.slice(comma + 1);
+  const mime = header.toLowerCase().includes("png") ? "image/png" : "image/jpeg";
+  const binary = atob(base64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
   return new Blob([bytes], { type: mime });

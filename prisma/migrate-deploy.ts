@@ -841,6 +841,75 @@ async function main() {
     END $$;
   `);
 
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'PlanChange'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'PlanChange' AND column_name = 'identitySelfieData'
+      ) THEN
+        ALTER TABLE "PlanChange" ADD COLUMN "identitySelfieData" TEXT;
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'PlanChange'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'PlanChange' AND column_name = 'identitySelfieId'
+      ) THEN
+        ALTER TABLE "PlanChange" ADD COLUMN "identitySelfieId" TEXT;
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'PlanChange'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'PlanChange' AND column_name = 'identitySelfieAt'
+      ) THEN
+        ALTER TABLE "PlanChange" ADD COLUMN "identitySelfieAt" TIMESTAMP(3);
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'PlanChange'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'PlanChange' AND column_name = 'dataConfirmedAt'
+      ) THEN
+        ALTER TABLE "PlanChange" ADD COLUMN "dataConfirmedAt" TIMESTAMP(3);
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'PlanChange'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'PlanChange' AND column_name = 'adendumAcceptedAt'
+      ) THEN
+        ALTER TABLE "PlanChange" ADD COLUMN "adendumAcceptedAt" TIMESTAMP(3);
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'PlanChange'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'PlanChange' AND column_name = 'signatureMode'
+      ) THEN
+        ALTER TABLE "PlanChange" ADD COLUMN "signatureMode" "PlanChangeSignatureMode" NOT NULL DEFAULT 'PRESENCIAL';
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'PlanChange'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'PlanChange' AND column_name = 'signatureUserAgent'
+      ) THEN
+        ALTER TABLE "PlanChange" ADD COLUMN "signatureUserAgent" TEXT;
+      END IF;
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'PlanChange'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'PlanChange' AND column_name = 'signedDigitally'
+      ) THEN
+        ALTER TABLE "PlanChange" ADD COLUMN "signedDigitally" BOOLEAN NOT NULL DEFAULT false;
+      END IF;
+    END $$;
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 

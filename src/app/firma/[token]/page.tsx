@@ -87,8 +87,11 @@ export default function FirmaRemotaPage() {
       setErrorType("EXPIRED");
       return;
     }
-    if (data.error === "CANCELLED" || data.error === "INVALID") {
-      setErrorType(data.error);
+    if (data.error === "CANCELLED" || data.error === "INVALID" || data.error === "INVALID_STATE") {
+      setErrorType(data.error === "INVALID_STATE" ? "INVALID" : data.error);
+      if (data.error === "INVALID_STATE") {
+        setError("Esta solicitud ya no está pendiente de firma. Contacte al asesor.");
+      }
       return;
     }
     if (data.error) {
@@ -106,18 +109,62 @@ export default function FirmaRemotaPage() {
     load();
   }, [load]);
 
+  async function advanceToSignatureStep(data: { steps?: Session["steps"] }) {
+    loadGenRef.current++;
+    setStep(4);
+    stepRef.current = 4;
+    setSelfiePreview("");
+    setSession((prev) =>
+      prev
+        ? {
+            ...prev,
+            steps: data.steps ?? { ...prev.steps, selfieUploaded: true },
+          }
+        : prev
+    );
+    setMsg("Identidad verificada. Continúe con su firma.");
+    setError(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  async function syncSelfieAndContinue() {
+    setSubmitting(true);
+    setError(null);
+    try {
+      const r = await fetch(`/api/firma/${token}`);
+      const data = await r.json();
+      if (data.error) {
+        setError(
+          data.error === "INVALID"
+            ? "El enlace ya no es válido. Solicite uno nuevo al asesor."
+            : data.error === "EXPIRED"
+              ? "El enlace expiró. Solicite uno nuevo al asesor."
+              : String(data.error)
+        );
+        return;
+      }
+      if (data.steps?.selfieUploaded) {
+        advanceToSignatureStep(data);
+      } else {
+        setError("La selfie aún no se registró. Tome la foto nuevamente o pulse Reintentar envío.");
+      }
+    } catch {
+      setError("No se pudo verificar el estado. Intente de nuevo.");
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
   async function uploadSelfieBlob(dataUrl: string) {
     setSubmitting(true);
     setError(null);
     setMsg("Enviando foto…");
     try {
-      const blob = dataUrlToBlob(dataUrl);
-      const fd = new FormData();
-      fd.append("selfie", blob, "selfie.jpg");
-
-      let r = await fetch(`/api/firma/${token}/selfie`, {
-        method: "POST",
-        body: fd,
+      // 1) JSON PATCH — más compatible en móviles/proxies
+      let r = await fetch(`/api/firma/${token}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "upload_selfie", selfieData: dataUrl }),
       });
 
       let data: { error?: string; ok?: boolean; steps?: Session["steps"] } | null = null;
@@ -127,15 +174,14 @@ export default function FirmaRemotaPage() {
         data = null;
       }
 
-      // Fallback JSON si multipart no está disponible o falla en red
-      if (
-        !r.ok &&
-        (!data || r.status === 404 || r.status >= 500 || r.status === 413 || r.status === 415)
-      ) {
-        r = await fetch(`/api/firma/${token}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "upload_selfie", selfieData: dataUrl }),
+      // 2) Multipart fallback
+      if (!r.ok || !data?.ok) {
+        const blob = dataUrlToBlob(dataUrl);
+        const fd = new FormData();
+        fd.append("selfie", blob, "selfie.jpg");
+        r = await fetch(`/api/firma/${token}/selfie`, {
+          method: "POST",
+          body: fd,
         });
         try {
           data = await r.json();
@@ -150,18 +196,7 @@ export default function FirmaRemotaPage() {
         return false;
       }
 
-      loadGenRef.current++;
-      setStep(4);
-      stepRef.current = 4;
-      setSession((prev) =>
-        prev
-          ? {
-              ...prev,
-              steps: data!.steps ?? { ...prev.steps, selfieUploaded: true },
-            }
-          : prev
-      );
-      setMsg("Identidad verificada. Continúe con su firma.");
+      advanceToSignatureStep(data);
       return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al enviar la foto.");
@@ -519,6 +554,15 @@ export default function FirmaRemotaPage() {
                 Al tomar la foto, se enviará automáticamente y pasará al paso de firma.
               </p>
             )}
+            <button
+              type="button"
+              disabled={submitting || selfieProcessing}
+              onClick={syncSelfieAndContinue}
+              className="w-full rounded-xl border-2 py-3 text-sm font-semibold disabled:opacity-50"
+              style={{ borderColor: COLORS.brand, color: COLORS.brand }}
+            >
+              Ya envié mi foto — continuar a firma
+            </button>
           </section>
         )}
 
