@@ -8,6 +8,9 @@ const PUBLIC = ["/login", "/api/auth/login", "/api/health", "/api/docs/manual-co
 function isPublicPath(pathname: string) {
   if (PUBLIC.some((p) => pathname === p || pathname.startsWith(`${p}/`))) return true;
   if (pathname.startsWith("/bajas/verificar/")) return true;
+  if (pathname.startsWith("/baja/preliquidacion/")) return true;
+  if (pathname.startsWith("/baja/acta/")) return true;
+  if (pathname.startsWith("/api/baja/")) return true;
   if (pathname.startsWith("/firma/")) return true;
   if (pathname.startsWith("/api/firma/")) return true;
   return false;

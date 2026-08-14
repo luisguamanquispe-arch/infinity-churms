@@ -189,16 +189,32 @@ async function buildLineItems(cancellationId: string): Promise<PreliquidacionLin
   const tariffs = await prisma.equipmentTariff.findMany();
   for (const eq of row.equipment) {
     const t = tariffs.find((x) => x.type === eq.type);
-    const value = Number(t?.notReturnedUsd ?? 0);
-    if (value <= 0) continue;
+    const notReturned = Number(t?.notReturnedUsd ?? 0);
+    const damaged = Number(t?.damagedUsd ?? 0);
     const label = eq.brand || eq.model ? `${eq.type} ${eq.brand ?? ""} ${eq.model ?? ""}`.trim() : eq.type;
-    lines.push({
-      category: "EQUIPO",
-      concept: `${label} (pendiente de devolución)`,
-      amount: value,
-      sortOrder: order++,
-      metadata: JSON.stringify({ serial: eq.serial, equipmentId: eq.id }),
-    });
+    const eqCharge = Number(eq.chargeAmount ?? 0);
+
+    if (!eq.delivered || eq.condition === "NO_ENTREGADO") {
+      const value = notReturned > 0 ? notReturned : eqCharge;
+      if (value <= 0) continue;
+      lines.push({
+        category: "EQUIPO",
+        concept: `${label} (pendiente de devolución)`,
+        amount: value,
+        sortOrder: order++,
+        metadata: JSON.stringify({ serial: eq.serial, equipmentId: eq.id }),
+      });
+    } else if (eq.condition === "DANADO") {
+      const value = damaged > 0 ? damaged : eqCharge;
+      if (value <= 0) continue;
+      lines.push({
+        category: "OTRO",
+        concept: `Daño — ${label}`,
+        amount: value,
+        sortOrder: order++,
+        metadata: JSON.stringify({ serial: eq.serial, equipmentId: eq.id, damage: true }),
+      });
+    }
   }
 
   return lines;

@@ -79,11 +79,12 @@ export function getCancellationFlowStep(cancellationStatus: string): number {
 }
 
 export const PRELIQUIDACION_CATEGORY_LABELS: Record<string, string> = {
-  PERMANENCIA: "Instalación / permanencia pendiente",
+  PERMANENCIA: "Instalación pendiente",
   MENSUALIDAD: "Mensualidades pendientes",
-  EQUIPO: "Equipos pendientes de devolución",
+  EQUIPO: "Equipos",
+  DANOS: "Daños",
   TV: "Soporte Streams / TV",
-  OTRO: "Otros valores",
+  OTRO: "Otros cargos",
   CREDITO: "Créditos a favor",
 };
 
@@ -94,6 +95,7 @@ export function summarizePreliquidacionByCategory(
     PERMANENCIA: 0,
     MENSUALIDAD: 0,
     EQUIPO: 0,
+    DANOS: 0,
     TV: 0,
     OTRO: 0,
     CREDITO: 0,
@@ -101,6 +103,14 @@ export function summarizePreliquidacionByCategory(
 
   for (const line of lineItems) {
     const amt = Number(line.amount);
+    if (Number.isNaN(amt) || amt === 0) continue;
+
+    const conceptLower = line.concept.toLowerCase();
+    if (line.category === "OTRO" && (conceptLower.includes("daño") || conceptLower.includes("danado"))) {
+      totals.DANOS += amt;
+      continue;
+    }
+
     const key = line.category in totals ? line.category : "OTRO";
     totals[key] += amt;
   }

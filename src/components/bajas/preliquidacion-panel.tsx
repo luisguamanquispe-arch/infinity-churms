@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { COLORS, PRELIQUIDACION_STATUS_LABELS, SIGNATURE_LINK_STATUS_LABELS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import {
@@ -53,11 +53,12 @@ interface PreliquidacionPanelProps {
   activePreliquidacion?: Preliquidacion | null;
   canPreliquidate: boolean;
   canSendLink: boolean;
+  showTechnicalErrors?: boolean;
   onRefresh: () => void;
   onMessage: (msg: string) => void;
 }
 
-const CATEGORY_ORDER = ["PERMANENCIA", "MENSUALIDAD", "EQUIPO", "TV", "OTRO", "CREDITO"];
+const CATEGORY_ORDER = ["PERMANENCIA", "MENSUALIDAD", "EQUIPO", "DANOS", "TV", "OTRO", "CREDITO"];
 
 export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
   const [active, setActive] = useState<Preliquidacion | null>(props.activePreliquidacion ?? null);
@@ -65,6 +66,7 @@ export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
   const [linkUrl, setLinkUrl] = useState("");
   const [whatsappUrl, setWhatsappUrl] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   const approved =
     active?.status === "APROBADA" ||
@@ -89,51 +91,94 @@ export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
     setActive(props.activePreliquidacion ?? null);
   }, [props.activePreliquidacion]);
 
+  const loadPreliquidacion = useCallback(async () => {
+    setFetchError(null);
+    const r = await fetch(`/api/cancellations/${props.cancellationId}/preliquidacion`);
+    if (!r.ok) {
+      const err = await r.json().catch(() => ({ error: `Error ${r.status}` }));
+      const msg =
+        (err as { error?: string }).error ?? "No se pudo cargar la preliquidación. Intente nuevamente.";
+      setFetchError(msg);
+      throw new Error(msg);
+    }
+    const data = await r.json();
+    if (data.autoGenerateError) {
+      setFetchError(data.autoGenerateError);
+    }
+    if (data?.active) setActive(data.active);
+    else if (data?.versions?.length) setActive(data.versions[0]);
+    if (data?.versions) setVersions(data.versions);
+    return data.active as Preliquidacion | null;
+  }, [props.cancellationId]);
+
   useEffect(() => {
-    fetch(`/api/cancellations/${props.cancellationId}/preliquidacion`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((data) => {
-        if (data?.active) setActive(data.active);
-        else if (data?.versions?.length) setActive(data.versions[0]);
-        if (data?.versions) setVersions(data.versions);
-      })
-      .catch(() => null);
-  }, [props.cancellationId, props.activePreliquidacion]);
+    loadPreliquidacion().catch((e) => {
+      setFetchError(e instanceof Error ? e.message : "No se pudo cargar la preliquidación");
+    });
+  }, [loadPreliquidacion, props.activePreliquidacion]);
 
   async function generateInitial() {
     setLoading(true);
-    const r = await fetch(`/api/cancellations/${props.cancellationId}/preliquidacion`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "generate" }),
-    });
-    const data = await r.json();
-    setLoading(false);
-    if (!r.ok) {
-      props.onMessage(data.error ?? "Error al generar preliquidación");
-      return;
+    setFetchError(null);
+    try {
+      const r = await fetch(`/api/cancellations/${props.cancellationId}/preliquidacion`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "generate" }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        const friendly =
+          data.error ??
+          "No fue posible generar la preliquidación. Intente nuevamente.";
+        setFetchError(friendly);
+        props.onMessage(friendly);
+        return;
+      }
+      const loaded = await loadPreliquidacion();
+      if (!loaded && data?.id) {
+        setActive(data);
+      }
+      props.onMessage(`Preliquidación V${data.version ?? loaded?.version ?? 1} generada correctamente.`);
+      props.onRefresh();
+    } catch (e) {
+      const msg =
+        e instanceof Error
+          ? e.message
+          : "No fue posible generar la preliquidación. Intente nuevamente.";
+      setFetchError(msg);
+      props.onMessage(msg);
+    } finally {
+      setLoading(false);
     }
-    setActive(data);
-    props.onMessage(`Preliquidación V${data.version} generada`);
-    props.onRefresh();
   }
 
   async function regenerate() {
     setLoading(true);
-    const r = await fetch(`/api/cancellations/${props.cancellationId}/preliquidacion`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ action: "regenerate" }),
-    });
-    const data = await r.json();
-    setLoading(false);
-    if (!r.ok) {
-      props.onMessage(data.error ?? "Error al regenerar");
-      return;
+    setFetchError(null);
+    try {
+      const r = await fetch(`/api/cancellations/${props.cancellationId}/preliquidacion`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "regenerate" }),
+      });
+      const data = await r.json();
+      if (!r.ok) {
+        const msg = data.error ?? "No fue posible regenerar la preliquidación.";
+        setFetchError(msg);
+        props.onMessage(msg);
+        return;
+      }
+      await loadPreliquidacion();
+      props.onMessage(`Preliquidación V${data.version} generada`);
+      props.onRefresh();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Error al regenerar la preliquidación.";
+      setFetchError(msg);
+      props.onMessage(msg);
+    } finally {
+      setLoading(false);
     }
-    setActive(data);
-    props.onMessage(`Preliquidación V${data.version} generada`);
-    props.onRefresh();
   }
 
   async function generateLink() {
@@ -234,8 +279,18 @@ export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
         {!active && (
           <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
             <p className="text-sm text-amber-900 font-medium">
-              Aún no hay preliquidación generada para esta solicitud.
+              No existe una preliquidación para esta solicitud.
             </p>
+            {fetchError && (
+              <p className="text-xs text-red-700 rounded border border-red-200 bg-red-50 px-3 py-2">
+                {fetchError}
+                {props.showTechnicalErrors && fetchError !== "No autorizado" && (
+                  <span className="mt-1 block font-mono text-[10px] opacity-80">
+                    cancellationId={props.cancellationId}
+                  </span>
+                )}
+              </p>
+            )}
             {props.canPreliquidate ? (
               <button
                 type="button"
@@ -244,10 +299,12 @@ export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
                 className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
                 style={{ backgroundColor: COLORS.brand }}
               >
-                Generar preliquidación
+                {loading ? "Generando…" : "Generar preliquidación"}
               </button>
             ) : (
-              <p className="text-xs text-amber-800">Contacte a cobranzas para generar la preliquidación.</p>
+              <p className="text-xs text-amber-800">
+                No tiene permiso para generar preliquidaciones. Contacte a cobranzas.
+              </p>
             )}
           </div>
         )}
@@ -319,8 +376,9 @@ export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
             )}
 
             {approved && active.approvedAt && (
-              <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm text-teal-900">
-                Aprobada por el cliente el {new Date(active.approvedAt).toLocaleString("es-VE")}
+              <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm font-semibold text-teal-900">
+                ✓ PRELIQUIDACIÓN APROBADA —{" "}
+                {new Date(active.approvedAt).toLocaleString("es-VE")}
               </div>
             )}
 

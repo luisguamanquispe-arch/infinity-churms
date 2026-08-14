@@ -148,10 +148,12 @@ export function CancellationDetail({
   initial,
   permissions,
   permanenceSummary,
+  preliquidacionError,
 }: {
   initial: Detail;
   permissions: Permissions;
   permanenceSummary?: PermanenceSummary | null;
+  preliquidacionError?: string | null;
 }) {
   const router = useRouter();
   const [data, setData] = useState(initial);
@@ -309,7 +311,14 @@ export function CancellationDetail({
 
       <CancellationFlowStepper status={data.status} />
 
-      {permissions.canViewPreliquidacion && (
+      {preliquidacionError && (
+        <p className="rounded-lg border-2 border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-900">
+          {preliquidacionError} Use el botón &quot;Generar preliquidación&quot; abajo o corrija los datos del
+          cliente.
+        </p>
+      )}
+
+      {permissions.canViewPreliquidacion ? (
         <PreliquidacionPanel
           cancellationId={data.id}
           status={data.status}
@@ -326,9 +335,21 @@ export function CancellationDetail({
           activePreliquidacion={data.activePreliquidacion}
           canPreliquidate={permissions.preliquidateEdit || permissions.preliquidate}
           canSendLink={permissions.preliquidateSend}
+          showTechnicalErrors={permissions.edit || permissions.preliquidate}
           onRefresh={refresh}
           onMessage={setMsg}
         />
+      ) : (
+        <section
+          id="preliquidacion"
+          className="scroll-mt-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-5"
+        >
+          <h2 className="text-lg font-bold text-[#0B1F3A]">PRELIQUIDACIÓN DE BAJA</h2>
+          <p className="mt-2 text-sm text-amber-900">
+            Sin permisos para visualizar la preliquidación. Se requiere el permiso{" "}
+            <strong>cancellations:list</strong>.
+          </p>
+        </section>
       )}
 
       {!preliqApproved && !closed && (

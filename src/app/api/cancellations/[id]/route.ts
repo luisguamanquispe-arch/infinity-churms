@@ -14,6 +14,7 @@ import { assertPreliquidacionApproved } from "@/lib/preliquidacion-guards";
 import { assertActaSigned, recordPresencialActaSignature } from "@/lib/services/cancellation-acta-remote-signature";
 import type { CancellationReason, CancellationStatus } from "@prisma/client";
 import { getClientIp } from "@/lib/request-ip";
+import { serializeCancellationForClient } from "@/lib/serialize-cancellation";
 
 const FLOW: Partial<Record<CancellationStatus, CancellationStatus>> = {
   BAJA_AUTORIZADA: "PENDIENTE_DE_PAGO",
@@ -31,7 +32,7 @@ export async function GET(
     const { id } = await params;
     const row = await getCancellation(id);
     if (!row) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-    return NextResponse.json(row);
+    return NextResponse.json(serializeCancellationForClient(row));
   } catch {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

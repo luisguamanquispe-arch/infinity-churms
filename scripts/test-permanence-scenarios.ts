@@ -125,6 +125,36 @@ const scenarios: Scenario[] = [
     expectCanCalculate: true,
     expectMonths: 8,
   },
+  {
+    name: "PRUEBA 8 — Cambio de plan: permanencia desde nuevo contrato",
+    customer: {
+      serviceStartDate: "2020-01-10",
+      originTechnology: "FIBRA",
+      currentTechnology: "FIBRA",
+      fiberInstallDate: "2020-01-10",
+      contractPermanenceStart: "2025-06-01",
+      contractPermanenceEnd: "2026-12-01",
+    },
+    requestDate: "2026-08-10",
+    expectPending: true,
+    expectCanCalculate: true,
+    expectMonths: 14,
+  },
+  {
+    name: "PRUEBA 9 — Renovación: permanencia desde fecha renovada",
+    customer: {
+      serviceStartDate: "2018-03-01",
+      originTechnology: "FIBRA",
+      currentTechnology: "FIBRA",
+      fiberInstallDate: "2018-03-01",
+      contractPermanenceStart: "2025-01-15",
+      contractPermanenceEnd: "2026-07-15",
+    },
+    requestDate: "2026-08-10",
+    expectPending: false,
+    expectCanCalculate: true,
+    expectMonths: 18,
+  },
 ];
 
 let passed = 0;

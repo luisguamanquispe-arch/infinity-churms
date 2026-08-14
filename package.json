@@ -21,6 +21,7 @@
     "db:studio": "prisma studio",
     "docs:manual-cobranza": "tsx scripts/generate-manual-cobranza.ts",
     "test:permanence": "tsx scripts/test-permanence-scenarios.ts",
+    "test:preliquidacion": "tsx scripts/test-preliquidacion-flow.ts",
     "test:baja-paths": "tsx scripts/test-baja-client-path.ts"
   },
   "engines": {

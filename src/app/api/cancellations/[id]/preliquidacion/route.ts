@@ -13,6 +13,7 @@ import {
 import { generatePreliquidacionPdf } from "@/lib/pdf-preliquidacion";
 import { REASON_LABELS } from "@/lib/constants";
 import { getClientIp } from "@/lib/request-ip";
+import { serializePreliquidacion } from "@/lib/serialize-preliquidacion";
 
 export async function GET(
   _request: NextRequest,
@@ -62,18 +63,30 @@ export async function GET(
 
     const versions = await listPreliquidaciones(id);
     let active = await getActivePreliquidacion(id);
+    let autoGenerateError: string | null = null;
 
     if (!active && hasPermission(session.role, "cancellations:preliquidate")) {
       try {
         await ensureActivePreliquidacion(id, session.userId);
         active = await getActivePreliquidacion(id);
-      } catch {
-        // Sin permiso o error: devolver lo que haya en historial.
+      } catch (e) {
+        autoGenerateError =
+          e instanceof Error
+            ? e.message === "PERMANENCE_INCOMPLETE"
+              ? "Falta información de permanencia del cliente."
+              : e.message
+            : "Error al generar preliquidación automática";
+        console.error("GET preliquidacion auto-generate:", e);
       }
     }
 
-    return NextResponse.json({ active, versions });
-  } catch {
+    return NextResponse.json({
+      active: serializePreliquidacion(active),
+      versions: versions.map((v) => serializePreliquidacion(v)),
+      autoGenerateError,
+    });
+  } catch (e) {
+    console.error("GET /api/cancellations/[id]/preliquidacion", e);
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 }
@@ -97,7 +110,7 @@ export async function POST(
         detail: `V${preliq.version}`,
         ipAddress: getClientIp(request),
       });
-      return NextResponse.json(preliq);
+      return NextResponse.json(serializePreliquidacion(preliq));
     }
 
     if (body.action === "regenerate") {
@@ -110,7 +123,7 @@ export async function POST(
         detail: `V${preliq.version}`,
         ipAddress: getClientIp(request),
       });
-      return NextResponse.json(preliq);
+      return NextResponse.json(serializePreliquidacion(preliq));
     }
 
     return NextResponse.json({ error: "Acción inválida" }, { status: 400 });
@@ -130,6 +143,10 @@ export async function POST(
     if (e instanceof Error && e.message === "PERMANENCE_INCOMPLETE") {
       return NextResponse.json({ error: "Falta información de permanencia del cliente." }, { status: 400 });
     }
-    return NextResponse.json({ error: "Error" }, { status: 500 });
+    console.error("POST /api/cancellations/[id]/preliquidacion", e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Error al generar preliquidación" },
+      { status: 500 }
+    );
   }
 }

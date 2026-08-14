@@ -912,6 +912,14 @@ async function main() {
 
   // --- Preliquidación obligatoria de bajas ---
   await run(`
+    CREATE TABLE IF NOT EXISTS "DocumentSequence" (
+      "key" TEXT NOT NULL,
+      "value" INTEGER NOT NULL DEFAULT 0,
+      CONSTRAINT "DocumentSequence_pkey" PRIMARY KEY ("key")
+    );
+  `);
+
+  await run(`
     DO $$ BEGIN
       IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'PreliquidacionStatus') THEN
         CREATE TYPE "PreliquidacionStatus" AS ENUM (
@@ -1201,6 +1209,19 @@ async function main() {
           FOREIGN KEY ("generatedById") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
       END IF;
     END $$;
+  `);
+
+  await run(`
+    UPDATE "Cancellation" c
+    SET "activePreliquidacionId" = latest."id"
+    FROM (
+      SELECT DISTINCT ON ("cancellationId") "id", "cancellationId"
+      FROM "CancellationPreliquidacion"
+      WHERE "status" <> 'SUPERSEDED'
+      ORDER BY "cancellationId", "version" DESC
+    ) latest
+    WHERE c."id" = latest."cancellationId"
+      AND c."activePreliquidacionId" IS NULL;
   `);
 
   console.log("Pre-deploy migrations OK");
