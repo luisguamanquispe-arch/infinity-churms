@@ -141,11 +141,14 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    await initEquipmentChecklist(cancellation.id, customerId);
-
-    await recalculateCancellation(cancellation.id);
-
-    await createInitialPreliquidacion(cancellation.id, session.userId);
+    try {
+      await initEquipmentChecklist(cancellation.id, customerId);
+      await recalculateCancellation(cancellation.id);
+      await createInitialPreliquidacion(cancellation.id, session.userId);
+    } catch (setupError) {
+      await prisma.cancellation.delete({ where: { id: cancellation.id } }).catch(() => undefined);
+      throw setupError;
+    }
 
     await audit({
       userId: session.userId,
@@ -172,6 +175,19 @@ export async function POST(request: NextRequest) {
     if (e instanceof Error && e.message === "FORBIDDEN") {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }
-    return NextResponse.json({ error: "Error al crear" }, { status: 500 });
+    if (e instanceof Error && e.message === "PERMANENCE_INCOMPLETE") {
+      return NextResponse.json(
+        { error: "No se pudo calcular la preliquidación: falta información de permanencia del cliente." },
+        { status: 400 }
+      );
+    }
+    if (e instanceof Error && e.message === "NOT_FOUND") {
+      return NextResponse.json({ error: "Cliente o baja no encontrada" }, { status: 404 });
+    }
+    console.error("POST /api/cancellations", e);
+    return NextResponse.json(
+      { error: e instanceof Error ? e.message : "Error al crear la baja" },
+      { status: 500 }
+    );
   }
 }

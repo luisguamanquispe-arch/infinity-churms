@@ -2,11 +2,13 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission, requireSession } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { getCancellation } from "@/lib/services/cancellations";
+import { hasPermission } from "@/lib/permissions";
 import {
   generatePreliquidacion,
   getActivePreliquidacion,
   listPreliquidaciones,
   regeneratePreliquidacion,
+  ensureActivePreliquidacion,
 } from "@/lib/services/preliquidaciones";
 import { generatePreliquidacionPdf } from "@/lib/pdf-preliquidacion";
 import { REASON_LABELS } from "@/lib/constants";
@@ -17,15 +19,14 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireSession();
+    const session = await requireSession();
     const { id } = await params;
     const format = _request.nextUrl.searchParams.get("format");
 
     if (format === "pdf") {
-      const session = await requireSession();
       const row = await getCancellation(id);
       if (!row) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-      const active = row.activePreliquidacion;
+      const active = row.activePreliquidacion ?? (await getActivePreliquidacion(id));
       const docNumber = active?.docNumber ?? `PRE-${row.customer.contract}`;
 
       const pdf = generatePreliquidacionPdf({
@@ -60,7 +61,17 @@ export async function GET(
     }
 
     const versions = await listPreliquidaciones(id);
-    const active = await getActivePreliquidacion(id);
+    let active = await getActivePreliquidacion(id);
+
+    if (!active && hasPermission(session.role, "cancellations:preliquidate")) {
+      try {
+        await ensureActivePreliquidacion(id, session.userId);
+        active = await getActivePreliquidacion(id);
+      } catch {
+        // Sin permiso o error: devolver lo que haya en historial.
+      }
+    }
+
     return NextResponse.json({ active, versions });
   } catch {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });

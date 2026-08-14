@@ -20,6 +20,34 @@ export interface PreliquidacionLineInput {
 
 const LOCKED_STATUSES: PreliquidacionStatus[] = ["ENVIADA", "PENDIENTE_APROBACION", "APROBADA"];
 
+const ACTIVE_PRELIQUIDACION_INCLUDE = {
+  lineItems: { orderBy: { sortOrder: "asc" as const } },
+  createdBy: { select: { name: true } },
+  approvalTokens: {
+    where: { isActive: true },
+    orderBy: { generatedAt: "desc" as const },
+    take: 1,
+  },
+};
+
+async function findLatestWorkingPreliquidacion(cancellationId: string) {
+  return prisma.cancellationPreliquidacion.findFirst({
+    where: {
+      cancellationId,
+      status: { not: "SUPERSEDED" },
+    },
+    orderBy: { version: "desc" },
+    include: ACTIVE_PRELIQUIDACION_INCLUDE,
+  });
+}
+
+async function linkActivePreliquidacion(cancellationId: string, preliquidacionId: string) {
+  await prisma.cancellation.update({
+    where: { id: cancellationId },
+    data: { activePreliquidacionId: preliquidacionId },
+  });
+}
+
 export async function listPreliquidaciones(cancellationId: string) {
   return prisma.cancellationPreliquidacion.findMany({
     where: { cancellationId },
@@ -49,19 +77,29 @@ export async function getActivePreliquidacion(cancellationId: string) {
     where: { id: cancellationId },
     include: {
       activePreliquidacion: {
-        include: {
-          lineItems: { orderBy: { sortOrder: "asc" } },
-          createdBy: { select: { name: true } },
-          approvalTokens: {
-            where: { isActive: true },
-            orderBy: { generatedAt: "desc" },
-            take: 1,
-          },
-        },
+        include: ACTIVE_PRELIQUIDACION_INCLUDE,
       },
     },
   });
-  return cancellation?.activePreliquidacion ?? null;
+
+  if (cancellation?.activePreliquidacion) {
+    return cancellation.activePreliquidacion;
+  }
+
+  const latest = await findLatestWorkingPreliquidacion(cancellationId);
+  if (!latest) return null;
+
+  if (!cancellation?.activePreliquidacionId) {
+    await linkActivePreliquidacion(cancellationId, latest.id);
+  }
+
+  return latest;
+}
+
+export async function ensureActivePreliquidacion(cancellationId: string, userId: string) {
+  const active = await getActivePreliquidacion(cancellationId);
+  if (active) return active;
+  return createInitialPreliquidacion(cancellationId, userId);
 }
 
 async function buildLineItems(cancellationId: string): Promise<PreliquidacionLineInput[]> {
@@ -278,13 +316,8 @@ export async function generatePreliquidacion(
 }
 
 export async function createInitialPreliquidacion(cancellationId: string, userId: string) {
-  const count = await prisma.cancellationPreliquidacion.count({ where: { cancellationId } });
-  if (count > 0) return getActivePreliquidacion(cancellationId);
-
-  await prisma.cancellation.update({
-    where: { id: cancellationId },
-    data: { status: "PRELIQUIDACION_EN_PROCESO" },
-  });
+  const active = await getActivePreliquidacion(cancellationId);
+  if (active) return active;
 
   return generatePreliquidacion(cancellationId, userId);
 }

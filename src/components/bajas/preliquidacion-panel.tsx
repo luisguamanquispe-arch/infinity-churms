@@ -60,16 +60,33 @@ export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
   }, [props.activePreliquidacion]);
 
   useEffect(() => {
-    if (props.canPreliquidate || props.canSendLink) {
-      fetch(`/api/cancellations/${props.cancellationId}/preliquidacion`)
-        .then((r) => (r.ok ? r.json() : null))
-        .then((data) => {
-          if (data?.active) setActive(data.active);
-          if (data?.versions) setVersions(data.versions);
-        })
-        .catch(() => null);
+    fetch(`/api/cancellations/${props.cancellationId}/preliquidacion`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.active) setActive(data.active);
+        else if (data?.versions?.length) setActive(data.versions[0]);
+        if (data?.versions) setVersions(data.versions);
+      })
+      .catch(() => null);
+  }, [props.cancellationId, props.activePreliquidacion]);
+
+  async function generateInitial() {
+    setLoading(true);
+    const r = await fetch(`/api/cancellations/${props.cancellationId}/preliquidacion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "generate" }),
+    });
+    const data = await r.json();
+    setLoading(false);
+    if (!r.ok) {
+      props.onMessage(data.error ?? "Error al generar preliquidación");
+      return;
     }
-  }, [props.cancellationId, props.canPreliquidate, props.canSendLink]);
+    setActive(data);
+    props.onMessage(`Preliquidación V${data.version} generada`);
+    props.onRefresh();
+  }
 
   async function regenerate() {
     setLoading(true);
@@ -156,7 +173,22 @@ export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
       </div>
 
       {!active && (
-        <p className="mt-4 text-sm text-amber-700">No hay preliquidación activa. Se generará al crear la baja.</p>
+        <div className="mt-4 space-y-3">
+          <p className="text-sm text-amber-700">
+            No hay preliquidación activa para esta baja.
+          </p>
+          {props.canPreliquidate && (
+            <button
+              type="button"
+              disabled={loading}
+              onClick={generateInitial}
+              className="rounded-lg px-4 py-2 text-sm font-semibold text-white disabled:opacity-50"
+              style={{ backgroundColor: COLORS.brand }}
+            >
+              Generar preliquidación
+            </button>
+          )}
+        </div>
       )}
 
       {active && (

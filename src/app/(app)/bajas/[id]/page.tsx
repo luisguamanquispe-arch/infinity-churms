@@ -4,6 +4,9 @@ import { getCancellationPermissions } from "@/lib/cancellation-permissions";
 import { getSession } from "@/lib/auth";
 import { notFound } from "next/navigation";
 import { serializePermanenceSummary } from "@/lib/permanence";
+import { ensureActivePreliquidacion } from "@/lib/services/preliquidaciones";
+import { isPreApprovalStatus } from "@/lib/preliquidacion-guards";
+import { hasPermission } from "@/lib/permissions";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -14,8 +17,21 @@ export default async function GestionarBajaPage({ params }: Props) {
   const session = await getSession();
   if (!session) notFound();
 
-  const row = await getCancellation(id);
+  let row = await getCancellation(id);
   if (!row) notFound();
+
+  if (
+    isPreApprovalStatus(row.status) &&
+    !row.activePreliquidacion &&
+    hasPermission(session.role, "cancellations:preliquidate")
+  ) {
+    try {
+      await ensureActivePreliquidacion(id, session.userId);
+      row = (await getCancellation(id)) ?? row;
+    } catch {
+      // Si falla la auto-generación, la UI permite generar manualmente.
+    }
+  }
 
   const { withdrawalRequestFileData: _archivedPdf, ...rowSafe } = row;
 
