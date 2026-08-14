@@ -38,6 +38,7 @@ export async function GET(request: NextRequest) {
       status: sp.get("status") ?? undefined,
       dateFrom: sp.get("dateFrom") ?? undefined,
       dateTo: sp.get("dateTo") ?? undefined,
+      q: sp.get("q") ?? undefined,
     });
     return NextResponse.json(rows);
   } catch {

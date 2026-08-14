@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -13,6 +13,10 @@ import {
 import { formatUsd } from "@/lib/liquidation";
 import { PermanenceSummaryPanel } from "@/components/bajas/permanence-summary-panel";
 import { FiberMigrationForm } from "@/components/bajas/fiber-migration-form";
+import {
+  CustomerSearchPicker,
+  type CustomerSearchResult,
+} from "@/components/clientes/customer-search-input";
 import type { PermanenceSummary } from "@/lib/permanence";
 import {
   BAJA_CLIENT_PATH_OPTIONS,
@@ -64,11 +68,25 @@ interface Customer {
 }
 
 export default function NuevaBajaPage() {
+  return (
+    <Suspense fallback={<NuevaBajaLoading />}>
+      <NuevaBajaForm />
+    </Suspense>
+  );
+}
+
+function NuevaBajaLoading() {
+  return (
+    <div className="mx-auto max-w-2xl py-12 text-center text-sm text-slate-500">
+      Cargando formulario de baja…
+    </div>
+  );
+}
+
+function NuevaBajaForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const prefillCustomerId = searchParams.get("customerId");
-  const [q, setQ] = useState("");
-  const [customers, setCustomers] = useState<Customer[]>([]);
   const [selected, setSelected] = useState<Customer | null>(null);
   const [clientPath, setClientPath] = useState<BajaClientPath | null>(null);
   const [requestDate, setRequestDate] = useState(new Date().toISOString().slice(0, 10));
@@ -80,13 +98,6 @@ export default function NuevaBajaPage() {
   const [pdfMsg, setPdfMsg] = useState("");
 
   useEffect(() => {
-    if (q.length < 2) return;
-    fetch(`/api/customers?q=${encodeURIComponent(q)}`)
-      .then((r) => r.json())
-      .then(setCustomers);
-  }, [q]);
-
-  useEffect(() => {
     if (!prefillCustomerId) return;
     fetch(`/api/customers/${prefillCustomerId}`)
       .then((r) => (r.ok ? r.json() : null))
@@ -94,10 +105,16 @@ export default function NuevaBajaPage() {
         if (c) {
           setSelected(c);
           setClientPath(inferBajaClientPath(c));
-          setQ(c.contract);
         }
       });
   }, [prefillCustomerId]);
+
+  async function pickCustomer(c: CustomerSearchResult) {
+    const r = await fetch(`/api/customers/${c.id}`);
+    if (!r.ok) return;
+    const full: Customer = await r.json();
+    selectCustomer(full);
+  }
 
   useEffect(() => {
     if (!selected) {
@@ -221,32 +238,11 @@ export default function NuevaBajaPage() {
 
       <section className="rounded-xl border bg-white p-5 shadow-sm">
         <label className="text-sm font-medium">Buscar cliente</label>
-        <input
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Contrato, nombre o cédula..."
-          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+        <CustomerSearchPicker
+          className="mt-2"
+          selectedId={selected?.id}
+          onSelect={pickCustomer}
         />
-        {customers.length > 0 && (
-          <ul className="mt-2 max-h-40 overflow-auto rounded border">
-            {customers.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => selectCustomer(c)}
-                  className={`w-full px-3 py-2 text-left text-sm hover:bg-slate-50 ${
-                    c.hasCancellation ? "opacity-60" : ""
-                  }`}
-                >
-                  {c.contract} — {c.name}
-                  {c.hasCancellation && (
-                    <span className="ml-2 text-xs text-red-600">(ya tiene baja)</span>
-                  )}
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
       </section>
 
       {selected && (

@@ -1,40 +1,28 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission, requireSession } from "@/lib/auth";
-import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { formatCustomerPayload, validateCustomerInput } from "@/lib/customer-form";
+import { searchCustomers } from "@/lib/services/customer-search";
+import { prisma } from "@/lib/prisma";
 import type { EquipmentType } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
   try {
     await requireSession();
-    const q = request.nextUrl.searchParams.get("q")?.trim();
-    const all = request.nextUrl.searchParams.get("all") === "1";
-    const customers = await prisma.customer.findMany({
-      where: q
-        ? {
-            OR: [
-              { name: { contains: q, mode: "insensitive" } },
-              { contract: { contains: q, mode: "insensitive" } },
-              { cedula: { contains: q, mode: "insensitive" } },
-            ],
-          }
-        : {},
-      include: {
-        equipment: true,
-        cancellations: { select: { id: true, status: true } },
-      },
-      orderBy: { name: "asc" },
-      take: all ? 100 : 20,
+    const sp = request.nextUrl.searchParams;
+    const q = sp.get("q")?.trim();
+    const all = sp.get("all") === "1";
+    const morosoOnly = sp.get("morosoOnly") === "1";
+    const zone = sp.get("zone")?.trim() || undefined;
+
+    const customers = await searchCustomers({
+      q: q || undefined,
+      morosoOnly,
+      zone,
+      limit: all ? 100 : q ? 25 : 100,
     });
 
-    return NextResponse.json(
-      customers.map((c) => ({
-        ...c,
-        hasCancellation: c.cancellations.length > 0,
-        cancellations: undefined,
-      }))
-    );
+    return NextResponse.json(customers);
   } catch {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

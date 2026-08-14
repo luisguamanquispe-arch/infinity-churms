@@ -1,21 +1,10 @@
 import Link from "next/link";
 import { listCancellations } from "@/lib/services/cancellations";
-import { STATUS_LABELS, REASON_LABELS, COLORS } from "@/lib/constants";
-import { formatUsd } from "@/lib/liquidation";
+import { COLORS } from "@/lib/constants";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { isDatabaseConnected } from "@/lib/db-status";
-import {
-  getPreliquidacionListStatus,
-  PRELIQUIDACION_LIST_LABELS,
-} from "@/lib/preliquidacion-display";
-
-const PRELIQ_BADGE: Record<string, string> = {
-  PENDIENTE: "bg-amber-100 text-amber-900",
-  ENVIADA: "bg-blue-100 text-blue-900",
-  APROBADA: "bg-teal-100 text-teal-900",
-  RECHAZADA: "bg-red-100 text-red-900",
-};
+import { BajasListPanel } from "@/components/bajas/bajas-list-panel";
 
 export default async function BajasPage() {
   const session = await getSession();
@@ -32,6 +21,16 @@ export default async function BajasPage() {
       loadError = true;
     }
   }
+
+  const initialRows = rows.map((r) => ({
+    id: r.id,
+    requestDate: r.requestDate.toISOString(),
+    reason: r.reason,
+    status: r.status,
+    totalAmount: String(r.totalAmount),
+    customer: r.customer,
+    activePreliquidacion: r.activePreliquidacion,
+  }));
 
   return (
     <div className="space-y-6">
@@ -68,93 +67,12 @@ export default async function BajasPage() {
         </p>
       )}
 
-      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
-        <table className="w-full min-w-[720px] text-sm">
-          <thead className="bg-slate-50 text-left">
-            <tr>
-              <th className="px-4 py-3">Cliente</th>
-              <th className="px-4 py-3">Fecha</th>
-              <th className="px-4 py-3">Motivo</th>
-              <th className="px-4 py-3">Preliquidación</th>
-              <th className="px-4 py-3">Total</th>
-              <th className="px-4 py-3">Estado</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length === 0 ? (
-              <tr>
-                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
-                  {dbOk && !loadError ? (
-                    <span>
-                      No hay solicitudes de baja registradas.
-                      <br />
-                      <span className="mt-2 inline-block text-sm">
-                        Primero cree un cliente en{" "}
-                        <Link href="/clientes" className="font-semibold text-teal-600 hover:underline">
-                          Clientes
-                        </Link>
-                        {canCreate && (
-                          <>
-                            {" "}
-                            y luego pulse{" "}
-                            <Link href="/bajas/nueva" className="font-semibold text-teal-600 hover:underline">
-                              Iniciar baja
-                            </Link>
-                          </>
-                        )}
-                        .
-                      </span>
-                    </span>
-                  ) : (
-                    "No se pudieron cargar las solicitudes."
-                  )}
-                </td>
-              </tr>
-            ) : (
-              rows.map((r) => {
-                const preliqKey = getPreliquidacionListStatus(
-                  r.status,
-                  r.activePreliquidacion?.status
-                );
-                return (
-                  <tr key={r.id} className="border-t hover:bg-slate-50">
-                    <td className="px-4 py-3">
-                      <p className="font-medium">{r.customer.name}</p>
-                      <p className="text-xs text-slate-500">{r.customer.contract}</p>
-                    </td>
-                    <td className="px-4 py-3">{r.requestDate.toLocaleDateString("es-VE")}</td>
-                    <td className="px-4 py-3 text-xs">
-                      {REASON_LABELS[r.reason] ?? r.reason}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRELIQ_BADGE[preliqKey]}`}
-                      >
-                        {PRELIQUIDACION_LIST_LABELS[preliqKey]}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">{formatUsd(Number(r.totalAmount))}</td>
-                    <td className="px-4 py-3">
-                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">
-                        {STATUS_LABELS[r.status] ?? r.status}
-                      </span>
-                    </td>
-                    <td className="px-4 py-3">
-                      <Link
-                        href={`/bajas/${r.id}#preliquidacion`}
-                        className="text-xs font-semibold text-teal-600 hover:underline"
-                      >
-                        Ver preliquidación →
-                      </Link>
-                    </td>
-                  </tr>
-                );
-              })
-            )}
-          </tbody>
-        </table>
-      </div>
+      <BajasListPanel
+        canCreate={canCreate}
+        dbOk={dbOk}
+        initialRows={initialRows}
+        loadError={loadError}
+      />
     </div>
   );
 }

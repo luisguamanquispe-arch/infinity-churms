@@ -6,6 +6,7 @@ import { COLORS, CUSTOMER_ZONES, EQUIPMENT_TYPES, toUpperInput, HAS_STREAMS_SUPP
 import { normalizeCedula, validateEcuadorianCedula } from "@/lib/cedula";
 import { formatUsd } from "@/lib/liquidation";
 import { getOverdueDays, isPrelegalOverdue } from "@/lib/services/overdue";
+import { CustomerSearchInput } from "@/components/clientes/customer-search-input";
 
 interface Customer {
   id: string;
@@ -45,6 +46,8 @@ const emptyForm = {
 
 export default function ClientesPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [morosoOnly, setMorosoOnly] = useState(false);
   const [form, setForm] = useState(emptyForm);
   const [editingBalance, setEditingBalance] = useState<{ id: string; value: string } | null>(null);
   const [msg, setMsg] = useState("");
@@ -52,21 +55,30 @@ export default function ClientesPage() {
   const [cedulaError, setCedulaError] = useState("");
 
   async function load() {
-    const res = await fetch("/api/customers?all=1");
+    const params = new URLSearchParams();
+    if (searchQuery.trim()) params.set("q", searchQuery.trim());
+    if (morosoOnly) params.set("morosoOnly", "1");
+    if (!searchQuery.trim()) params.set("all", "1");
+    const res = await fetch(`/api/customers?${params.toString()}`);
     if (res.ok) setCustomers(await res.json());
   }
 
   useEffect(() => {
-    let active = true;
-    fetch("/api/customers?all=1")
-      .then((r) => (r.ok ? r.json() : []))
-      .then((data) => {
-        if (active) setCustomers(data);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
+    if (searchQuery.trim().length === 1) return;
+
+    const timer = window.setTimeout(() => {
+      const params = new URLSearchParams();
+      if (searchQuery.trim()) params.set("q", searchQuery.trim());
+      if (morosoOnly) params.set("morosoOnly", "1");
+      if (!searchQuery.trim()) params.set("all", "1");
+
+      fetch(`/api/customers?${params.toString()}`)
+        .then((r) => (r.ok ? r.json() : []))
+        .then((data) => setCustomers(Array.isArray(data) ? data : []));
+    }, searchQuery.trim() ? 300 : 0);
+
+    return () => window.clearTimeout(timer);
+  }, [searchQuery, morosoOnly]);
 
   function updateUpper<K extends keyof typeof form>(key: K, value: string) {
     setForm((prev) => ({ ...prev, [key]: toUpperInput(value) }));
@@ -153,6 +165,16 @@ export default function ClientesPage() {
       </header>
 
       {msg && <p className="rounded-lg bg-teal-50 px-4 py-2 text-sm text-teal-800">{msg}</p>}
+
+      <CustomerSearchInput
+        value={searchQuery}
+        onChange={setSearchQuery}
+        autoSearch={false}
+        morosoOnly={morosoOnly}
+        onMorosoOnlyChange={setMorosoOnly}
+        showMorosoFilter
+        className="max-w-2xl"
+      />
 
       {showForm && (
         <form onSubmit={createCustomer} className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
@@ -309,9 +331,14 @@ export default function ClientesPage() {
             {customers.length === 0 ? (
               <tr>
                 <td colSpan={9} className="px-4 py-8 text-center text-slate-500">
-                  No hay clientes registrados. Cree uno con <strong>+ Nuevo cliente</strong> y luego use{" "}
-                  <strong className="text-teal-700">Gestionar →</strong> para la pestaña{" "}
-                  <strong className="text-teal-700">Gestión de Cobranza</strong>.
+                  {searchQuery.trim().length >= 2 ? (
+                    <>No hay clientes que coincidan con «{searchQuery.trim()}».</>
+                  ) : (
+                    <>
+                      No hay clientes registrados. Cree uno con <strong>+ Nuevo cliente</strong> y luego use{" "}
+                      <strong className="text-teal-700">Cobranza →</strong> para gestionar mora antes de enviar a baja.
+                    </>
+                  )}
                 </td>
               </tr>
             ) : (

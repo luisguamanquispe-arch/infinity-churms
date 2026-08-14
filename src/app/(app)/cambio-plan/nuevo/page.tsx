@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { Suspense, useEffect, useState, useMemo } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { addMonths } from "date-fns";
 import { COLORS, OPERATION_TYPE_LABELS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
+import { CustomerSearchPicker } from "@/components/clientes/customer-search-input";
 
 interface ServicePlan {
   id: string;
@@ -42,6 +43,14 @@ type OperationType = "CAMBIO_PLAN" | "RENOVACION" | "RENOVACION_CAMBIO_PLAN";
 type Step = "type" | "search" | "select" | "confirm";
 
 export default function NuevaGestionContractualPage() {
+  return (
+    <Suspense fallback={<p className="py-12 text-center text-sm text-slate-500">Cargando…</p>}>
+      <NuevaGestionContractualForm />
+    </Suspense>
+  );
+}
+
+function NuevaGestionContractualForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedId = searchParams.get("customerId");
@@ -51,8 +60,6 @@ export default function NuevaGestionContractualPage() {
     preselectedOp && OPERATION_TYPE_LABELS[preselectedOp] ? preselectedOp : "CAMBIO_PLAN"
   );
   const [step, setStep] = useState<Step>(preselectedId ? "search" : "type");
-  const [query, setQuery] = useState("");
-  const [customers, setCustomers] = useState<{ id: string; contract: string; name: string; cedula: string }[]>([]);
   const [ctx, setCtx] = useState<PlanContext | null>(null);
   const [plans, setPlans] = useState<ServicePlan[]>([]);
   const [selectedPlanId, setSelectedPlanId] = useState("");
@@ -85,13 +92,6 @@ export default function NuevaGestionContractualPage() {
       setOperationType(preselectedOp);
     }
   }, [preselectedOp]);
-
-  async function searchCustomers() {
-    if (!query.trim()) return;
-    const r = await fetch(`/api/customers?q=${encodeURIComponent(query.trim())}`);
-    const data = await r.json();
-    setCustomers(Array.isArray(data) ? data : data.items ?? []);
-  }
 
   async function loadCustomer(id: string) {
     setError("");
@@ -241,37 +241,7 @@ export default function NuevaGestionContractualPage() {
       {step === "search" && !ctx && (
         <section className="rounded-xl border bg-white p-5 space-y-4">
           <h2 className="font-semibold">Buscar cliente</h2>
-          <div className="flex gap-2">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && searchCustomers()}
-              placeholder="Contrato, cédula o nombre"
-              className="flex-1 rounded-lg border px-3 py-2 text-sm"
-            />
-            <button
-              type="button"
-              onClick={searchCustomers}
-              className="rounded-lg px-4 py-2 text-sm text-white"
-              style={{ backgroundColor: COLORS.brand }}
-            >
-              Buscar
-            </button>
-          </div>
-          <ul className="divide-y">
-            {customers.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  onClick={() => loadCustomer(c.id)}
-                  className="w-full px-2 py-3 text-left hover:bg-slate-50"
-                >
-                  <span className="font-medium">{c.name}</span>
-                  <span className="ml-2 text-sm text-slate-500">{c.contract} · {c.cedula}</span>
-                </button>
-              </li>
-            ))}
-          </ul>
+          <CustomerSearchPicker onSelect={(c) => loadCustomer(c.id)} />
         </section>
       )}
 

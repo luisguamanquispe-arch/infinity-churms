@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { buildCustomerSearchWhere } from "@/lib/services/customer-search";
 import { calculateLiquidation } from "@/lib/liquidation";
 import { buildPermanenceSummary, validatePermanenceForCancellation, calculatePermanenceFromStartDate } from "@/lib/permanence";
 import type { CancellationReason, CancellationStatus, EquipmentCondition, EquipmentType } from "@prisma/client";
@@ -112,9 +113,15 @@ export async function listCancellations(filters?: {
   status?: string;
   dateFrom?: string;
   dateTo?: string;
+  q?: string;
 }) {
+  const customerSearch = filters?.q?.trim()
+    ? { customer: buildCustomerSearchWhere(filters.q.trim()) }
+    : {};
+
   return prisma.cancellation.findMany({
     where: {
+      ...customerSearch,
       ...(filters?.status ? { status: filters.status as CancellationStatus } : {}),
       ...(filters?.dateFrom || filters?.dateTo
         ? {

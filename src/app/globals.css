@@ -9,6 +9,8 @@
 
 html {
   color-scheme: light;
+  background-color: #f8fafc;
+  min-height: 100%;
 }
 
 @keyframes app-spin {
