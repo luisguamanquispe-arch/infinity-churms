@@ -1,10 +1,11 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import {
-  APP_NAME,
   COLLECTION_MANAGEMENT_TYPES,
   COLLECTION_RESULTS,
+  COMPANY_NAME,
 } from "@/lib/constants";
+import { drawPdfBrandFooter, drawPdfBrandHeader } from "@/lib/pdf-branding";
 
 const NAVY = [11, 31, 58] as const;
 const BRAND = [0, 169, 181] as const;
@@ -12,12 +13,7 @@ const MARGIN = 14;
 const LINE = 5;
 
 function addFooter(doc: jsPDF, page: number, total: number) {
-  const w = doc.internal.pageSize.getWidth();
-  const h = doc.internal.pageSize.getHeight();
-  doc.setFontSize(8);
-  doc.setTextColor(120, 120, 120);
-  doc.text(`${APP_NAME} — Manual Gestión de Cobranza`, MARGIN, h - 8);
-  doc.text(`Página ${page} de ${total}`, w - MARGIN, h - 8, { align: "right" });
+  drawPdfBrandFooter(doc, `Manual Gestión de Cobranza · Página ${page} de ${total}`);
 }
 
 function writeParagraph(doc: jsPDF, text: string, y: number, maxWidth = 180) {
@@ -45,24 +41,18 @@ function writeSubheading(doc: jsPDF, text: string, y: number) {
 export function generateManualCobranzaPdf(): jsPDF {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
-  let y = 20;
+  let y = drawPdfBrandHeader(doc, {
+    title: "Manual de uso",
+    subtitle: "Gestión de Cobranza",
+    docRef: COMPANY_NAME,
+  });
 
-  doc.setFontSize(18);
-  doc.setTextColor(...NAVY);
-  doc.text("Manual de uso", pageWidth / 2, y, { align: "center" });
-  y += 10;
-  doc.setFontSize(14);
-  doc.setTextColor(...BRAND);
-  doc.text("Gestión de Cobranza", pageWidth / 2, y, { align: "center" });
-  y += 8;
   doc.setFontSize(9);
   doc.setTextColor(100, 100, 100);
-  doc.text(APP_NAME, pageWidth / 2, y, { align: "center" });
-  y += 5;
   doc.text(`Versión del manual: ${new Date().toLocaleDateString("es-VE")}`, pageWidth / 2, y, {
     align: "center",
   });
-  y += 14;
+  y += 10;
 
   y = writeHeading(doc, "1. Objetivo", y);
   y = writeParagraph(

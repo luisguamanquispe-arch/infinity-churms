@@ -2,7 +2,8 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { COLORS } from "@/lib/constants";
+import { APP_SHORT_NAME, COLORS } from "@/lib/constants";
+import { InfinityLogo } from "@/components/brand/infinity-logo";
 
 function safeRedirectPath(from: string | null) {
   if (!from || !from.startsWith("/") || from.startsWith("//")) return "/";
@@ -44,8 +45,10 @@ function LoginForm() {
       style={{ backgroundColor: "#f8fafc" }}
     >
       <form onSubmit={submit} className="w-full max-w-sm rounded-xl border bg-white p-8 shadow-sm">
-        <h1 className="text-xl font-bold text-[#0B1F3A]">Infinity — Gestión</h1>
-        <p className="mt-1 text-sm text-slate-500">Bajas, cobranzas y agentes</p>
+        <div className="mb-6 flex justify-center">
+          <InfinityLogo variant="compact" priority />
+        </div>
+        <p className="text-center text-sm font-medium text-[#0B1F3A]">{APP_SHORT_NAME}</p>
         {error && <p className="mt-4 text-sm text-red-600">{error}</p>}
         <div className="mt-6 space-y-4">
           <input

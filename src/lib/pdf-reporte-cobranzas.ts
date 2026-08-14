@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { APP_NAME } from "@/lib/constants";
+import { drawPdfBrandFooter, drawPdfBrandHeader } from "@/lib/pdf-branding";
 import { formatUsd } from "@/lib/liquidation";
 import type {
   CarteraReportRow,
@@ -35,17 +36,11 @@ export function generateCollectionReportPdf(report: CollectionReportResult) {
   const doc = new jsPDF({ orientation: "landscape" });
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 14;
-  let y = 16;
-
-  doc.setFontSize(14);
-  doc.setTextColor(11, 31, 58);
-  doc.text("Reporte personalizado — Gestión de Cobranzas", pageWidth / 2, y, { align: "center" });
-  y += 8;
-
-  doc.setFontSize(10);
-  doc.setTextColor(0, 169, 181);
-  doc.text(VIEW_TITLES[report.filters.view], pageWidth / 2, y, { align: "center" });
-  y += 8;
+  let y = drawPdfBrandHeader(doc, {
+    title: "Reporte personalizado — Gestión de Cobranzas",
+    subtitle: VIEW_TITLES[report.filters.view],
+    yStart: 10,
+  });
 
   doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
@@ -143,14 +138,7 @@ export function generateCollectionReportPdf(report: CollectionReportResult) {
     });
   }
 
-  doc.setFontSize(7);
-  doc.setTextColor(120, 120, 120);
-  doc.text(
-    `${report.rows.length} registro(s) · ${APP_NAME}`,
-    pageWidth / 2,
-    doc.internal.pageSize.getHeight() - 8,
-    { align: "center" }
-  );
+  drawPdfBrandFooter(doc, `${report.rows.length} registro(s) · ${APP_NAME}`);
 
   return doc;
 }

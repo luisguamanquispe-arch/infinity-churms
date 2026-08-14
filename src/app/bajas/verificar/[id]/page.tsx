@@ -1,6 +1,7 @@
 import { getCancellation } from "@/lib/services/cancellations";
 import { STATUS_LABELS, REASON_LABELS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
+import { PublicPageHeader } from "@/components/brand/public-page-header";
 import { notFound } from "next/navigation";
 
 interface Props {
@@ -21,14 +22,16 @@ export default async function VerificarBajaPage({ params }: Props) {
   const payment = row.payments[0];
 
   return (
-    <div className="mx-auto max-w-lg p-6">
-      <div className="rounded-xl border bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase text-teal-600">Verificación Infinity</p>
-        <h1 className="mt-2 text-xl font-bold">{row.customer.name}</h1>
-        <p className="text-sm text-slate-500">
-          Contrato {row.customer.contract} · {row.customer.cedula}
-        </p>
-        <p className="text-xs text-slate-500">{REASON_LABELS[row.reason] ?? row.reason}</p>
+    <div className="min-h-screen bg-slate-50">
+      <PublicPageHeader
+        title="Verificación de acta de baja"
+        subtitle={`${row.customer.name} · Contrato ${row.customer.contract}`}
+      />
+      <div className="mx-auto max-w-lg p-6">
+        <div className="rounded-xl border bg-white p-6 shadow-sm">
+          <p className="text-xs text-slate-500">
+            {REASON_LABELS[row.reason] ?? row.reason} · Cédula {row.customer.cedula}
+          </p>
 
         {row.actaPhysicalCode && (
           <div className="mt-4 rounded-lg border border-[#0B1F3A] bg-slate-50 px-4 py-3 text-center">
@@ -64,6 +67,7 @@ export default async function VerificarBajaPage({ params }: Props) {
             ))
           )}
         </ul>
+        </div>
       </div>
     </div>
   );

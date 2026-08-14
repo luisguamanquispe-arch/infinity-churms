@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { APP_NAME } from "@/lib/constants";
+import { drawPdfBrandFooter, drawPdfBrandHeader } from "@/lib/pdf-branding";
 import { formatUsd } from "@/lib/liquidation";
 import {
   PRELEGAL_NOTICE,
@@ -40,17 +41,10 @@ export function generatePrelegalNoticePdf(
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 18;
   const contentWidth = pageWidth - margin * 2;
-  let y = 22;
-
-  doc.setFontSize(14);
-  doc.setTextColor(11, 31, 58);
-  doc.text(PRELEGAL_NOTICE.title, pageWidth / 2, y, { align: "center" });
-  y += 10;
-
-  doc.setFontSize(9);
-  doc.setTextColor(0, 169, 181);
-  doc.text(APP_NAME, pageWidth / 2, y, { align: "center" });
-  y += 12;
+  let y = drawPdfBrandHeader(doc, {
+    title: PRELEGAL_NOTICE.title,
+    subtitle: APP_NAME,
+  });
 
   doc.setFontSize(9);
   doc.setTextColor(80, 80, 80);
@@ -146,13 +140,9 @@ export function generatePrelegalNoticePdf(
   doc.setTextColor(0, 169, 181);
   doc.text(`"${PRELEGAL_NOTICE.tagline}"`, margin, y);
 
-  doc.setFontSize(8);
-  doc.setTextColor(120, 120, 120);
-  doc.text(
-    `Documento generado por ${APP_NAME} — Cobranza prelegal (+${summary.overdueDays} días de mora)`,
-    pageWidth / 2,
-    doc.internal.pageSize.getHeight() - 10,
-    { align: "center" }
+  drawPdfBrandFooter(
+    doc,
+    `Cobranza prelegal (+${summary.overdueDays} días de mora) · ${APP_NAME}`
   );
 
   return doc;

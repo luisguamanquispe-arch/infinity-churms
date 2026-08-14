@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
-import { INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, getEquipmentReportStatus } from "@/lib/constants";
+import { INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, getEquipmentReportStatus, COMPANY_NAME } from "@/lib/constants";
+import { drawPdfBrandFooter, drawPdfBrandHeader } from "@/lib/pdf-branding";
 import { getCustomerTypeLabel, technologyLabel } from "@/lib/permanence";
 import type {
   Cancellation,
@@ -32,38 +33,35 @@ export async function generateActaPdf(params: {
   const { cancellation: c, customer, equipment, charges, payment } = params;
   const physicalCode = c.actaPhysicalCode ?? "—";
 
-  doc.setFillColor(11, 31, 58);
-  doc.rect(14, 12, 182, 22, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(14);
-  doc.text("ACTA DE RECEPCIÓN DE EQUIPOS", 105, 20, { align: "center" });
-  doc.setFontSize(8);
-  doc.text("CÓDIGO IDENTIFICACIÓN FÍSICA", 105, 27, { align: "center" });
-  doc.setFontSize(13);
-  doc.text(physicalCode, 105, 33, { align: "center" });
+  const contentY = drawPdfBrandHeader(doc, {
+    banner: true,
+    title: "ACTA DE RECEPCIÓN DE EQUIPOS",
+    subtitle: "CÓDIGO IDENTIFICACIÓN FÍSICA",
+    docRef: physicalCode,
+  });
 
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(10);
-  doc.text(`N° Acta: ${c.actaNumber ?? "—"}`, 14, 42);
+  doc.text(`N° Acta: ${c.actaNumber ?? "—"}`, 14, contentY);
   doc.setFontSize(9);
-  doc.text(`Fecha emisión: ${new Date().toLocaleDateString("es-VE")}`, 14, 48);
-  doc.text(`Contrato: ${customer.contract}`, 120, 42);
-  doc.text(`Cédula: ${customer.cedula}`, 120, 48);
+  doc.text(`Fecha emisión: ${new Date().toLocaleDateString("es-VE")}`, 14, contentY + 6);
+  doc.text(`Contrato: ${customer.contract}`, 120, contentY);
+  doc.text(`Cédula: ${customer.cedula}`, 120, contentY + 6);
 
   doc.setFontSize(10);
-  doc.text(`Cliente: ${customer.name}`, 14, 56);
-  doc.text(`Dirección: ${customer.address}`, 14, 62);
-  doc.text(`Plan: ${customer.planName}`, 14, 68);
-  doc.text(`Motivo baja: ${params.reasonLabel}`, 14, 74);
-  doc.text(`Fecha solicitud: ${c.requestDate.toLocaleDateString("es-VE")}`, 14, 80);
+  doc.text(`Cliente: ${customer.name}`, 14, contentY + 14);
+  doc.text(`Dirección: ${customer.address}`, 14, contentY + 20);
+  doc.text(`Plan: ${customer.planName}`, 14, contentY + 26);
+  doc.text(`Motivo baja: ${params.reasonLabel}`, 14, contentY + 32);
+  doc.text(`Fecha solicitud: ${c.requestDate.toLocaleDateString("es-VE")}`, 14, contentY + 38);
   doc.setFontSize(8);
-  doc.text(`Tecnología: ${technologyLabel(customer.originTechnology)} → ${technologyLabel(customer.currentTechnology)}`, 14, 86);
-  doc.text(`Permanencia fibra desde: ${c.permanenceStartDate?.toLocaleDateString("es-VE") ?? "—"} · ${c.monthsCompleted} meses`, 14, 91);
-  doc.text(`Estado: ${c.fiberInstallPending ? "Instalación pendiente" : "Permanencia cumplida"}`, 14, 96);
+  doc.text(`Tecnología: ${technologyLabel(customer.originTechnology)} → ${technologyLabel(customer.currentTechnology)}`, 14, contentY + 44);
+  doc.text(`Permanencia fibra desde: ${c.permanenceStartDate?.toLocaleDateString("es-VE") ?? "—"} · ${c.monthsCompleted} meses`, 14, contentY + 49);
+  doc.text(`Estado: ${c.fiberInstallPending ? "Instalación pendiente" : "Permanencia cumplida"}`, 14, contentY + 54);
   doc.setFontSize(10);
 
   autoTable(doc, {
-    startY: 102,
+    startY: contentY + 60,
     head: [["Tipo", "Marca", "Modelo", "Serie", "Estado", "Observaciones"]],
     body: equipment.map((e) => [
       e.type,
@@ -123,7 +121,7 @@ export async function generateActaPdf(params: {
   doc.text(`C.I.: ${customer.cedula}`, 14, sigY + (fl?.signatureImageData ? 40 : 18));
 
   doc.line(110, sigY, 190, sigY);
-  doc.text("Firma Infinity / Técnico", 110, sigY + 6);
+  doc.text(`Firma ${COMPANY_NAME} / Técnico`, 110, sigY + 6);
   doc.text("_______________________________", 110, sigY + 12);
 
   if (params.qrDataUrl) {
@@ -138,8 +136,10 @@ export async function generateActaPdf(params: {
   doc.text(
     "Conserve este código en el documento físico entregado al cliente para identificación y verificación.",
     14,
-    285
+    280
   );
+
+  drawPdfBrandFooter(doc, `Acta ${c.actaNumber ?? "—"} · Contrato ${customer.contract}`);
 
   return Buffer.from(doc.output("arraybuffer"));
 }

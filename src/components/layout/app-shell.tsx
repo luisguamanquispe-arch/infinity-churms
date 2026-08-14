@@ -2,8 +2,18 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { APP_NAME, COLORS } from "@/lib/constants";
-import { LayoutDashboard, FileMinus, BarChart3, LogOut, Users, Settings, Menu } from "lucide-react";
+import { COLORS } from "@/lib/constants";
+import { InfinityLogo } from "@/components/brand/infinity-logo";
+import {
+  LayoutDashboard,
+  FileMinus,
+  BarChart3,
+  LogOut,
+  Users,
+  Settings,
+  Menu,
+  FileSignature,
+} from "lucide-react";
 import { useState } from "react";
 import type { UserRole } from "@prisma/client";
 
@@ -11,6 +21,7 @@ const ICONS: Record<string, typeof LayoutDashboard> = {
   "/": LayoutDashboard,
   "/bajas": FileMinus,
   "/clientes": Users,
+  "/cambio-plan": FileSignature,
   "/reportes": BarChart3,
   "/configuracion": Settings,
 };
@@ -25,6 +36,14 @@ const ROLE_LABELS: Record<UserRole, string> = {
 interface NavItem {
   href: string;
   label: string;
+}
+
+function SidebarBrand() {
+  return (
+    <Link href="/" className="block">
+      <InfinityLogo variant="sidebar" onDark />
+    </Link>
+  );
 }
 
 export function AppShell({
@@ -51,35 +70,36 @@ export function AppShell({
     window.location.href = "/login";
   }
 
+  const navLinks = items.map((item) => {
+    const Icon = ICONS[item.href] ?? LayoutDashboard;
+    const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
+    return (
+      <Link
+        key={item.href}
+        href={item.href}
+        onClick={() => setMobileOpen(false)}
+        className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
+          active ? "bg-white/10" : "hover:bg-white/5"
+        }`}
+      >
+        <Icon className="h-4 w-4" />
+        {item.label}
+      </Link>
+    );
+  });
+
   return (
     <div className="flex min-h-screen bg-slate-50" style={{ backgroundColor: "#f8fafc" }}>
       <aside className="hidden w-56 flex-col bg-[#0B1F3A] p-4 text-white md:flex">
-        <p className="text-sm font-bold">{APP_NAME}</p>
+        <SidebarBrand />
         {user && (
-          <p className="mt-2 text-xs text-slate-400">
+          <p className="mt-3 text-xs text-slate-400">
             {user.name}
             <br />
             <span style={{ color: COLORS.brand }}>{ROLE_LABELS[user.role]}</span>
           </p>
         )}
-        <nav className="mt-8 space-y-1">
-          {items.map((item) => {
-            const Icon = ICONS[item.href] ?? LayoutDashboard;
-            const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-            return (
-              <Link
-                key={item.href}
-                href={item.href}
-                className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-                  active ? "bg-white/10" : "hover:bg-white/5"
-                }`}
-              >
-                <Icon className="h-4 w-4" />
-                {item.label}
-              </Link>
-            );
-          })}
-        </nav>
+        <nav className="mt-6 space-y-1">{navLinks}</nav>
         <div className="mt-auto space-y-2">
           {buildVersion && (
             <p className="px-3 text-[10px] text-slate-500" title={buildVersion}>
@@ -105,26 +125,8 @@ export function AppShell({
             onClick={() => setMobileOpen(false)}
           />
           <aside className="relative flex h-full w-64 flex-col bg-[#0B1F3A] p-4 text-white">
-            <p className="text-sm font-bold">{APP_NAME}</p>
-            <nav className="mt-6 space-y-1">
-              {items.map((item) => {
-                const Icon = ICONS[item.href] ?? LayoutDashboard;
-                const active = pathname === item.href || pathname.startsWith(`${item.href}/`);
-                return (
-                  <Link
-                    key={item.href}
-                    href={item.href}
-                    onClick={() => setMobileOpen(false)}
-                    className={`flex items-center gap-2 rounded-lg px-3 py-2 text-sm ${
-                      active ? "bg-white/10" : "hover:bg-white/5"
-                    }`}
-                  >
-                    <Icon className="h-4 w-4" />
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </nav>
+            <SidebarBrand />
+            <nav className="mt-6 space-y-1">{navLinks}</nav>
             <button
               onClick={logout}
               className="mt-auto flex items-center gap-2 rounded-lg px-3 py-2 text-sm text-slate-300 hover:bg-white/5"
@@ -138,9 +140,11 @@ export function AppShell({
 
       <div className="flex min-h-screen flex-1 flex-col">
         <header className="flex items-center justify-between border-b bg-white px-4 py-3 md:hidden">
-          <div>
-            <p className="text-sm font-bold text-[#0B1F3A]">{APP_NAME}</p>
-            {user && <p className="text-xs text-slate-500">{user.name}</p>}
+          <div className="flex items-center gap-3">
+            <InfinityLogo variant="header" />
+            {user && (
+              <p className="text-xs text-slate-500">{user.name}</p>
+            )}
           </div>
           <button
             type="button"

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { COLORS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
+import { PublicPageHeader } from "@/components/brand/public-page-header";
 
 interface PreliquidacionData {
   version: number;
@@ -141,13 +142,10 @@ export default function PreliquidacionClientePage() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-100 px-4 py-8">
-      <div className="mx-auto max-w-lg rounded-xl border bg-white p-6 shadow-sm">
-        <p className="text-xs font-semibold uppercase" style={{ color: COLORS.brand }}>
-          Infinity Internet
-        </p>
-        <h1 className="mt-2 text-xl font-bold text-[#0B1F3A]">Preliquidación de baja</h1>
-        <p className="text-sm text-slate-500">Versión V{data.version}</p>
+    <div className="min-h-screen bg-slate-100">
+      <PublicPageHeader title="Preliquidación de baja" subtitle={`Versión V${data.version}`} />
+      <div className="mx-auto max-w-lg px-4 py-6">
+      <div className="rounded-xl border bg-white p-6 shadow-sm">
 
         <dl className="mt-6 space-y-2 text-sm">
           <Row label="Cliente" value={data.customerName} />
@@ -232,6 +230,7 @@ export default function PreliquidacionClientePage() {
             </button>
           </div>
         )}
+      </div>
       </div>
     </div>
   );

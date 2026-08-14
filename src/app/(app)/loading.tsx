@@ -1,3 +1,5 @@
+import { InfinityLogo } from "@/components/brand/infinity-logo";
+
 export default function AppLoading() {
   return (
     <div
@@ -5,11 +7,12 @@ export default function AppLoading() {
       style={{ backgroundColor: "#f8fafc" }}
     >
       <div className="text-center">
+        <InfinityLogo variant="compact" className="mx-auto" />
         <div
-          className="mx-auto h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#00A9B5]"
+          className="mx-auto mt-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#00A9B5]"
           aria-hidden
         />
-        <p className="mt-4 text-sm font-medium text-[#0B1F3A]">Cargando Infinity Bajas…</p>
+        <p className="mt-4 text-sm font-medium text-[#0B1F3A]">Cargando…</p>
       </div>
     </div>
   );

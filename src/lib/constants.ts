@@ -1,4 +1,8 @@
-export const APP_NAME = "Gestión de Bajas — Infinity";
+export const APP_NAME = "Sistema de Gestión Documental";
+export const COMPANY_NAME = "Infinity Internet";
+export const APP_SHORT_NAME = "Sistema de Gestión Documental";
+export const LOGO_PATH = "/brand/logo-infinity-internet.png";
+export const ICON_PATH = "/brand/icon.png";
 
 export const COLORS = {
   navy: "#0B1F3A",

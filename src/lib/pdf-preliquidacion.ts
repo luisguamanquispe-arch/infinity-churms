@@ -1,6 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { APP_NAME, SUSPENSION_POLICIES, INSTALLATION_PRORATION_LABEL, installationProrationDetail, STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL } from "@/lib/constants";
+import { drawPdfBrandFooter, drawPdfBrandHeader } from "@/lib/pdf-branding";
 import { getCustomerTypeLabel, technologyLabel } from "@/lib/permanence";
 import type { Cancellation, CancellationCharge, CancellationEquipment, Customer } from "@prisma/client";
 
@@ -17,26 +18,23 @@ export function generatePreliquidacionPdf(params: {
 }) {
   const doc = new jsPDF();
   const { cancellation: c, customer, charges } = params;
-  const pageWidth = doc.internal.pageSize.getWidth();
 
-  doc.setFontSize(16);
-  doc.setTextColor(11, 31, 58);
-  doc.text("PRE-LIQUIDACIÓN DE BAJA DE SERVICIO", pageWidth / 2, 18, { align: "center" });
-
-  doc.setFontSize(10);
-  doc.setTextColor(0, 169, 181);
-  doc.text(APP_NAME, pageWidth / 2, 25, { align: "center" });
+  let y = drawPdfBrandHeader(doc, {
+    title: "PRE-LIQUIDACIÓN DE BAJA DE SERVICIO",
+    subtitle: APP_NAME,
+  });
 
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(9);
-  doc.text(`N° Documento: ${params.docNumber}`, 14, 34);
+  doc.text(`N° Documento: ${params.docNumber}`, 14, y);
   if (params.version) {
-    doc.text(`Versión: V${params.version}`, 14, 40);
+    doc.text(`Versión: V${params.version}`, 14, y + 6);
   }
-  doc.text(`Fecha emisión: ${new Date().toLocaleDateString("es-VE")}`, 14, params.version ? 46 : 40);
-  doc.text(`Fecha solicitud: ${c.requestDate.toLocaleDateString("es-VE")}`, 120, 34);
-  doc.text(`Estado: Informativo — valores a pagar`, 120, params.version ? 46 : 40);
+  doc.text(`Fecha emisión: ${new Date().toLocaleDateString("es-VE")}`, 14, y + (params.version ? 12 : 6));
+  doc.text(`Fecha solicitud: ${c.requestDate.toLocaleDateString("es-VE")}`, 120, y);
+  doc.text(`Estado: Informativo — valores a pagar`, 120, y + (params.version ? 12 : 6));
 
+  y += params.version ? 18 : 12;
   doc.setFontSize(8);
   doc.setTextColor(80, 80, 80);
   const aviso = doc.splitTextToSize(
@@ -45,14 +43,15 @@ export function generatePreliquidacionPdf(params: {
       "se tramitarán después del pago de esta pre-liquidación.",
     180
   );
-  doc.text(aviso, 14, 46);
+  doc.text(aviso, 14, y);
   doc.setTextColor(0, 0, 0);
 
+  y += aviso.length * 4 + 8;
   doc.setFontSize(11);
-  doc.text("Datos del cliente", 14, 58);
+  doc.text("Datos del cliente", 14, y);
 
   autoTable(doc, {
-    startY: 62,
+    startY: y + 4,
     theme: "plain",
     styles: { fontSize: 9 },
     body: [
@@ -96,7 +95,7 @@ export function generatePreliquidacionPdf(params: {
     ],
   });
 
-  let y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+  y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
 
   doc.setFontSize(11);
   doc.text("Detalle de valores a pagar", 14, y);
@@ -183,6 +182,8 @@ export function generatePreliquidacionPdf(params: {
   doc.line(110, signY, 190, signY);
   doc.text("Firma Infinity", 110, signY + 6);
   doc.text("_______________________________", 110, signY + 12);
+
+  drawPdfBrandFooter(doc, "Pre-liquidación informativa de baja de servicio");
 
   return Buffer.from(doc.output("arraybuffer"));
 }

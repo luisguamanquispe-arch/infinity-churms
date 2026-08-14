@@ -1,5 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+import { COMPANY_NAME } from "@/lib/constants";
+import { drawPdfBrandFooter, drawPdfBrandHeader } from "@/lib/pdf-branding";
 import type { Customer, PlanChange } from "@prisma/client";
 
 const DEFAULT_RENEWAL_DECLARATION =
@@ -32,27 +34,27 @@ export function generateRenewalPdf(params: {
     (pc.previousPlanName !== pc.newPlanName ||
       Number(pc.previousMonthlyUsd) !== Number(pc.newMonthlyUsd));
 
-  doc.setFillColor(11, 31, 58);
-  doc.rect(14, 12, 182, 28, "F");
-  doc.setTextColor(255, 255, 255);
-  doc.setFontSize(11);
-  doc.text("RENOVACIÓN DEL CONTRATO DE PRESTACIÓN", 105, 22, { align: "center" });
-  doc.text("DEL SERVICIO DE INTERNET", 105, 30, { align: "center" });
-  doc.setFontSize(9);
-  doc.text(pc.addendumNumber ?? "BORRADOR", 105, 38, { align: "center" });
+  const contentY = drawPdfBrandHeader(doc, {
+    banner: true,
+    title: "RENOVACIÓN DEL CONTRATO DE PRESTACIÓN",
+    subtitle: "DEL SERVICIO DE INTERNET",
+    docRef: pc.addendumNumber ?? "BORRADOR",
+  });
 
   doc.setTextColor(0, 0, 0);
   doc.setFontSize(10);
-  doc.text(`Fecha documento: ${fmtDate(pc.confirmedAt ?? pc.requestDate)}`, 14, 48);
+  doc.text(`Fecha documento: ${fmtDate(pc.confirmedAt ?? pc.requestDate)}`, 14, contentY);
+  let tableStart = contentY + 6;
   if (digitallySigned) {
     doc.setFontSize(9);
     doc.setTextColor(0, 120, 100);
-    doc.text("FIRMADO DIGITALMENTE", 14, 54);
+    doc.text("FIRMADO DIGITALMENTE", 14, contentY + 6);
     doc.setTextColor(0, 0, 0);
+    tableStart = contentY + 12;
   }
 
   autoTable(doc, {
-    startY: 60,
+    startY: tableStart,
     head: [["DATOS DEL CLIENTE", ""]],
     body: [
       ["Nombre completo", customer.name],
@@ -138,8 +140,10 @@ export function generateRenewalPdf(params: {
   doc.text(`Fecha y hora firma: ${pc.signedAt ? new Date(pc.signedAt).toLocaleString("es-VE") : "—"}`, 14, sigY + 24);
 
   doc.line(110, sigY, 190, sigY);
-  doc.text("Infinity Internet", 110, sigY + 6);
+  doc.text(COMPANY_NAME, 110, sigY + 6);
   doc.text(params.processedByName ?? "_______________________________", 110, sigY + 12);
+
+  drawPdfBrandFooter(doc, pc.addendumNumber ?? "Renovación contractual");
 
   return Buffer.from(doc.output("arraybuffer"));
 }

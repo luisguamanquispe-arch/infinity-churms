@@ -1,10 +1,17 @@
 import type { Metadata } from "next";
 import "./globals.css";
-import { APP_NAME } from "@/lib/constants";
+import { APP_NAME, APP_SHORT_NAME, COMPANY_NAME, ICON_PATH } from "@/lib/constants";
 
 export const metadata: Metadata = {
-  title: APP_NAME,
-  description: "Gestión de bajas y recuperación de equipos — Infinity ISP",
+  title: {
+    default: APP_NAME,
+    template: `%s · ${COMPANY_NAME}`,
+  },
+  description: `${APP_SHORT_NAME} — ${COMPANY_NAME}`,
+  icons: {
+    icon: ICON_PATH,
+    apple: ICON_PATH,
+  },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

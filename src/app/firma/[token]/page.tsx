@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
 import { COLORS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
+import { PublicPageHeader } from "@/components/brand/public-page-header";
 import { SignaturePad } from "@/components/cambio-plan/signature-pad";
 import { compressSelfieImage, dataUrlToBlob } from "@/lib/compress-selfie-image";
 
@@ -395,14 +396,11 @@ export default function FirmaRemotaPage() {
 
   return (
     <div className="mx-auto min-h-screen max-w-md bg-slate-50 pb-8">
-      <header className="px-4 py-5 text-white" style={{ backgroundColor: COLORS.navy }}>
-        <p className="text-xs uppercase tracking-wide opacity-80">{headerLabel}</p>
-        <h1 className="text-lg font-bold">Infinity Internet</h1>
-        <p className="mt-2 text-sm">Hola, {session.customer.name}</p>
-        <p className="mt-1 text-xs opacity-80">
-          Enlace válido hasta: {expires.toLocaleDateString("es-VE")} {expires.toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" })}
-        </p>
-      </header>
+      <PublicPageHeader
+        dark
+        title={headerLabel}
+        subtitle={`Hola, ${session.customer.name} · Válido hasta ${expires.toLocaleDateString("es-VE")} ${expires.toLocaleTimeString("es-VE", { hour: "2-digit", minute: "2-digit" })}`}
+      />
 
       <div className="px-4 pt-4">
         <div className="mb-4 flex justify-between text-xs font-medium text-slate-500">
