@@ -1,10 +1,21 @@
 import Link from "next/link";
 import { listCancellations } from "@/lib/services/cancellations";
-import { STATUS_LABELS, COLORS } from "@/lib/constants";
+import { STATUS_LABELS, REASON_LABELS, COLORS } from "@/lib/constants";
 import { formatUsd } from "@/lib/liquidation";
 import { getSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { isDatabaseConnected } from "@/lib/db-status";
+import {
+  getPreliquidacionListStatus,
+  PRELIQUIDACION_LIST_LABELS,
+} from "@/lib/preliquidacion-display";
+
+const PRELIQ_BADGE: Record<string, string> = {
+  PENDIENTE: "bg-amber-100 text-amber-900",
+  ENVIADA: "bg-blue-100 text-blue-900",
+  APROBADA: "bg-teal-100 text-teal-900",
+  RECHAZADA: "bg-red-100 text-red-900",
+};
 
 export default async function BajasPage() {
   const session = await getSession();
@@ -24,15 +35,20 @@ export default async function BajasPage() {
 
   return (
     <div className="space-y-6">
-      <header className="flex justify-between">
-        <h1 className="text-2xl font-bold text-[#0B1F3A]">Solicitudes de Baja</h1>
+      <header className="flex flex-wrap items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-[#0B1F3A]">Solicitudes de Baja</h1>
+          <p className="mt-1 text-sm text-slate-600">
+            Toda baja requiere preliquidación aprobada por el cliente antes de continuar.
+          </p>
+        </div>
         {canCreate && (
           <Link
             href="/bajas/nueva"
-            className="rounded-lg px-4 py-2 text-sm font-semibold text-white"
+            className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white shadow-sm"
             style={{ backgroundColor: COLORS.brand }}
           >
-            + Nueva baja
+            Iniciar baja
           </Link>
         )}
       </header>
@@ -52,12 +68,14 @@ export default async function BajasPage() {
         </p>
       )}
 
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-        <table className="w-full text-sm">
+      <div className="overflow-x-auto rounded-xl border bg-white shadow-sm">
+        <table className="w-full min-w-[720px] text-sm">
           <thead className="bg-slate-50 text-left">
             <tr>
               <th className="px-4 py-3">Cliente</th>
               <th className="px-4 py-3">Fecha</th>
+              <th className="px-4 py-3">Motivo</th>
+              <th className="px-4 py-3">Preliquidación</th>
               <th className="px-4 py-3">Total</th>
               <th className="px-4 py-3">Estado</th>
               <th className="px-4 py-3"></th>
@@ -66,7 +84,7 @@ export default async function BajasPage() {
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-slate-500">
+                <td colSpan={7} className="px-4 py-8 text-center text-slate-500">
                   {dbOk && !loadError ? (
                     <span>
                       No hay solicitudes de baja registradas.
@@ -79,9 +97,9 @@ export default async function BajasPage() {
                         {canCreate && (
                           <>
                             {" "}
-                            y luego registre una{" "}
+                            y luego pulse{" "}
                             <Link href="/bajas/nueva" className="font-semibold text-teal-600 hover:underline">
-                              nueva baja
+                              Iniciar baja
                             </Link>
                           </>
                         )}
@@ -94,26 +112,45 @@ export default async function BajasPage() {
                 </td>
               </tr>
             ) : (
-              rows.map((r) => (
-                <tr key={r.id} className="border-t hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <p className="font-medium">{r.customer.name}</p>
-                    <p className="text-xs text-slate-500">{r.customer.contract}</p>
-                  </td>
-                  <td className="px-4 py-3">{r.requestDate.toLocaleDateString("es-VE")}</td>
-                  <td className="px-4 py-3">{formatUsd(Number(r.totalAmount))}</td>
-                  <td className="px-4 py-3">
-                    <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">
-                      {STATUS_LABELS[r.status] ?? r.status}
-                    </span>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Link href={`/bajas/${r.id}`} className="text-xs font-semibold text-teal-600">
-                      Ver baja →
-                    </Link>
-                  </td>
-                </tr>
-              ))
+              rows.map((r) => {
+                const preliqKey = getPreliquidacionListStatus(
+                  r.status,
+                  r.activePreliquidacion?.status
+                );
+                return (
+                  <tr key={r.id} className="border-t hover:bg-slate-50">
+                    <td className="px-4 py-3">
+                      <p className="font-medium">{r.customer.name}</p>
+                      <p className="text-xs text-slate-500">{r.customer.contract}</p>
+                    </td>
+                    <td className="px-4 py-3">{r.requestDate.toLocaleDateString("es-VE")}</td>
+                    <td className="px-4 py-3 text-xs">
+                      {REASON_LABELS[r.reason] ?? r.reason}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${PRELIQ_BADGE[preliqKey]}`}
+                      >
+                        {PRELIQUIDACION_LIST_LABELS[preliqKey]}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">{formatUsd(Number(r.totalAmount))}</td>
+                    <td className="px-4 py-3">
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs">
+                        {STATUS_LABELS[r.status] ?? r.status}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Link
+                        href={`/bajas/${r.id}#preliquidacion`}
+                        className="text-xs font-semibold text-teal-600 hover:underline"
+                      >
+                        Ver preliquidación →
+                      </Link>
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>

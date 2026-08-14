@@ -191,7 +191,7 @@ export default function NuevaBajaPage() {
       }),
     });
     const data = await res.json();
-    if (res.ok) router.push(`/bajas/${data.id}`);
+    if (res.ok) router.push(`/bajas/${data.id}#preliquidacion`);
     else setError(data.error ?? "Error al crear");
     setLoading(false);
   }
@@ -483,7 +483,7 @@ export default function NuevaBajaPage() {
                 className="rounded-lg px-6 py-2.5 text-sm font-semibold text-white disabled:opacity-50"
                 style={{ backgroundColor: COLORS.brand }}
               >
-                {loading ? "Creando..." : "Registrar solicitud y calcular liquidación"}
+                {loading ? "Creando..." : "Iniciar baja y generar preliquidación"}
               </button>
             </>
           )}

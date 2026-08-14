@@ -21,5 +21,6 @@ export function getCancellationPermissions(role: UserRole) {
     preliquidateView: hasPermission(role, "cancellations:preliquidate_view"),
     liquidate: hasPermission(role, "cancellations:liquidate"),
     actaSend: hasPermission(role, "cancellations:acta_send"),
+    canViewPreliquidacion: hasPermission(role, "cancellations:list"),
   };
 }

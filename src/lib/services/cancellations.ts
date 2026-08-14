@@ -128,6 +128,9 @@ export async function listCancellations(filters?: {
     include: {
       customer: { select: { contract: true, name: true } },
       createdBy: { select: { name: true } },
+      activePreliquidacion: {
+        select: { status: true, totalAmount: true, version: true },
+      },
     },
     orderBy: { requestDate: "desc" },
   });

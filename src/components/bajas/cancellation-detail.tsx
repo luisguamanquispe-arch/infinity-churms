@@ -10,6 +10,7 @@ import { PermanenceSummaryPanel } from "@/components/bajas/permanence-summary-pa
 import { CancellationAdminPanel } from "@/components/bajas/cancellation-admin-panel";
 import { PreliquidacionPanel } from "@/components/bajas/preliquidacion-panel";
 import { ActaRemoteSignaturePanel } from "@/components/bajas/acta-remote-signature-panel";
+import { CancellationFlowStepper } from "@/components/bajas/cancellation-flow-stepper";
 import type { PermanenceSummary } from "@/lib/permanence";
 import { technologyLabel } from "@/lib/permanence";
 
@@ -46,6 +47,7 @@ interface Detail {
     serviceStartDate: string;
     planName: string;
     phone?: string | null;
+    planMonthlyUsd?: string | null;
     pendingBalance: string;
     originTechnology?: string;
     currentTechnology?: string;
@@ -107,6 +109,7 @@ interface Permissions {
   preliquidateView: boolean;
   liquidate: boolean;
   actaSend: boolean;
+  canViewPreliquidacion: boolean;
 }
 
 interface AuditEntry {
@@ -169,6 +172,14 @@ export function CancellationDetail({
     fetch(`/api/cancellations/${data.id}/audit`)
       .then((r) => (r.ok ? r.json() : []))
       .then(setAudit);
+  }, [data.id]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.location.hash === "#preliquidacion") {
+      requestAnimationFrame(() => {
+        document.getElementById("preliquidacion")?.scrollIntoView({ behavior: "smooth", block: "start" });
+      });
+    }
   }, [data.id]);
 
   async function refresh() {
@@ -296,6 +307,37 @@ export function CancellationDetail({
 
       {msg && <p className="rounded-lg bg-teal-50 px-4 py-2 text-sm text-teal-800">{msg}</p>}
 
+      <CancellationFlowStepper status={data.status} />
+
+      {permissions.canViewPreliquidacion && (
+        <PreliquidacionPanel
+          cancellationId={data.id}
+          status={data.status}
+          customer={{
+            name: data.customer.name,
+            cedula: data.customer.cedula,
+            contract: data.customer.contract,
+            planName: data.customer.planName,
+            phone: data.customer.phone ?? null,
+            serviceStartDate: data.customer.serviceStartDate,
+            contractPermanenceEnd: permanenceSummary?.contractPermanenceEnd ?? null,
+            planMonthlyUsd: data.customer.planMonthlyUsd ?? null,
+          }}
+          activePreliquidacion={data.activePreliquidacion}
+          canPreliquidate={permissions.preliquidateEdit || permissions.preliquidate}
+          canSendLink={permissions.preliquidateSend}
+          onRefresh={refresh}
+          onMessage={setMsg}
+        />
+      )}
+
+      {!preliqApproved && !closed && (
+        <p className="rounded-lg border-2 border-amber-300 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+          La baja permanece bloqueada hasta que el cliente apruebe la preliquidación. Use &quot;Enviar al
+          cliente&quot; y espere la aprobación antes de registrar pagos o completar la baja.
+        </p>
+      )}
+
       {(permissions.edit || permissions.delete) && (
         <CancellationAdminPanel
           data={data}
@@ -391,26 +433,6 @@ export function CancellationDetail({
           </p>
         )}
       </Card>
-
-      {(permissions.preliquidateView || permissions.preliquidate || permissions.preliquidateSend) && (
-        <PreliquidacionPanel
-          cancellationId={data.id}
-          status={data.status}
-          customerName={data.customer.name}
-          customerPhone={data.customer.phone ?? null}
-          activePreliquidacion={data.activePreliquidacion}
-          canPreliquidate={permissions.preliquidateEdit || permissions.preliquidate}
-          canSendLink={permissions.preliquidateSend}
-          onRefresh={refresh}
-          onMessage={setMsg}
-        />
-      )}
-
-      {!preliqApproved && !closed && (
-        <p className="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
-          El pago, la devolución de equipos y el cierre de la baja permanecen bloqueados hasta que el cliente apruebe la preliquidación.
-        </p>
-      )}
 
       {data.finalLiquidations && data.finalLiquidations.length > 0 && (
         <Card title="Liquidación final">

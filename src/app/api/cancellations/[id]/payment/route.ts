@@ -17,7 +17,10 @@ export async function POST(
     } catch (e) {
       if (e instanceof Error && e.message === "PRELIQUIDACION_NOT_APPROVED") {
         return NextResponse.json(
-          { error: "La preliquidación debe estar aprobada por el cliente antes de registrar el pago." },
+          {
+            error:
+              "No se puede completar la baja. La preliquidación todavía no ha sido aprobada por el cliente.",
+          },
           { status: 403 }
         );
       }

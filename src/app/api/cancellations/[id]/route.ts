@@ -202,13 +202,25 @@ export async function PATCH(
         return NextResponse.json({ error: "Transición no permitida" }, { status: 400 });
       }
 
-      if (next === "PENDIENTE_DE_PAGO") {
+      if (next === "PENDIENTE_DE_PAGO" || next === "BAJA_COMPLETADA") {
         try {
           await assertPreliquidacionApproved(id);
         } catch (e) {
           if (e instanceof Error && e.message === "PRELIQUIDACION_NOT_APPROVED") {
             return NextResponse.json(
-              { error: "La preliquidación debe estar aprobada por el cliente." },
+              {
+                error:
+                  "No se puede completar la baja. La preliquidación todavía no ha sido aprobada por el cliente.",
+              },
+              { status: 403 }
+            );
+          }
+          if (e instanceof Error && e.message === "PRELIQUIDACION_REQUIRED") {
+            return NextResponse.json(
+              {
+                error:
+                  "No se puede continuar. Debe generar la preliquidación y obtener la aprobación del cliente.",
+              },
               { status: 403 }
             );
           }

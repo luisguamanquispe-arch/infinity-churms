@@ -59,6 +59,7 @@ export default async function GestionarBajaPage({ params }: Props) {
       phone: row.customer.phone,
       serviceStartDate: row.customer.serviceStartDate.toISOString(),
       pendingBalance: String(row.customer.pendingBalance),
+      planMonthlyUsd: row.customer.planMonthlyUsd != null ? String(row.customer.planMonthlyUsd) : null,
       originTechnology: row.customer.originTechnology,
       currentTechnology: row.customer.currentTechnology,
       fiberInstallDate: row.customer.fiberInstallDate?.toISOString() ?? null,
