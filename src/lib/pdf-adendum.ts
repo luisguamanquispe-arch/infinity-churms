@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { COMPANY_NAME } from "@/lib/constants";
 import { drawPdfBrandFooter, drawPdfBrandHeader } from "@/lib/pdf-branding";
+import { appendPlanChangeIdentitySelfiePage } from "@/lib/pdf-plan-change-identity";
 import type { Customer, PlanChange } from "@prisma/client";
 
 const DEFAULT_DECLARATION =
@@ -143,6 +144,16 @@ export function generateAdendumPdf(params: {
   doc.text(`Procesado: ${fmtDate(pc.signedAt ?? pc.confirmedAt)}`, 110, sigY + 18);
 
   drawPdfBrandFooter(doc, pc.addendumNumber ?? "Adendum contractual");
+
+  appendPlanChangeIdentitySelfiePage(doc, {
+    identitySelfieData: pc.identitySelfieData,
+    identitySelfieId: pc.identitySelfieId,
+    identitySelfieAt: pc.identitySelfieAt,
+    customerName: customer.name,
+    cedula: customer.cedula,
+    docRef: pc.addendumNumber,
+    footerDetail: pc.addendumNumber ?? "Verificación de identidad",
+  });
 
   return Buffer.from(doc.output("arraybuffer"));
 }

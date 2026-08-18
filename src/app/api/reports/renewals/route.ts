@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth";
 import { listPlanChanges } from "@/lib/services/plan-changes";
 import { OPERATION_TYPE_LABELS, PLAN_CHANGE_STATUS_LABELS } from "@/lib/constants";
+import {
+  appendPlanChangeReportSelfiesAppendix,
+  hasIdentitySelfie,
+} from "@/lib/pdf-plan-change-identity";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { formatUsd } from "@/lib/liquidation";
@@ -35,7 +39,7 @@ export async function GET(request: NextRequest) {
 
     if (format === "csv" || format === "excel") {
       const header =
-        "Cliente,Contrato,Tipo,Plan anterior,Nuevo plan,Precio,Fecha firma,Fin permanencia,Estado,Documento\n";
+        "Cliente,Contrato,Tipo,Plan anterior,Nuevo plan,Precio,Fecha firma,Fin permanencia,Estado,Documento,Selfie\n";
       const lines = data.map((r) =>
         [
           r.customer.name,
@@ -48,6 +52,7 @@ export async function GET(request: NextRequest) {
           fmtDate(r.newPermanenceEnd),
           PLAN_CHANGE_STATUS_LABELS[r.status] ?? r.status,
           r.addendumNumber ?? "",
+          hasIdentitySelfie(r.identitySelfieData) ? "Sí" : "No",
         ]
           .map((c) => `"${String(c).replace(/"/g, '""')}"`)
           .join(",")
@@ -66,7 +71,7 @@ export async function GET(request: NextRequest) {
       doc.text("Reporte — Renovaciones contractuales", 14, 16);
       autoTable(doc, {
         startY: 22,
-        head: [["Cliente", "Contrato", "Tipo", "Plan ant.", "Plan nuevo", "Precio", "Firma", "Estado", "Doc."]],
+        head: [["Cliente", "Contrato", "Tipo", "Plan ant.", "Plan nuevo", "Precio", "Firma", "Estado", "Doc.", "Selfie"]],
         body: data.map((r) => [
           r.customer.name,
           r.customer.contract,
@@ -77,9 +82,11 @@ export async function GET(request: NextRequest) {
           fmtDate(r.signedAt ?? r.requestDate),
           PLAN_CHANGE_STATUS_LABELS[r.status] ?? r.status,
           r.addendumNumber ?? "—",
+          hasIdentitySelfie(r.identitySelfieData) ? "Sí" : "No",
         ]),
         styles: { fontSize: 7 },
       });
+      appendPlanChangeReportSelfiesAppendix(doc, data, "Reporte — Renovaciones contractuales");
       return new NextResponse(new Uint8Array(doc.output("arraybuffer")), {
         headers: {
           "Content-Type": "application/pdf",

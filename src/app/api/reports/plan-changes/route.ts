@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth";
 import { listPlanChanges } from "@/lib/services/plan-changes";
 import { PLAN_CHANGE_STATUS_LABELS } from "@/lib/constants";
+import {
+  appendPlanChangeReportSelfiesAppendix,
+  hasIdentitySelfie,
+} from "@/lib/pdf-plan-change-identity";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 
@@ -30,7 +34,7 @@ export async function GET(request: NextRequest) {
 
     if (format === "csv" || format === "excel") {
       const header =
-        "Cliente,Contrato,Plan anterior,Nuevo plan,Precio anterior,Nuevo precio,Fecha,Nueva fin permanencia,Estado,Adendum\n";
+        "Cliente,Contrato,Plan anterior,Nuevo plan,Precio anterior,Nuevo precio,Fecha,Nueva fin permanencia,Estado,Adendum,Selfie\n";
       const lines = rows.map((r) =>
         [
           r.customer.name,
@@ -43,6 +47,7 @@ export async function GET(request: NextRequest) {
           fmtDate(r.newPermanenceEnd),
           PLAN_CHANGE_STATUS_LABELS[r.status] ?? r.status,
           r.addendumNumber ?? "",
+          hasIdentitySelfie(r.identitySelfieData) ? "Sí" : "No",
         ]
           .map((c) => `"${String(c).replace(/"/g, '""')}"`)
           .join(",")
@@ -74,6 +79,7 @@ export async function GET(request: NextRequest) {
             "Fin permanencia",
             "Estado",
             "Adendum",
+            "Selfie",
           ],
         ],
         body: rows.map((r) => [
@@ -87,9 +93,11 @@ export async function GET(request: NextRequest) {
           fmtDate(r.newPermanenceEnd),
           PLAN_CHANGE_STATUS_LABELS[r.status] ?? r.status,
           r.addendumNumber ?? "—",
+          hasIdentitySelfie(r.identitySelfieData) ? "Sí" : "No",
         ]),
         styles: { fontSize: 7 },
       });
+      appendPlanChangeReportSelfiesAppendix(doc, rows, "Reporte — Cambios de Plan");
       return new NextResponse(new Uint8Array(doc.output("arraybuffer")), {
         headers: {
           "Content-Type": "application/pdf",

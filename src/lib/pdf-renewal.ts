@@ -2,6 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { COMPANY_NAME } from "@/lib/constants";
 import { drawPdfBrandFooter, drawPdfBrandHeader } from "@/lib/pdf-branding";
+import { appendPlanChangeIdentitySelfiePage } from "@/lib/pdf-plan-change-identity";
 import type { Customer, PlanChange } from "@prisma/client";
 
 const DEFAULT_RENEWAL_DECLARATION =
@@ -144,6 +145,16 @@ export function generateRenewalPdf(params: {
   doc.text(params.processedByName ?? "_______________________________", 110, sigY + 12);
 
   drawPdfBrandFooter(doc, pc.addendumNumber ?? "Renovación contractual");
+
+  appendPlanChangeIdentitySelfiePage(doc, {
+    identitySelfieData: pc.identitySelfieData,
+    identitySelfieId: pc.identitySelfieId,
+    identitySelfieAt: pc.identitySelfieAt,
+    customerName: customer.name,
+    cedula: customer.cedula,
+    docRef: pc.addendumNumber,
+    footerDetail: pc.addendumNumber ?? "Verificación de identidad",
+  });
 
   return Buffer.from(doc.output("arraybuffer"));
 }
