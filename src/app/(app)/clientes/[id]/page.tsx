@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { hasPermission } from "@/lib/permissions";
+import { canManageCustomerCollections, hasPermission } from "@/lib/permissions";
 import { customerHasCancellation } from "@/lib/services/cancellations";
 import { getBajaEligibility } from "@/lib/services/collections";
 import { CustomerDetailView } from "@/components/clientes/customer-detail";
@@ -32,6 +32,12 @@ export default async function ClienteDetailPage({ params }: Props) {
   const detail = {
     ...customer,
     phone: customer.phone,
+    planSpeedMbps: customer.planSpeedMbps,
+    planMonthlyUsd: customer.planMonthlyUsd != null ? String(customer.planMonthlyUsd) : null,
+    offeredPlanName: customer.offeredPlanName,
+    offeredPlanSpeedMbps: customer.offeredPlanSpeedMbps,
+    offeredPlanMonthlyUsd:
+      customer.offeredPlanMonthlyUsd != null ? String(customer.offeredPlanMonthlyUsd) : null,
     serviceStartDate: customer.serviceStartDate.toISOString(),
     pendingBalance: String(customer.pendingBalance),
     overdueSince: customer.overdueSince?.toISOString() ?? null,
@@ -56,6 +62,7 @@ export default async function ClienteDetailPage({ params }: Props) {
     <CustomerDetailView
       initial={detail}
       canCreateBaja={hasPermission(session.role, "cancellations:create")}
+      canManageCollections={canManageCustomerCollections(session.role)}
       equipmentTariffs={equipmentTariffs.map((t) => ({
         type: t.type,
         notReturnedUsd: Number(t.notReturnedUsd),

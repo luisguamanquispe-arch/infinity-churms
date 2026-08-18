@@ -19,6 +19,7 @@ export type Permission =
   | "cancellations:edit"
   | "cancellations:delete"
   | "customers:manage"
+  | "customers:edit"
   | "plan-changes:list"
   | "plan-changes:create"
   | "plan-changes:manage"
@@ -49,6 +50,7 @@ const ALL: Permission[] = [
   "cancellations:edit",
   "cancellations:delete",
   "customers:manage",
+  "customers:edit",
   "plan-changes:list",
   "plan-changes:create",
   "plan-changes:manage",
@@ -95,11 +97,20 @@ const ROLE_PERMISSIONS: Record<UserRole, Permission[]> = {
     "cancellations:list",
     "cancellations:equipment",
     "cancellations:advance_equipment",
+    "customers:edit",
   ],
 };
 
 export function hasPermission(role: UserRole, permission: Permission): boolean {
   return ROLE_PERMISSIONS[role].includes(permission);
+}
+
+export function canEditCustomer(role: UserRole): boolean {
+  return hasPermission(role, "customers:edit") || hasPermission(role, "customers:manage");
+}
+
+export function canManageCustomerCollections(role: UserRole): boolean {
+  return hasPermission(role, "customers:manage");
 }
 
 export function isAdminRole(role: UserRole): boolean {
@@ -144,7 +155,11 @@ export function canAccessRoute(role: UserRole, pathname: string, method?: string
       // handled below
     }
     if (pathname.startsWith("/api/service-plans")) {
-      return hasPermission(role, "config:manage") || hasPermission(role, "plan-changes:create");
+      return (
+        hasPermission(role, "config:manage") ||
+        hasPermission(role, "plan-changes:create") ||
+        canEditCustomer(role)
+      );
     }
     return hasPermission(role, "plan-changes:list") || hasPermission(role, "plan-changes:create");
   }
@@ -163,11 +178,17 @@ export function canAccessRoute(role: UserRole, pathname: string, method?: string
   if (pathname.startsWith("/api/contractual")) {
     return hasPermission(role, "plan-changes:list");
   }
+  if (pathname.startsWith("/api/customers") && /\/(collections|charges|payments|aviso-prelegal|comunicado-al-dia|migrate-fiber)/.test(pathname)) {
+    return hasPermission(role, "customers:manage");
+  }
+  if (pathname.startsWith("/api/users/collection-agents")) {
+    return hasPermission(role, "customers:manage");
+  }
   if (pathname === "/clientes" || pathname.startsWith("/clientes/") || pathname.startsWith("/api/customers")) {
     if (/\/api\/customers\/[^/]+\/permanence-preview/.test(pathname)) {
       return hasPermission(role, "cancellations:create");
     }
-    return hasPermission(role, "customers:manage");
+    return canEditCustomer(role);
   }
   if (pathname === "/reportes" || pathname.startsWith("/api/reports")) {
     return hasPermission(role, "reports:view");
@@ -178,9 +199,6 @@ export function canAccessRoute(role: UserRole, pathname: string, method?: string
   if (pathname === "/configuracion" || pathname.startsWith("/api/config")) {
     return hasPermission(role, "config:manage");
   }
-  if (pathname.startsWith("/api/users/collection-agents")) {
-    return hasPermission(role, "customers:manage");
-  }
   if (pathname.startsWith("/api/users")) {
     return hasPermission(role, "users:manage");
   }
@@ -190,7 +208,7 @@ export function canAccessRoute(role: UserRole, pathname: string, method?: string
 export const NAV_ITEMS = [
   { href: "/", label: "Dashboard", permission: "dashboard:view" as Permission },
   { href: "/bajas", label: "Bajas", permission: "cancellations:list" as Permission },
-  { href: "/clientes", label: "Clientes · Cobranza", permission: "customers:manage" as Permission },
+  { href: "/clientes", label: "Clientes · Cobranza", permission: "customers:edit" as Permission },
   { href: "/cambio-plan", label: "Gestión Contractual", permission: "plan-changes:list" as Permission },
   { href: "/reportes", label: "Reportes", permission: "reports:view" as Permission },
   { href: "/configuracion", label: "Configuración", permission: "config:manage" as Permission },

@@ -12,6 +12,7 @@ import {
   toUpperInput,
 } from "@/lib/constants";
 import { normalizeCedula, validateEcuadorianCedula } from "@/lib/cedula";
+import { PlanOfferFields } from "@/components/clientes/plan-offer-fields";
 
 type FormEquipmentRow = {
   id?: string;
@@ -30,6 +31,11 @@ export type CustomerEditSource = {
   zone: string;
   phone?: string | null;
   planName: string;
+  planSpeedMbps?: string | null;
+  planMonthlyUsd?: string | null;
+  offeredPlanName?: string | null;
+  offeredPlanSpeedMbps?: string | null;
+  offeredPlanMonthlyUsd?: string | null;
   status: string;
   serviceStartDate: string;
   originTechnology: string;
@@ -64,6 +70,11 @@ function buildForm(customer: CustomerEditSource): CustomerFormState {
     zone: customer.zone,
     phone: customer.phone ?? "",
     planName: customer.planName,
+    planSpeedMbps: customer.planSpeedMbps ?? "",
+    planMonthlyUsd: customer.planMonthlyUsd ?? "",
+    offeredPlanName: customer.offeredPlanName ?? "",
+    offeredPlanSpeedMbps: customer.offeredPlanSpeedMbps ?? "",
+    offeredPlanMonthlyUsd: customer.offeredPlanMonthlyUsd ?? "",
     status: customer.status,
     serviceStartDate: customer.serviceStartDate.slice(0, 10),
     originTechnology: customer.originTechnology,
@@ -98,6 +109,11 @@ type CustomerFormState = {
   zone: string;
   phone: string;
   planName: string;
+  planSpeedMbps: string;
+  planMonthlyUsd: string;
+  offeredPlanName: string;
+  offeredPlanSpeedMbps: string;
+  offeredPlanMonthlyUsd: string;
   status: string;
   serviceStartDate: string;
   originTechnology: string;
@@ -208,6 +224,11 @@ export function CustomerEditForm({
       zone: json.zone,
       phone: json.phone,
       planName: json.planName,
+      planSpeedMbps: json.planSpeedMbps != null ? String(json.planSpeedMbps) : null,
+      planMonthlyUsd: json.planMonthlyUsd != null ? String(json.planMonthlyUsd) : null,
+      offeredPlanName: json.offeredPlanName ?? null,
+      offeredPlanSpeedMbps: json.offeredPlanSpeedMbps != null ? String(json.offeredPlanSpeedMbps) : null,
+      offeredPlanMonthlyUsd: json.offeredPlanMonthlyUsd != null ? String(json.offeredPlanMonthlyUsd) : null,
       status: json.status,
       serviceStartDate: new Date(json.serviceStartDate).toISOString(),
       originTechnology: json.originTechnology,
@@ -326,16 +347,25 @@ export function CustomerEditForm({
       </section>
 
       <section>
+        <h3 className="text-sm font-semibold text-[#0B1F3A]">Planes y propuesta comercial</h3>
+        <div className="mt-3">
+          <PlanOfferFields
+            values={{
+              planName: form.planName,
+              planSpeedMbps: form.planSpeedMbps,
+              planMonthlyUsd: form.planMonthlyUsd,
+              offeredPlanName: form.offeredPlanName,
+              offeredPlanSpeedMbps: form.offeredPlanSpeedMbps,
+              offeredPlanMonthlyUsd: form.offeredPlanMonthlyUsd,
+            }}
+            onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+          />
+        </div>
+      </section>
+
+      <section>
         <h3 className="text-sm font-semibold text-[#0B1F3A]">Servicio</h3>
         <div className="mt-3 grid gap-3 sm:grid-cols-2">
-          <EditField label="Plan *">
-            <input
-              required
-              value={form.planName}
-              onChange={(e) => updateUpper("planName", e.target.value)}
-              className="w-full rounded border px-2 py-1.5 text-sm uppercase"
-            />
-          </EditField>
           <EditField label="Alta servicio (instalación original) *">
             <input
               required

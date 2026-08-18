@@ -1,5 +1,24 @@
 import { CUSTOMER_ZONES, toUpperInput } from "@/lib/constants";
 import { normalizeCedula, validateEcuadorianCedula } from "@/lib/cedula";
+import { parsePlanNumber } from "@/lib/plan-offer-comparison";
+
+export function extractPlanFields(body: {
+  planSpeedMbps?: number | string | null;
+  planMonthlyUsd?: number | string | null;
+  offeredPlanName?: string | null;
+  offeredPlanSpeedMbps?: number | string | null;
+  offeredPlanMonthlyUsd?: number | string | null;
+}) {
+  return {
+    planSpeedMbps: parsePlanNumber(body.planSpeedMbps),
+    planMonthlyUsd: parsePlanNumber(body.planMonthlyUsd),
+    offeredPlanName: body.offeredPlanName?.trim()
+      ? toUpperInput(body.offeredPlanName.trim())
+      : null,
+    offeredPlanSpeedMbps: parsePlanNumber(body.offeredPlanSpeedMbps),
+    offeredPlanMonthlyUsd: parsePlanNumber(body.offeredPlanMonthlyUsd),
+  };
+}
 
 export function formatCustomerPayload(body: {
   contract?: string;

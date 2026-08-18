@@ -180,6 +180,14 @@ model Customer {
   status           String   @default("ACTIVO")
   hasTvStreaming   Boolean  @default(false)
   tvStreamingSince DateTime?
+  planSpeedMbps     Int?
+  planMonthlyUsd    Decimal? @db.Decimal(10, 2)
+  offeredPlanName       String?
+  offeredPlanSpeedMbps  Int?
+  offeredPlanMonthlyUsd Decimal? @db.Decimal(10, 2)
+  activeServicePlanId String?
+  contractPermanenceStart DateTime?
+  contractPermanenceEnd   DateTime?
   pendingBalance   Decimal  @default(0) @db.Decimal(10, 2)
   overdueSince     DateTime?
   openTechnicalClaim Boolean @default(false)
@@ -193,11 +201,6 @@ model Customer {
   migrationReviewRequired Boolean @default(false)
   createdAt        DateTime @default(now())
   email            String?
-  activeServicePlanId String?
-  planMonthlyUsd    Decimal? @db.Decimal(10, 2)
-  planSpeedMbps     Int?
-  contractPermanenceStart DateTime?
-  contractPermanenceEnd   DateTime?
 
   equipment     CustomerEquipment[]
   cancellations Cancellation[]

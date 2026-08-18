@@ -1224,6 +1224,19 @@ async function main() {
       AND c."activePreliquidacionId" IS NULL;
   `);
 
+  await run(`
+    DO $$ BEGIN
+      IF NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Customer' AND column_name = 'offeredPlanName'
+      ) THEN
+        ALTER TABLE "Customer" ADD COLUMN "offeredPlanName" TEXT;
+        ALTER TABLE "Customer" ADD COLUMN "offeredPlanSpeedMbps" INTEGER;
+        ALTER TABLE "Customer" ADD COLUMN "offeredPlanMonthlyUsd" DECIMAL(10,2);
+      END IF;
+    END $$;
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 

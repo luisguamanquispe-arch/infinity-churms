@@ -1,15 +1,16 @@
 import { AppShell } from "@/components/layout/app-shell";
 import { getSession } from "@/lib/auth";
-import { hasPermission, NAV_ITEMS } from "@/lib/permissions";
+import { hasPermission, NAV_ITEMS, canEditCustomer } from "@/lib/permissions";
 import { redirect } from "next/navigation";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await getSession();
   if (!session) redirect("/login");
 
-  const nav = NAV_ITEMS.filter((item) => hasPermission(session.role, item.permission)).map(
-    ({ href, label }) => ({ href, label })
-  );
+  const nav = NAV_ITEMS.filter((item) => {
+    if (item.href === "/clientes") return canEditCustomer(session.role);
+    return hasPermission(session.role, item.permission);
+  }).map(({ href, label }) => ({ href, label }));
 
   const buildVersion = process.env.RENDER_GIT_COMMIT ?? "dev";
 

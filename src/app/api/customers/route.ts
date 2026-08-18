@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission, requireSession } from "@/lib/auth";
+import { requireAnyPermission, requireSession } from "@/lib/auth";
 import { audit } from "@/lib/audit";
-import { formatCustomerPayload, validateCustomerInput } from "@/lib/customer-form";
+import { formatCustomerPayload, validateCustomerInput, extractPlanFields } from "@/lib/customer-form";
 import { searchCustomers } from "@/lib/services/customer-search";
 import { prisma } from "@/lib/prisma";
 import type { EquipmentType } from "@prisma/client";
@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await requirePermission("customers:manage");
+    const session = await requireAnyPermission("customers:edit", "customers:manage");
     const body = await request.json();
 
     if (body.hasTvStreaming && !body.tvStreamingSince) {
@@ -75,6 +75,7 @@ export async function POST(request: NextRequest) {
         phone: formatted.phone,
         serviceStartDate: serviceStart,
         planName: formatted.planName,
+        ...extractPlanFields(body),
         originTechnology,
         currentTechnology,
         fiberInstallDate,

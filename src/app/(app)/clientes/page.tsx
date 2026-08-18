@@ -7,6 +7,7 @@ import { normalizeCedula, validateEcuadorianCedula } from "@/lib/cedula";
 import { formatUsd } from "@/lib/liquidation";
 import { getOverdueDays, isPrelegalOverdue } from "@/lib/services/overdue";
 import { CustomerSearchInput } from "@/components/clientes/customer-search-input";
+import { PlanOfferFields } from "@/components/clientes/plan-offer-fields";
 
 interface Customer {
   id: string;
@@ -16,6 +17,10 @@ interface Customer {
   address: string;
   zone: string;
   planName: string;
+  planSpeedMbps?: number | null;
+  planMonthlyUsd?: string;
+  offeredPlanName?: string | null;
+  offeredPlanSpeedMbps?: number | null;
   status: string;
   pendingBalance: string;
   overdueSince: string | null;
@@ -32,6 +37,11 @@ const emptyForm = {
   address: "",
   zone: "",
   planName: "",
+  planSpeedMbps: "",
+  planMonthlyUsd: "",
+  offeredPlanName: "",
+  offeredPlanSpeedMbps: "",
+  offeredPlanMonthlyUsd: "",
   serviceStartDate: new Date().toISOString().slice(0, 10),
   originTechnology: "FIBRA",
   currentTechnology: "FIBRA",
@@ -203,8 +213,7 @@ export default function ClientesPage() {
                 ))}
               </select>
             </div>
-            <Input label="Plan *" value={form.planName} onChange={(v) => updateUpper("planName", v)} uppercase required />
-            <Input label="Dirección *" value={form.address} onChange={(v) => updateUpper("address", v)} uppercase required />
+            <Input label="Dirección *" value={form.address} onChange={(v) => updateUpper("address", v)} uppercase required className="sm:col-span-2" />
             <Input label="Fecha alta (instalación original) *" type="date" value={form.serviceStartDate} onChange={(v) => setForm({ ...form, serviceStartDate: v })} required />
             <div>
               <label className="text-xs text-slate-600">Tecnología origen *</label>
@@ -237,6 +246,19 @@ export default function ClientesPage() {
             <Input label="Saldo pendiente" type="number" value={form.pendingBalance} onChange={(v) => setForm({ ...form, pendingBalance: v })} />
             <Input label="Inicio mora (si aplica)" type="date" value={form.overdueSince} onChange={(v) => setForm({ ...form, overdueSince: v })} />
           </div>
+
+          <PlanOfferFields
+            values={{
+              planName: form.planName,
+              planSpeedMbps: form.planSpeedMbps,
+              planMonthlyUsd: form.planMonthlyUsd,
+              offeredPlanName: form.offeredPlanName,
+              offeredPlanSpeedMbps: form.offeredPlanSpeedMbps,
+              offeredPlanMonthlyUsd: form.offeredPlanMonthlyUsd,
+            }}
+            onChange={(patch) => setForm((prev) => ({ ...prev, ...patch }))}
+          />
+
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
@@ -319,7 +341,7 @@ export default function ClientesPage() {
               <th className="px-4 py-3">Contrato</th>
               <th className="px-4 py-3">Nombre</th>
               <th className="px-4 py-3">Zona</th>
-              <th className="px-4 py-3">Plan</th>
+              <th className="px-4 py-3">Plan / Mbps / Costo</th>
               <th className="px-4 py-3">Streams desde</th>
               <th className="px-4 py-3">Saldo</th>
               <th className="px-4 py-3">Mora</th>
@@ -354,7 +376,19 @@ export default function ClientesPage() {
                   )}
                 </td>
                 <td className="px-4 py-3 text-slate-500">{c.zone ?? "—"}</td>
-                <td className="px-4 py-3">{c.planName}</td>
+                <td className="px-4 py-3">
+                  <p>{c.planName}</p>
+                  <p className="text-xs text-slate-500">
+                    {c.planSpeedMbps ? `${c.planSpeedMbps} Mbps` : "—"}
+                    {c.planMonthlyUsd ? ` · ${formatUsd(Number(c.planMonthlyUsd))}` : ""}
+                  </p>
+                  {c.offeredPlanName && (
+                    <p className="text-xs text-teal-700">
+                      Oferta: {c.offeredPlanName}
+                      {c.offeredPlanSpeedMbps ? ` · ${c.offeredPlanSpeedMbps} Mbps` : ""}
+                    </p>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-slate-500">
                   {c.hasTvStreaming && c.tvStreamingSince
                     ? new Date(c.tvStreamingSince).toLocaleDateString("es-VE")
@@ -422,6 +456,7 @@ function Input({
   type = "text",
   required,
   uppercase,
+  className = "",
 }: {
   label: string;
   value: string;
@@ -429,9 +464,10 @@ function Input({
   type?: string;
   required?: boolean;
   uppercase?: boolean;
+  className?: string;
 }) {
   return (
-    <div>
+    <div className={className}>
       <label className="text-xs text-slate-600">{label}</label>
       <input
         type={type}

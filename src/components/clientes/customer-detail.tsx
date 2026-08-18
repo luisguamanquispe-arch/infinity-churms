@@ -67,6 +67,11 @@ interface CustomerDetail {
   zone: string;
   phone: string | null;
   planName: string;
+  planSpeedMbps?: number | null;
+  planMonthlyUsd?: string | null;
+  offeredPlanName?: string | null;
+  offeredPlanSpeedMbps?: number | null;
+  offeredPlanMonthlyUsd?: string | null;
   status: string;
   pendingBalance: string;
   overdueSince: string | null;
@@ -118,13 +123,17 @@ async function readFileAsDataUrl(file: File): Promise<{ name: string; data: stri
 export function CustomerDetailView({
   initial,
   canCreateBaja,
+  canManageCollections,
   equipmentTariffs,
 }: {
   initial: CustomerDetail;
   canCreateBaja: boolean;
+  canManageCollections: boolean;
   equipmentTariffs: { type: string; notReturnedUsd: number | string }[];
 }) {
-  const [tab, setTab] = useState<"datos" | "cobranza" | "contrato">("cobranza");
+  const [tab, setTab] = useState<"datos" | "cobranza" | "contrato">(
+    canManageCollections ? "cobranza" : "datos"
+  );
   const [customer, setCustomer] = useState(initial);
   const [actions, setActions] = useState<CollectionAction[]>([]);
   const [agentHistory, setAgentHistory] = useState<CustomerAgentStage[]>([]);
@@ -137,6 +146,7 @@ export function CustomerDetailView({
   const [photo, setPhoto] = useState<{ name: string; data: string } | null>(null);
 
   async function refreshCollections() {
+    if (!canManageCollections) return;
     const [collectionsRes, chargesRes] = await Promise.all([
       fetch(`/api/customers/${customer.id}/collections`),
       fetch(`/api/customers/${customer.id}/charges`),
@@ -159,6 +169,7 @@ export function CustomerDetailView({
   }
 
   useEffect(() => {
+    if (!canManageCollections) return;
     async function bootstrapAgents() {
       const [meRes, agentsRes] = await Promise.all([
         fetch("/api/auth/me"),
@@ -176,7 +187,7 @@ export function CustomerDetailView({
     }
     bootstrapAgents();
     refreshCollections();
-  }, [customer.id]);
+  }, [customer.id, canManageCollections]);
 
   async function saveCollection(e: React.FormEvent) {
     e.preventDefault();
@@ -234,6 +245,20 @@ export function CustomerDetailView({
           <p className="text-sm text-slate-500">
             Contrato {customer.contract} · {customer.cedula} · {customer.zone}
           </p>
+          <p className="mt-1 text-sm text-slate-600">
+            Plan actual: <strong>{customer.planName}</strong>
+            {customer.planSpeedMbps ? ` · ${customer.planSpeedMbps} Mbps` : ""}
+            {customer.planMonthlyUsd ? ` · ${formatUsd(Number(customer.planMonthlyUsd))}/mes` : ""}
+          </p>
+          {customer.offeredPlanName && (
+            <p className="text-sm text-teal-700">
+              Oferta: {customer.offeredPlanName}
+              {customer.offeredPlanSpeedMbps ? ` · ${customer.offeredPlanSpeedMbps} Mbps` : ""}
+              {customer.offeredPlanMonthlyUsd
+                ? ` · ${formatUsd(Number(customer.offeredPlanMonthlyUsd))}/mes`
+                : ""}
+            </p>
+          )}
           <p className="mt-1 text-sm">
             Saldo pendiente: <strong>{formatUsd(Number(customer.pendingBalance))}</strong>
             {customer.inCollectionWhitelist && (
@@ -298,7 +323,7 @@ export function CustomerDetailView({
         <p className="rounded-lg bg-teal-50 px-4 py-2 text-sm text-teal-800">{msg}</p>
       )}
 
-      {!customer.inCollectionWhitelist && (
+      {canManageCollections && !customer.inCollectionWhitelist && (
         <PrelegalOverdueNotice
           customer={{
             id: customer.id,
@@ -320,9 +345,11 @@ export function CustomerDetailView({
         <TabButton active={tab === "datos"} onClick={() => setTab("datos")}>
           Editar cliente
         </TabButton>
-        <TabButton active={tab === "cobranza"} onClick={() => setTab("cobranza")}>
-          Gestión de Cobranza
-        </TabButton>
+        {canManageCollections && (
+          <TabButton active={tab === "cobranza"} onClick={() => setTab("cobranza")}>
+            Gestión de Cobranza
+          </TabButton>
+        )}
         <TabButton active={tab === "contrato"} onClick={() => setTab("contrato")}>
           Contrato y planes
         </TabButton>
@@ -340,6 +367,15 @@ export function CustomerDetailView({
             customer={{
               ...customer,
               phone: customer.phone ?? null,
+              planSpeedMbps:
+                customer.planSpeedMbps != null ? String(customer.planSpeedMbps) : null,
+              planMonthlyUsd: customer.planMonthlyUsd ?? null,
+              offeredPlanName: customer.offeredPlanName ?? null,
+              offeredPlanSpeedMbps:
+                customer.offeredPlanSpeedMbps != null
+                  ? String(customer.offeredPlanSpeedMbps)
+                  : null,
+              offeredPlanMonthlyUsd: customer.offeredPlanMonthlyUsd ?? null,
             }}
             onMessage={setMsg}
             onSaved={(fields) => {
@@ -365,7 +401,7 @@ export function CustomerDetailView({
         </div>
       )}
 
-      {tab === "cobranza" && (
+      {canManageCollections && tab === "cobranza" && (
         <>
           <CollectionChargesPanel
             customerId={customer.id}

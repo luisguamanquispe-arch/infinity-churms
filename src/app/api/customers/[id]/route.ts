@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission } from "@/lib/auth";
+import { requireAnyPermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { getClientIp } from "@/lib/request-ip";
@@ -17,7 +17,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requirePermission("customers:manage");
+    await requireAnyPermission("customers:edit", "customers:manage");
     const { id } = await params;
 
     const customer = await prisma.customer.findUnique({
@@ -43,7 +43,7 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const session = await requirePermission("customers:manage");
+    const session = await requireAnyPermission("customers:edit", "customers:manage");
     const { id } = await params;
     const body = (await request.json()) as CustomerPatchBody;
 

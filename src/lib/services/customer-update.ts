@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { formatCustomerPayload, validateCustomerInput } from "@/lib/customer-form";
+import { formatCustomerPayload, validateCustomerInput, extractPlanFields } from "@/lib/customer-form";
 import { resolveOverdueSinceOnBalanceChange } from "@/lib/services/overdue";
 import { resolveCollectionAgent } from "@/lib/services/collections";
 import type { Customer, EquipmentType, Prisma, ServiceTechnology } from "@prisma/client";
@@ -20,6 +20,11 @@ export type CustomerPatchBody = {
   zone?: string;
   phone?: string | null;
   planName?: string;
+  planSpeedMbps?: number | string | null;
+  planMonthlyUsd?: number | string | null;
+  offeredPlanName?: string | null;
+  offeredPlanSpeedMbps?: number | string | null;
+  offeredPlanMonthlyUsd?: number | string | null;
   status?: string;
   serviceStartDate?: string;
   originTechnology?: string;
@@ -104,6 +109,17 @@ export async function prepareCustomerUpdate(
     zone: formatted.zone,
     planName: formatted.planName,
     phone: formatted.phone,
+    ...extractPlanFields({
+      planSpeedMbps: patch.planSpeedMbps ?? existing.planSpeedMbps,
+      planMonthlyUsd:
+        patch.planMonthlyUsd ??
+        (existing.planMonthlyUsd != null ? Number(existing.planMonthlyUsd) : null),
+      offeredPlanName: patch.offeredPlanName ?? existing.offeredPlanName,
+      offeredPlanSpeedMbps: patch.offeredPlanSpeedMbps ?? existing.offeredPlanSpeedMbps,
+      offeredPlanMonthlyUsd:
+        patch.offeredPlanMonthlyUsd ??
+        (existing.offeredPlanMonthlyUsd != null ? Number(existing.offeredPlanMonthlyUsd) : null),
+    }),
   };
 
   if (patch.status !== undefined) {

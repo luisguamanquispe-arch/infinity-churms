@@ -51,6 +51,12 @@ export async function requirePermission(permission: Permission): Promise<Session
   return session;
 }
 
+export async function requireAnyPermission(...permissions: Permission[]): Promise<Session> {
+  const session = await requireSession();
+  if (!permissions.some((p) => hasPermission(session.role, p))) throw new Error("FORBIDDEN");
+  return session;
+}
+
 export async function requireAdmin(): Promise<Session> {
   const session = await requireSession();
   if (session.role !== "ADMIN") throw new Error("FORBIDDEN");
