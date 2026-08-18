@@ -16,6 +16,7 @@ interface Row {
   newMonthlyUsd: string;
   newPermanenceEnd: string | null;
   addendumNumber: string | null;
+  hasIdentitySelfie?: boolean;
   customer: { name: string; contract: string };
 }
 
@@ -93,6 +94,7 @@ export function RenewalsReportSection() {
               <th>Fin permanencia</th>
               <th>Estado</th>
               <th>Documento</th>
+              <th>Selfie</th>
             </tr>
           </thead>
           <tbody>
@@ -107,6 +109,20 @@ export function RenewalsReportSection() {
                 <td>{r.newPermanenceEnd ? new Date(r.newPermanenceEnd).toLocaleDateString("es-VE") : "—"}</td>
                 <td>{PLAN_CHANGE_STATUS_LABELS[r.status] ?? r.status}</td>
                 <td>{r.addendumNumber ?? "—"}</td>
+                <td>
+                  {r.hasIdentitySelfie ? (
+                    <a
+                      href={`/api/plan-changes/${r.id}/adendum`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-medium text-teal-700 hover:underline"
+                    >
+                      Ver PDF
+                    </a>
+                  ) : (
+                    "No"
+                  )}
+                </td>
               </tr>
             ))}
           </tbody>

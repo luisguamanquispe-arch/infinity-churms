@@ -1,6 +1,6 @@
 import { notFound } from "next/navigation";
 import { getSession } from "@/lib/auth";
-import { canManageCustomerCollections, hasPermission } from "@/lib/permissions";
+import { canManageCustomerCollections, hasPermission, isAdminRole } from "@/lib/permissions";
 import { customerHasCancellation } from "@/lib/services/cancellations";
 import { getBajaEligibility } from "@/lib/services/collections";
 import { CustomerDetailView } from "@/components/clientes/customer-detail";
@@ -63,6 +63,7 @@ export default async function ClienteDetailPage({ params }: Props) {
       initial={detail}
       canCreateBaja={hasPermission(session.role, "cancellations:create")}
       canManageCollections={canManageCustomerCollections(session.role)}
+      canDeleteCustomer={isAdminRole(session.role)}
       equipmentTariffs={equipmentTariffs.map((t) => ({
         type: t.type,
         notReturnedUsd: Number(t.notReturnedUsd),

@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAnyPermission } from "@/lib/auth";
+import { requireAdmin, requireAnyPermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { getClientIp } from "@/lib/request-ip";
 import { customerHasCancellation } from "@/lib/services/cancellations";
+import { deleteCustomer } from "@/lib/services/customer-delete";
 import { getBajaEligibility } from "@/lib/services/collections";
 import {
   prepareCustomerUpdate,
@@ -95,5 +96,36 @@ export async function PATCH(
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }
     return NextResponse.json({ error: "Error al actualizar cliente" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await requireAdmin();
+    const { id } = await params;
+    const removed = await deleteCustomer(id);
+
+    await audit({
+      userId: session.userId,
+      action: "DELETE",
+      entity: "Customer",
+      entityId: id,
+      detail: `Cliente eliminado · ${removed.contract} · ${removed.name}`,
+      ipAddress: getClientIp(request),
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    if (e instanceof Error && e.message === "NOT_FOUND") {
+      return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+    }
+    if (e instanceof Error && e.message === "FORBIDDEN") {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
+    console.error("[DELETE /api/customers/[id]]", e);
+    return NextResponse.json({ error: "No se pudo eliminar el cliente" }, { status: 500 });
   }
 }

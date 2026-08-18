@@ -130,6 +130,12 @@ export function canAccessRoute(role: UserRole, pathname: string, method?: string
   ) {
     return isAdminRole(role);
   }
+  if (
+    method === "DELETE" &&
+    /^\/api\/customers\/[^/]+$/.test(pathname)
+  ) {
+    return isAdminRole(role);
+  }
   if (pathname === "/" || pathname.startsWith("/api/dashboard")) {
     return hasPermission(role, "dashboard:view");
   }

@@ -3,6 +3,7 @@ import type { PlanChangeStatus, Prisma, ContractOperationType } from "@prisma/cl
 import { prisma } from "@/lib/prisma";
 import { nextContractDocumentNumber } from "@/lib/acta-number";
 import { generateContractDocumentPdf } from "@/lib/pdf-contract-document";
+import { isIdentitySelfieRecorded } from "@/lib/pdf-plan-change-identity";
 import { buildCustomerContractSummary, isEligibleForRenewal } from "@/lib/contract-eligibility";
 
 const ACTIVE_BLOCKING_STATUSES: PlanChangeStatus[] = [
@@ -632,11 +633,38 @@ export async function listPlanChanges(filters?: {
   previousPlanId?: string;
   newPlanId?: string;
   operationType?: string;
+  operationTypes?: ContractOperationType[];
   signed?: string;
 }) {
+  const where = buildPlanChangeReportWhere(filters);
+
+  return prisma.planChange.findMany({
+    where,
+    include: {
+      customer: { select: { contract: true, name: true, cedula: true } },
+      createdBy: { select: { name: true } },
+    },
+    orderBy: { requestDate: "desc" },
+  });
+}
+
+function buildPlanChangeReportWhere(filters?: {
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  userId?: string;
+  customerId?: string;
+  previousPlanId?: string;
+  newPlanId?: string;
+  operationType?: string;
+  operationTypes?: ContractOperationType[];
+  signed?: string;
+}): Prisma.PlanChangeWhereInput {
   const where: Prisma.PlanChangeWhereInput = {};
 
-  if (filters?.operationType) {
+  if (filters?.operationTypes?.length) {
+    where.operationType = { in: filters.operationTypes };
+  } else if (filters?.operationType) {
     where.operationType = filters.operationType as ContractOperationType;
   }
 
@@ -654,11 +682,48 @@ export async function listPlanChanges(filters?: {
   if (filters?.signed === "true") where.signedAt = { not: null };
   if (filters?.signed === "false") where.signedAt = null;
 
+  return where;
+}
+
+export function serializePlanChangeReportRow<
+  T extends {
+    identitySelfieData?: string | null;
+    identitySelfieAt?: Date | null;
+    signedPdfData?: string | null;
+    signatureImageData?: string | null;
+  },
+>(row: T) {
+  const { identitySelfieData, signedPdfData, signatureImageData, ...rest } = row;
+  return {
+    ...rest,
+    hasIdentitySelfie: isIdentitySelfieRecorded(row),
+  };
+}
+
+export async function listPlanChangesWithSelfies(filters?: {
+  status?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  userId?: string;
+  customerId?: string;
+  previousPlanId?: string;
+  newPlanId?: string;
+  operationType?: string;
+  operationTypes?: ContractOperationType[];
+  signed?: string;
+}) {
+  const where = buildPlanChangeReportWhere(filters);
+  where.identitySelfieData = { not: null };
+
   return prisma.planChange.findMany({
     where,
-    include: {
-      customer: { select: { contract: true, name: true, cedula: true } },
-      createdBy: { select: { name: true } },
+    select: {
+      operationType: true,
+      identitySelfieData: true,
+      identitySelfieId: true,
+      identitySelfieAt: true,
+      addendumNumber: true,
+      customer: { select: { name: true, cedula: true, contract: true } },
     },
     orderBy: { requestDate: "desc" },
   });

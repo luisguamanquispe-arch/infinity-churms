@@ -1,13 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth";
-import { listPlanChanges } from "@/lib/services/plan-changes";
+import {
+  listPlanChanges,
+  listPlanChangesWithSelfies,
+  serializePlanChangeReportRow,
+} from "@/lib/services/plan-changes";
 import { PLAN_CHANGE_STATUS_LABELS } from "@/lib/constants";
 import {
   appendPlanChangeReportSelfiesAppendix,
-  hasIdentitySelfie,
+  isIdentitySelfieRecorded,
 } from "@/lib/pdf-plan-change-identity";
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
+
+const PLAN_CHANGE_REPORT_TYPES = ["CAMBIO_PLAN", "RENOVACION_CAMBIO_PLAN"] as const;
+
+function reportFilters(sp: URLSearchParams) {
+  return {
+    status: sp.get("status") ?? undefined,
+    dateFrom: sp.get("dateFrom") ?? undefined,
+    dateTo: sp.get("dateTo") ?? undefined,
+    userId: sp.get("userId") ?? undefined,
+    signed: sp.get("signed") ?? undefined,
+    operationTypes: [...PLAN_CHANGE_REPORT_TYPES],
+  };
+}
 
 function fmtDate(d: Date | string | null | undefined) {
   if (!d) return "—";
@@ -19,17 +36,12 @@ export async function GET(request: NextRequest) {
     await requirePermission("reports:view");
     const sp = request.nextUrl.searchParams;
     const format = sp.get("format");
+    const filters = reportFilters(sp);
 
-    const rows = await listPlanChanges({
-      status: sp.get("status") ?? undefined,
-      dateFrom: sp.get("dateFrom") ?? undefined,
-      dateTo: sp.get("dateTo") ?? undefined,
-      userId: sp.get("userId") ?? undefined,
-      signed: sp.get("signed") ?? undefined,
-    });
+    const rows = await listPlanChanges(filters);
 
     if (format === "json") {
-      return NextResponse.json(rows);
+      return NextResponse.json(rows.map(serializePlanChangeReportRow));
     }
 
     if (format === "csv" || format === "excel") {
@@ -47,7 +59,7 @@ export async function GET(request: NextRequest) {
           fmtDate(r.newPermanenceEnd),
           PLAN_CHANGE_STATUS_LABELS[r.status] ?? r.status,
           r.addendumNumber ?? "",
-          hasIdentitySelfie(r.identitySelfieData) ? "Sí" : "No",
+          isIdentitySelfieRecorded(r) ? "Sí" : "No",
         ]
           .map((c) => `"${String(c).replace(/"/g, '""')}"`)
           .join(",")
@@ -62,6 +74,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (format === "pdf") {
+      const selfieRows = await listPlanChangesWithSelfies(filters);
       const doc = new jsPDF({ orientation: "landscape" });
       doc.setFontSize(14);
       doc.text("Reporte — Cambios de Plan", 14, 16);
@@ -93,11 +106,11 @@ export async function GET(request: NextRequest) {
           fmtDate(r.newPermanenceEnd),
           PLAN_CHANGE_STATUS_LABELS[r.status] ?? r.status,
           r.addendumNumber ?? "—",
-          hasIdentitySelfie(r.identitySelfieData) ? "Sí" : "No",
+          isIdentitySelfieRecorded(r) ? "Sí" : "No",
         ]),
         styles: { fontSize: 7 },
       });
-      appendPlanChangeReportSelfiesAppendix(doc, rows, "Reporte — Cambios de Plan");
+      appendPlanChangeReportSelfiesAppendix(doc, selfieRows, "Reporte — Cambios de Plan");
       return new NextResponse(new Uint8Array(doc.output("arraybuffer")), {
         headers: {
           "Content-Type": "application/pdf",
@@ -106,7 +119,7 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json(rows);
+    return NextResponse.json(rows.map(serializePlanChangeReportRow));
   } catch (e) {
     if (e instanceof Error && e.message === "FORBIDDEN") {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });

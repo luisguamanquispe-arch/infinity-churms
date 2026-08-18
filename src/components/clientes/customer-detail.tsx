@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   COLORS,
   COLLECTION_MANAGEMENT_TYPES,
@@ -124,13 +125,16 @@ export function CustomerDetailView({
   initial,
   canCreateBaja,
   canManageCollections,
+  canDeleteCustomer,
   equipmentTariffs,
 }: {
   initial: CustomerDetail;
   canCreateBaja: boolean;
   canManageCollections: boolean;
+  canDeleteCustomer: boolean;
   equipmentTariffs: { type: string; notReturnedUsd: number | string }[];
 }) {
+  const router = useRouter();
   const [tab, setTab] = useState<"datos" | "cobranza" | "contrato">(
     canManageCollections ? "cobranza" : "datos"
   );
@@ -142,6 +146,7 @@ export function CustomerDetailView({
   const [form, setForm] = useState(emptyForm);
   const [msg, setMsg] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [attachment, setAttachment] = useState<{ name: string; data: string } | null>(null);
   const [photo, setPhoto] = useState<{ name: string; data: string } | null>(null);
 
@@ -234,6 +239,28 @@ export function CustomerDetailView({
 
   const showPromise = form.result === "PROMESA_DE_PAGO";
 
+  async function deleteCustomerRecord() {
+    const confirmed = window.confirm(
+      `¿Eliminar permanentemente al cliente ${customer.name} (${customer.contract})?\n\nSe eliminarán también sus cambios de plan, bajas y gestiones asociadas.`
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setMsg("");
+    try {
+      const res = await fetch(`/api/customers/${customer.id}`, { method: "DELETE" });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setMsg(json.error ?? "No se pudo eliminar el cliente.");
+        return;
+      }
+      router.push("/clientes");
+      router.refresh();
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
       <header className="flex flex-wrap items-start justify-between gap-4">
@@ -315,6 +342,16 @@ export function CustomerDetailView({
                 </p>
               )}
             </>
+          )}
+          {canDeleteCustomer && (
+            <button
+              type="button"
+              onClick={deleteCustomerRecord}
+              disabled={deleting}
+              className="block w-full rounded-lg border border-red-200 px-4 py-2 text-center text-sm font-semibold text-red-700 hover:bg-red-50 disabled:opacity-60"
+            >
+              {deleting ? "Eliminando…" : "Eliminar cliente"}
+            </button>
           )}
         </div>
       </header>
