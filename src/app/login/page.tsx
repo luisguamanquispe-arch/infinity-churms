@@ -12,7 +12,7 @@ function safeRedirectPath(from: string | null) {
 
 function LoginForm() {
   const searchParams = useSearchParams();
-  const [email, setEmail] = useState("admin@infinity.net");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -74,17 +74,32 @@ function LoginForm() {
             {loading ? "Ingresando…" : "Ingresar"}
           </button>
         </div>
-        <p className="mt-4 text-xs text-slate-400">
-          admin@infinity.net · cobranzas@infinity.net / admin2010
-        </p>
       </form>
+    </div>
+  );
+}
+
+function LoginLoading() {
+  return (
+    <div
+      className="flex min-h-screen items-center justify-center bg-slate-50 p-6"
+      style={{ backgroundColor: "#f8fafc", color: "#0f172a" }}
+    >
+      <div className="text-center">
+        <InfinityLogo variant="compact" className="mx-auto" priority />
+        <div
+          className="mx-auto mt-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-[#00A9B5]"
+          aria-hidden
+        />
+        <p className="mt-4 text-sm font-medium text-[#0B1F3A]">Cargando acceso…</p>
+      </div>
     </div>
   );
 }
 
 export default function LoginPage() {
   return (
-    <Suspense>
+    <Suspense fallback={<LoginLoading />}>
       <LoginForm />
     </Suspense>
   );

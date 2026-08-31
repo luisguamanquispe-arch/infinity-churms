@@ -1,11 +1,10 @@
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import type { UserRole } from "@prisma/client";
+import { getJwtSecretBytes } from "./env";
 import { hasPermission, type Permission } from "./permissions";
 
-const secret = new TextEncoder().encode(
-  process.env.JWT_SECRET ?? "dev-secret-change-me"
-);
+const secret = getJwtSecretBytes();
 
 export const AUTH_COOKIE = "infinity-auth";
 

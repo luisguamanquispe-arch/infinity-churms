@@ -3,15 +3,18 @@ import { requirePermission, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import {
+  createCancellationRecord,
+  CancellationConflictError,
   customerHasCancellation,
   initEquipmentChecklist,
   listCancellations,
   recalculateCancellation,
   validatePermanenceForCancellation,
   customerTechnologyInput,
+  getPermanencePreviewForCustomer,
 } from "@/lib/services/cancellations";
 import { createInitialPreliquidacion } from "@/lib/services/preliquidaciones";
-import { buildPermanenceSummary, PERMANENCE_AUDIT_REASON } from "@/lib/permanence";
+import { PERMANENCE_AUDIT_REASON } from "@/lib/permanence";
 import { validateClientPath, type BajaClientPath } from "@/lib/baja-client-path";
 import { getBajaEligibility } from "@/lib/services/collections";
 import { getClientIp } from "@/lib/request-ip";
@@ -108,11 +111,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: permanenceValidation.warning }, { status: 400 });
     }
 
-    const config = await prisma.tariffConfig.findFirst();
-    const permanencePreview = buildPermanenceSummary(techInput, requestDate, {
-      permanenceMonths: config?.permanenceMonths ?? 18,
-      installCostUsd: Number(config?.installCostUsd ?? 200),
-    });
+    const permanencePreview = await getPermanencePreviewForCustomer(customerId, requestDate);
     if (!permanencePreview.canCalculate) {
       return NextResponse.json({ error: permanencePreview.warning }, { status: 400 });
     }
@@ -128,19 +127,26 @@ export async function POST(request: NextRequest) {
     const archivedPdfName = sanitizePdfFileName(withdrawalRequestFileName);
     const archivedPdfData = withdrawalRequestFileData.trim();
 
-    const cancellation = await prisma.cancellation.create({
-      data: {
+    let cancellation;
+    try {
+      cancellation = await createCancellationRecord({
         customerId,
         reason,
         notes,
         requestDate,
         createdById: session.userId,
-        status: "SOLICITADA",
         withdrawalRequestFileName: archivedPdfName,
         withdrawalRequestFileData: archivedPdfData,
-        withdrawalRequestUploadedAt: new Date(),
-      },
-    });
+      });
+    } catch (createError) {
+      if (createError instanceof CancellationConflictError) {
+        return NextResponse.json(
+          { error: "Este cliente ya tiene una baja registrada. No se puede crear otra." },
+          { status: 409 }
+        );
+      }
+      throw createError;
+    }
 
     try {
       await initEquipmentChecklist(cancellation.id, customerId);

@@ -74,16 +74,24 @@ export function generateManualCobranzaPdf(): jsPDF {
 
   autoTable(doc, {
     startY: y,
-    head: [["Usuario", "Contraseña", "Rol"]],
+    head: [["Perfil", "Menú principal"]],
     body: [
-      ["admin@infinity.net", "admin2010", "Administrador"],
-      ["supervisor@infinity.net", "admin2010", "Supervisor"],
+      ["Administrador", "Clientes · Cobranza, Configuración, Reportes"],
+      ["Supervisor", "Clientes · Cobranza, Reportes (según permisos)"],
+      ["Cobranzas", "Clientes · Cobranza, Bajas, Cambio de plan"],
     ],
     styles: { fontSize: 8 },
     headStyles: { fillColor: [11, 31, 58], textColor: 255 },
     margin: { left: MARGIN, right: MARGIN },
   });
-  y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 10;
+  y = (doc as jsPDF & { lastAutoTable: { finalY: number } }).lastAutoTable.finalY + 6;
+  y = writeParagraph(
+    doc,
+    "Las credenciales de acceso son asignadas por el administrador del sistema. " +
+      "No comparta contraseñas por correo ni las publique en documentación.",
+    y
+  );
+  y += 4;
 
   y = writeHeading(doc, "3. Flujo operativo", y);
   y = writeParagraph(

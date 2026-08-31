@@ -1,4 +1,10 @@
 import { differenceInMonths } from "date-fns";
+import {
+  assertValidInstallCostUsd,
+  assertValidPermanenceMonths,
+  assertValidTvMonthlyUsd,
+  PermanenceConfigError,
+} from "@/lib/permanence-config";
 
 export interface LiquidationInput {
   permanenceStartDate: Date;
@@ -25,6 +31,10 @@ export interface LiquidationResult {
 }
 
 export function calculateLiquidation(input: LiquidationInput): LiquidationResult {
+  const permanenceMonths = assertValidPermanenceMonths(input.config.permanenceMonths);
+  const installCostUsd = assertValidInstallCostUsd(input.config.installCostUsd);
+  const tvMonthlyUsd = assertValidTvMonthlyUsd(input.config.tvMonthlyUsd);
+
   const monthsCompleted =
     input.monthsCompletedOverride ??
     Math.max(0, differenceInMonths(input.requestDate, input.permanenceStartDate));
@@ -36,8 +46,8 @@ export function calculateLiquidation(input: LiquidationInput): LiquidationResult
     permanenceAmount = input.permanenceAmountOverride;
     fiberInstallPending = permanenceAmount > 0;
   } else {
-    const monthsPending = Math.max(0, input.config.permanenceMonths - monthsCompleted);
-    const monthlyPermanence = input.config.installCostUsd / input.config.permanenceMonths;
+    const monthsPending = Math.max(0, permanenceMonths - monthsCompleted);
+    const monthlyPermanence = installCostUsd / permanenceMonths;
     permanenceAmount = Math.round(monthsPending * monthlyPermanence * 100) / 100;
     fiberInstallPending = monthsPending > 0;
   }
@@ -45,7 +55,7 @@ export function calculateLiquidation(input: LiquidationInput): LiquidationResult
   let tvAmount = 0;
   if (input.hasTvStreaming && input.tvStreamingSince) {
     const tvMonths = Math.max(1, differenceInMonths(input.requestDate, input.tvStreamingSince));
-    tvAmount = Math.round(tvMonths * input.config.tvMonthlyUsd * 100) / 100;
+    tvAmount = Math.round(tvMonths * tvMonthlyUsd * 100) / 100;
   }
 
   const monthlyAmount = input.pendingBalance;
@@ -53,6 +63,14 @@ export function calculateLiquidation(input: LiquidationInput): LiquidationResult
   const otherAmount = input.extraCharges.reduce((s, c) => s + c.amount, 0);
   const totalAmount =
     Math.round((permanenceAmount + tvAmount + monthlyAmount + otherAmount) * 100) / 100;
+
+  if (
+    !Number.isFinite(permanenceAmount) ||
+    !Number.isFinite(tvAmount) ||
+    !Number.isFinite(totalAmount)
+  ) {
+    throw new PermanenceConfigError("La liquidación produjo un valor inválido.");
+  }
 
   return {
     monthsCompleted,

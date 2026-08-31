@@ -2,13 +2,96 @@ import { prisma } from "@/lib/prisma";
 import { buildCustomerSearchWhere } from "@/lib/services/customer-search";
 import { calculateLiquidation } from "@/lib/liquidation";
 import { buildPermanenceSummary, validatePermanenceForCancellation, calculatePermanenceFromStartDate } from "@/lib/permanence";
+import {
+  resolvePermanenceConfigForCustomer,
+  resolvePermanenceTariffForCancellation,
+} from "@/lib/permanence-config-resolver";
 import type { CancellationReason, CancellationStatus, EquipmentCondition, EquipmentType } from "@prisma/client";
 import { deliveryStateForEquipment, isEquipmentReceptionComplete } from "@/lib/equipment-reception";
 import { assertPreliquidacionApproved } from "@/lib/preliquidacion-guards";
 
-export async function customerHasCancellation(customerId: string) {
-  const count = await prisma.cancellation.count({ where: { customerId } });
+export const TERMINAL_CANCELLATION_STATUSES: CancellationStatus[] = ["BAJA_COMPLETADA", "CANCELADA"];
+
+export class CancellationConflictError extends Error {
+  constructor() {
+    super("CUSTOMER_HAS_ACTIVE_CANCELLATION");
+    this.name = "CancellationConflictError";
+  }
+}
+
+function isPrismaUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    (error as { code: string }).code === "P2002"
+  );
+}
+
+export async function customerHasActiveCancellation(customerId: string) {
+  const count = await prisma.cancellation.count({
+    where: {
+      customerId,
+      status: { notIn: TERMINAL_CANCELLATION_STATUSES },
+    },
+  });
   return count > 0;
+}
+
+export async function customerHasCancellation(customerId: string) {
+  return customerHasActiveCancellation(customerId);
+}
+
+export interface CreateCancellationInput {
+  customerId: string;
+  reason: CancellationReason;
+  notes?: string | null;
+  requestDate: Date;
+  createdById: string;
+  withdrawalRequestFileName: string;
+  withdrawalRequestFileData: string;
+}
+
+export async function createCancellationRecord(input: CreateCancellationInput) {
+  const permanenceConfig = await resolvePermanenceConfigForCustomer(input.customerId);
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const active = await tx.cancellation.findFirst({
+        where: {
+          customerId: input.customerId,
+          status: { notIn: TERMINAL_CANCELLATION_STATUSES },
+        },
+      });
+      if (active) {
+        throw new CancellationConflictError();
+      }
+
+      return tx.cancellation.create({
+        data: {
+          customerId: input.customerId,
+          reason: input.reason,
+          notes: input.notes,
+          requestDate: input.requestDate,
+          createdById: input.createdById,
+          status: "SOLICITADA",
+          withdrawalRequestFileName: input.withdrawalRequestFileName,
+          withdrawalRequestFileData: input.withdrawalRequestFileData,
+          withdrawalRequestUploadedAt: new Date(),
+          permanenceMonthsSnapshot: permanenceConfig.permanenceMonths,
+          installCostUsdSnapshot: permanenceConfig.installCostUsd,
+          tvMonthlyUsdSnapshot: permanenceConfig.tvMonthlyUsd,
+          permanenceConfigSource: permanenceConfig.source,
+          planChangeIdSnapshot: permanenceConfig.planChangeId,
+        },
+      });
+    });
+  } catch (error) {
+    if (error instanceof CancellationConflictError || isPrismaUniqueViolation(error)) {
+      throw new CancellationConflictError();
+    }
+    throw error;
+  }
 }
 
 export async function getDashboardKpis() {
@@ -161,17 +244,17 @@ export async function recalculateCancellation(
   const row = await getCancellation(cancellationId);
   if (!row) throw new Error("NOT_FOUND");
 
-  const config = await prisma.tariffConfig.findFirst();
+  const resolvedTariff = await resolvePermanenceTariffForCancellation(row);
   const tariff = {
-    permanenceMonths: config?.permanenceMonths ?? 18,
-    installCostUsd: Number(config?.installCostUsd ?? 200),
-    tvMonthlyUsd: Number(config?.tvMonthlyUsd ?? 2),
+    permanenceMonths: resolvedTariff.permanenceMonths,
+    installCostUsd: resolvedTariff.installCostUsd,
+    tvMonthlyUsd: resolvedTariff.tvMonthlyUsd,
   };
 
   const permanence = buildPermanenceSummary(customerTechnologyInput(row.customer), row.requestDate, {
     permanenceMonths: tariff.permanenceMonths,
     installCostUsd: tariff.installCostUsd,
-  });
+  }, { planChangeAddendum: resolvedTariff.planChangeAddendum });
 
   if (!permanence.canCalculate || !permanence.permanenceStartDate) {
     throw new Error("PERMANENCE_INCOMPLETE");
@@ -240,20 +323,15 @@ export function customerTechnologyInput(customer: {
 export async function getPermanencePreviewForCustomer(customerId: string, requestDate = new Date()) {
   const customer = await prisma.customer.findUnique({ where: { id: customerId } });
   if (!customer) throw new Error("NOT_FOUND");
-  const config = await prisma.tariffConfig.findFirst();
-  const activePlanChange = await prisma.planChange.findFirst({
-    where: { customerId, status: "ACTIVO" },
-    orderBy: { activatedAt: "desc" },
-    select: { addendumNumber: true },
-  });
+  const resolved = await resolvePermanenceConfigForCustomer(customerId);
   return buildPermanenceSummary(
     customerTechnologyInput(customer),
     requestDate,
     {
-      permanenceMonths: config?.permanenceMonths ?? 18,
-      installCostUsd: Number(config?.installCostUsd ?? 200),
+      permanenceMonths: resolved.permanenceMonths,
+      installCostUsd: resolved.installCostUsd,
     },
-    { planChangeAddendum: activePlanChange?.addendumNumber ?? null }
+    { planChangeAddendum: resolved.planChangeAddendum }
   );
 }
 

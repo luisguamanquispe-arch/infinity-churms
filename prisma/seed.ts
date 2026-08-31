@@ -4,7 +4,13 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  const hash = await bcrypt.hash("admin2010", 10);
+  const seedPassword = process.env.SEED_DEFAULT_PASSWORD?.trim();
+  if (!seedPassword) {
+    throw new Error(
+      "SEED_DEFAULT_PASSWORD is required to run db:seed. Set it in .env for local development only."
+    );
+  }
+  const hash = await bcrypt.hash(seedPassword, 10);
 
   await prisma.user.updateMany({
     where: { email: { notIn: ["admin@infinity.net", "supervisor@infinity.net", "cobranzas@infinity.net"] } },

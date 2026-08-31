@@ -1237,6 +1237,31 @@ async function main() {
     END $$;
   `);
 
+  // --- AUD-003/005: snapshot de permanencia + una baja activa por cliente ---
+  await run(`
+    DO $$ BEGIN
+      IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'Cancellation'
+      ) AND NOT EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'public' AND table_name = 'Cancellation' AND column_name = 'permanenceMonthsSnapshot'
+      ) THEN
+        ALTER TABLE "Cancellation" ADD COLUMN "permanenceMonthsSnapshot" INTEGER;
+        ALTER TABLE "Cancellation" ADD COLUMN "installCostUsdSnapshot" DECIMAL(10,2);
+        ALTER TABLE "Cancellation" ADD COLUMN "tvMonthlyUsdSnapshot" DECIMAL(10,2);
+        ALTER TABLE "Cancellation" ADD COLUMN "permanenceConfigSource" TEXT;
+        ALTER TABLE "Cancellation" ADD COLUMN "planChangeIdSnapshot" TEXT;
+      END IF;
+    END $$;
+  `);
+
+  await run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "Cancellation_customerId_active_key"
+      ON "Cancellation"("customerId")
+      WHERE "status" NOT IN ('BAJA_COMPLETADA', 'CANCELADA');
+  `);
+
   console.log("Pre-deploy migrations OK");
 }
 

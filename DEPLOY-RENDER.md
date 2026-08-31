@@ -144,5 +144,6 @@ Confirmar deploy listo: `/api/health` con `"version"` igual al último commit de
 
 ## Login producción
 
-- `admin@infinity.net` / `admin2010`
-- `supervisor@infinity.net` / `admin2010`
+- Use las credenciales asignadas por el administrador del sistema.
+- Tras el primer deploy, rote contraseñas si alguna cuenta usó valores temporales de desarrollo.
+- No publique contraseñas en documentación, PDFs ni en la pantalla de login.

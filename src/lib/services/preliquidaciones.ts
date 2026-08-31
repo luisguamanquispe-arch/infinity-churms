@@ -9,6 +9,7 @@ import {
 import { buildPermanenceSummary, calculatePermanenceFromStartDate } from "@/lib/permanence";
 import { calculateLiquidation } from "@/lib/liquidation";
 import { INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL } from "@/lib/constants";
+import { resolvePermanenceTariffForCancellation } from "@/lib/permanence-config-resolver";
 
 export interface PreliquidacionLineInput {
   category: PreliquidacionLineCategory;
@@ -106,24 +107,18 @@ async function buildLineItems(cancellationId: string): Promise<PreliquidacionLin
   const row = await getCancellation(cancellationId);
   if (!row) throw new Error("NOT_FOUND");
 
-  const config = await prisma.tariffConfig.findFirst();
+  const resolvedTariff = await resolvePermanenceTariffForCancellation(row);
   const tariff = {
-    permanenceMonths: config?.permanenceMonths ?? 18,
-    installCostUsd: Number(config?.installCostUsd ?? 200),
-    tvMonthlyUsd: Number(config?.tvMonthlyUsd ?? 2),
+    permanenceMonths: resolvedTariff.permanenceMonths,
+    installCostUsd: resolvedTariff.installCostUsd,
+    tvMonthlyUsd: resolvedTariff.tvMonthlyUsd,
   };
-
-  const activePlanChange = await prisma.planChange.findFirst({
-    where: { customerId: row.customerId, status: "ACTIVO" },
-    orderBy: { activatedAt: "desc" },
-    select: { addendumNumber: true },
-  });
 
   const permanence = buildPermanenceSummary(
     customerTechnologyInput(row.customer),
     row.requestDate,
     tariff,
-    { planChangeAddendum: activePlanChange?.addendumNumber ?? null }
+    { planChangeAddendum: resolvedTariff.planChangeAddendum }
   );
 
   if (!permanence.canCalculate || !permanence.permanenceStartDate) {

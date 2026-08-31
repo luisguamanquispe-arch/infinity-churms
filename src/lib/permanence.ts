@@ -1,5 +1,10 @@
 import { differenceInMonths } from "date-fns";
 import type { ServiceTechnology } from "@prisma/client";
+import {
+  assertValidInstallCostUsd,
+  assertValidPermanenceMonths,
+  PermanenceConfigError,
+} from "@/lib/permanence-config";
 
 export const PERMANENCE_WARNING_INCOMPLETE =
   "No es posible calcular correctamente la permanencia de fibra porque falta la fecha de migración/instalación de fibra.";
@@ -140,13 +145,20 @@ export function calculatePermanenceFromStartDate(
   requestDate: Date,
   config: PermanenceConfig
 ) {
+  const permanenceMonths = assertValidPermanenceMonths(config.permanenceMonths);
+  const installCostUsd = assertValidInstallCostUsd(config.installCostUsd);
+
   const monthsInFiber = Math.max(0, differenceInMonths(requestDate, permanenceStartDate));
-  const permanenceMet = monthsInFiber >= config.permanenceMonths;
-  const monthsRemaining = Math.max(0, config.permanenceMonths - monthsInFiber);
-  const monthlyPermanenceRate = config.installCostUsd / config.permanenceMonths;
+  const permanenceMet = monthsInFiber >= permanenceMonths;
+  const monthsRemaining = Math.max(0, permanenceMonths - monthsInFiber);
+  const monthlyPermanenceRate = installCostUsd / permanenceMonths;
   const installAmount = permanenceMet
     ? 0
     : Math.round(monthsRemaining * monthlyPermanenceRate * 100) / 100;
+
+  if (!Number.isFinite(installAmount)) {
+    throw new PermanenceConfigError("El cálculo de permanencia produjo un valor inválido.");
+  }
 
   return {
     monthsInFiber,
@@ -158,12 +170,76 @@ export function calculatePermanenceFromStartDate(
   };
 }
 
+function buildInvalidConfigSummary(
+  customer: CustomerTechnologyInput,
+  requestDate: Date,
+  extras: { planChangeAddendum?: string | null } | undefined,
+  warning: string
+): PermanenceSummary {
+  const origin = customer.originTechnology as ServiceTechnology;
+  const current = customer.currentTechnology as ServiceTechnology;
+  const originalInstallDate = new Date(customer.serviceStartDate);
+  const customerSeniorityMonths = Math.max(
+    0,
+    differenceInMonths(requestDate, originalInstallDate)
+  );
+
+  return {
+    customerTypeLabel: getCustomerTypeLabel(customer),
+    originTechnology: origin,
+    currentTechnology: current,
+    currentTechnologyLabel: technologyLabel(current),
+    originalInstallDate: originalInstallDate.toISOString(),
+    fiberMigrationDate: customer.fiberMigrationDate
+      ? new Date(customer.fiberMigrationDate).toISOString()
+      : null,
+    fiberInstallDate: null,
+    permanenceStartDate: null,
+    contractPermanenceEnd: customer.contractPermanenceEnd
+      ? new Date(customer.contractPermanenceEnd).toISOString()
+      : null,
+    planChangeAddendum: extras?.planChangeAddendum ?? null,
+    requestDate: requestDate.toISOString(),
+    monthsInFiber: 0,
+    monthsRemaining: 0,
+    customerSeniorityMonths,
+    minContractMonths: 0,
+    fiberInstallValue: 0,
+    permanenceMet: false,
+    fiberInstallPending: false,
+    installAmount: 0,
+    monthlyPermanenceRate: 0,
+    canCalculate: false,
+    permanenceStatusLabel: "REVISIÓN REQUERIDA",
+    fiberInstallStatusLabel: "NO CALCULADO",
+    warning,
+    auditReason: null,
+  };
+}
+
 export function buildPermanenceSummary(
   customer: CustomerTechnologyInput,
   requestDate: Date,
   config: PermanenceConfig,
   extras?: { planChangeAddendum?: string | null }
 ): PermanenceSummary {
+  let validatedMonths: number;
+  let validatedInstall: number;
+  try {
+    validatedMonths = assertValidPermanenceMonths(config.permanenceMonths);
+    validatedInstall = assertValidInstallCostUsd(config.installCostUsd);
+  } catch (error) {
+    if (error instanceof PermanenceConfigError) {
+      return buildInvalidConfigSummary(customer, requestDate, extras, error.message);
+    }
+    throw error;
+  }
+
+  const validatedConfig: PermanenceConfig = {
+    permanenceMonths: validatedMonths,
+    installCostUsd: validatedInstall,
+  };
+
   const validation = validatePermanenceForCancellation(customer);
   const permanenceStart = resolvePermanenceStartDate(customer);
   const origin = customer.originTechnology as ServiceTechnology;
@@ -200,14 +276,14 @@ export function buildPermanenceSummary(
       planChangeAddendum: extras?.planChangeAddendum ?? null,
       requestDate: requestDate.toISOString(),
       monthsInFiber: 0,
-      monthsRemaining: config.permanenceMonths,
+      monthsRemaining: validatedMonths,
       customerSeniorityMonths,
-      minContractMonths: config.permanenceMonths,
-      fiberInstallValue: config.installCostUsd,
+      minContractMonths: validatedMonths,
+      fiberInstallValue: validatedInstall,
       permanenceMet: false,
       fiberInstallPending: false,
       installAmount: 0,
-      monthlyPermanenceRate: config.installCostUsd / config.permanenceMonths,
+      monthlyPermanenceRate: validatedInstall / validatedMonths,
       canCalculate: false,
       permanenceStatusLabel: "REVISIÓN REQUERIDA",
       fiberInstallStatusLabel: "NO CALCULADO",
@@ -216,7 +292,7 @@ export function buildPermanenceSummary(
     };
   }
 
-  const charge = calculatePermanenceFromStartDate(permanenceStart, requestDate, config);
+  const charge = calculatePermanenceFromStartDate(permanenceStart, requestDate, validatedConfig);
 
   return {
     customerTypeLabel: getCustomerTypeLabel(customer),
@@ -235,8 +311,8 @@ export function buildPermanenceSummary(
     monthsInFiber: charge.monthsInFiber,
     monthsRemaining: charge.monthsRemaining,
     customerSeniorityMonths,
-    minContractMonths: config.permanenceMonths,
-    fiberInstallValue: config.installCostUsd,
+    minContractMonths: validatedMonths,
+    fiberInstallValue: validatedInstall,
     permanenceMet: charge.permanenceMet,
     fiberInstallPending: charge.fiberInstallPending,
     installAmount: charge.installAmount,
