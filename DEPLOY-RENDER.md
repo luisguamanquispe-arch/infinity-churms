@@ -161,3 +161,5 @@ Ese hostname es la **URL interna** de Render. Suele indicar que la base PostgreS
 5. **Manual Deploy** después de corregir variables.
 
 El script `db:migrate` reintenta la conexión ~2 minutos antes de fallar (útil cuando la BD Free despierta junto con la web).
+
+En Render, si `DATABASE_URL` usa hostname interno `dpg-*-a`, la app convierte automáticamente a la URL externa `dpg-*.REGION-postgres.render.com` con `sslmode=require`.

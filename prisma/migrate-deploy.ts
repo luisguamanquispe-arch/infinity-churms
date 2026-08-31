@@ -1,34 +1,16 @@
 import { PrismaClient } from "@prisma/client";
 import { clearBusinessData } from "./clear-business-data";
+import { databaseHostLabel, getDatabaseUrl } from "../src/lib/database-url";
 
-function resolveDatabaseUrl(): string {
-  const url =
-    process.env.DATABASE_URL?.trim() ||
-    process.env.DATABASE_EXTERNAL_URL?.trim() ||
-    process.env.DATABASE_URL_EXTERNAL?.trim();
-  if (!url) {
-    throw new Error(
-      "DATABASE_URL is required. On Render, link the PostgreSQL instance to the web service or paste the External Database URL."
-    );
-  }
-  return url;
-}
-
-function databaseHostLabel(url: string): string {
-  try {
-    return new URL(url.replace(/^postgres(ql)?:\/\//, "https://")).hostname;
-  } catch {
-    return "(invalid DATABASE_URL)";
-  }
-}
+const databaseUrl = getDatabaseUrl();
 
 const prisma = new PrismaClient({
-  datasources: { db: { url: resolveDatabaseUrl() } },
+  datasources: { db: { url: databaseUrl } },
 });
 
 async function waitForDatabase(maxAttempts = 24, delayMs = 5000) {
-  const host = databaseHostLabel(resolveDatabaseUrl());
-  console.log(`Waiting for PostgreSQL at ${host} ...`);
+  const host = databaseHostLabel(databaseUrl);
+  console.log(`Using PostgreSQL at ${host}`);
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
