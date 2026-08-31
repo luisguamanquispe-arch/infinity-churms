@@ -1256,6 +1256,26 @@ async function main() {
     END $$;
   `);
 
+  // Resolver duplicados históricos antes del índice único parcial (AUD-005).
+  await run(`
+    UPDATE "Cancellation" c
+    SET "status" = 'CANCELADA', "updatedAt" = NOW()
+    WHERE c."id" IN (
+      SELECT "id"
+      FROM (
+        SELECT
+          "id",
+          ROW_NUMBER() OVER (
+            PARTITION BY "customerId"
+            ORDER BY "createdAt" DESC, "id" DESC
+          ) AS rn
+        FROM "Cancellation"
+        WHERE "status" NOT IN ('BAJA_COMPLETADA', 'CANCELADA')
+      ) ranked
+      WHERE rn > 1
+    );
+  `);
+
   await run(`
     CREATE UNIQUE INDEX IF NOT EXISTS "Cancellation_customerId_active_key"
       ON "Cancellation"("customerId")
