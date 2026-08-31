@@ -147,3 +147,17 @@ Confirmar deploy listo: `/api/health` con `"version"` igual al último commit de
 - Use las credenciales asignadas por el administrador del sistema.
 - Tras el primer deploy, rote contraseñas si alguna cuenta usó valores temporales de desarrollo.
 - No publique contraseñas en documentación, PDFs ni en la pantalla de login.
+
+## Error: Can't reach database server at `dpg-...-a:5432`
+
+Ese hostname es la **URL interna** de Render. Suele indicar que la base PostgreSQL no está accesible todavía o no está vinculada.
+
+1. Dashboard → servicio **PostgreSQL** (ej. `infinity-bajas`)
+   - Estado debe ser **Available**. Si está **Suspended**, pulse **Resume**.
+2. Dashboard → servicio **Web** → **Environment**
+   - `DATABASE_URL` debe estar **linked** a la base correcta (no una URL antigua copiada a mano).
+3. Misma región para web y BD (ej. Oregon).
+4. Si tras reanudar la BD sigue fallando, en PostgreSQL → **Connections** → copie **External Database URL** y úsela como `DATABASE_URL` en el servicio web (sustituye la interna).
+5. **Manual Deploy** después de corregir variables.
+
+El script `db:migrate` reintenta la conexión ~2 minutos antes de fallar (útil cuando la BD Free despierta junto con la web).

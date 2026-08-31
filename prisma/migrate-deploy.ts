@@ -1,13 +1,69 @@
 import { PrismaClient } from "@prisma/client";
 import { clearBusinessData } from "./clear-business-data";
 
-const prisma = new PrismaClient();
+function resolveDatabaseUrl(): string {
+  const url =
+    process.env.DATABASE_URL?.trim() ||
+    process.env.DATABASE_EXTERNAL_URL?.trim() ||
+    process.env.DATABASE_URL_EXTERNAL?.trim();
+  if (!url) {
+    throw new Error(
+      "DATABASE_URL is required. On Render, link the PostgreSQL instance to the web service or paste the External Database URL."
+    );
+  }
+  return url;
+}
+
+function databaseHostLabel(url: string): string {
+  try {
+    return new URL(url.replace(/^postgres(ql)?:\/\//, "https://")).hostname;
+  } catch {
+    return "(invalid DATABASE_URL)";
+  }
+}
+
+const prisma = new PrismaClient({
+  datasources: { db: { url: resolveDatabaseUrl() } },
+});
+
+async function waitForDatabase(maxAttempts = 24, delayMs = 5000) {
+  const host = databaseHostLabel(resolveDatabaseUrl());
+  console.log(`Waiting for PostgreSQL at ${host} ...`);
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      if (attempt > 1) {
+        console.log("Database connection established.");
+      }
+      return;
+    } catch (error) {
+      const summary = error instanceof Error ? error.message.split("\n")[0] : String(error);
+      if (attempt >= maxAttempts) {
+        console.error(
+          [
+            `Could not connect to PostgreSQL at ${host} after ${maxAttempts} attempts.`,
+            "Render checklist:",
+            "  1. Open the PostgreSQL service and confirm status is Available (resume if Suspended).",
+            "  2. Web service → Environment → DATABASE_URL must be linked to that database.",
+            "  3. Web and database should be in the same region.",
+            "  4. If internal hostname (*-a) keeps failing, replace DATABASE_URL with the External Database URL from the DB Connections tab.",
+          ].join("\n")
+        );
+        throw error;
+      }
+      console.warn(`Database not reachable (${attempt}/${maxAttempts}): ${summary}`);
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
 
 async function run(sql: string) {
   await prisma.$executeRawUnsafe(sql);
 }
 
 async function main() {
+  await waitForDatabase();
   console.log("Running pre-deploy SQL migrations...");
 
   await run(`
