@@ -93,8 +93,8 @@ El archivo `render.yaml` define la BD, pero **solo se crea automáticamente** si
 
 ## Comandos (render.yaml)
 
-- **Build:** `npm ci --include=dev && npm run render:build` (migraciones + build Next.js)
-- **Start:** `npm run render:start` (solo arranca Next.js — más rápido)
+- **Build:** `npm ci --include=dev && npm run render:build` (solo compila Next.js; no requiere BD)
+- **Start:** `npm run render:start` (migraciones SQL + arranque Next.js; la BD interna de Render solo es accesible aquí)
 - **Health:** `GET /api/health` → `{ "database": "connected", "version": "...", "collectionsReady": true }`
 - **Seed manual** (solo primera vez o reset usuarios): `npm run db:seed` en Shell de Render
 
@@ -102,8 +102,8 @@ El archivo `render.yaml` define la BD, pero **solo se crea automáticamente** si
 
 | Fase | Duración típica |
 |------|-----------------|
-| Build (`npm ci` + migraciones + `next build`) | 4–8 min |
-| Start (arranque Next.js) | 10–30 s |
+| Build (`npm ci` + `next build`) | 3–6 min |
+| Start (migraciones + arranque Next.js) | 15–45 s |
 | Servicio dormido (sin tráfico ~15 min) | 30–60 s al despertar |
 | **Total tras push a `main`** | **~5–10 min** |
 
