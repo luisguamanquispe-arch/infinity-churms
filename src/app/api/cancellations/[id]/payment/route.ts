@@ -50,20 +50,24 @@ export async function POST(
       return NextResponse.json({ error: "Número de factura obligatorio" }, { status: 400 });
     }
 
-    await prisma.cancellationPayment.create({
-      data: {
-        cancellationId: id,
-        paymentDate: new Date(paymentDate),
-        method,
-        invoiceNumber: invoiceNumber.trim(),
-        amountPaid,
-        notes,
-      },
-    });
-
-    await prisma.cancellation.update({
-      where: { id },
-      data: { invoiceNumber: invoiceNumber.trim(), status: "PAGADA" },
+    await prisma.$transaction(async (tx) => {
+      const statusUpdate = await tx.cancellation.updateMany({
+        where: { id, status: { in: ["BAJA_AUTORIZADA", "PENDIENTE_DE_PAGO"] } },
+        data: { invoiceNumber: invoiceNumber.trim(), status: "PAGADA" },
+      });
+      if (statusUpdate.count === 0) {
+        throw new Error("INVALID_STATUS");
+      }
+      await tx.cancellationPayment.create({
+        data: {
+          cancellationId: id,
+          paymentDate: new Date(paymentDate),
+          method,
+          invoiceNumber: invoiceNumber.trim(),
+          amountPaid,
+          notes,
+        },
+      });
     });
 
     await audit({
@@ -75,7 +79,13 @@ export async function POST(
     });
 
     return NextResponse.json({ ok: true });
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message === "INVALID_STATUS") {
+      return NextResponse.json(
+        { error: "La baja no está en estado válido para registrar pago." },
+        { status: 400 }
+      );
+    }
     return NextResponse.json({ error: "Error" }, { status: 500 });
   }
 }

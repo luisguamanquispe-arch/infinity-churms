@@ -7,7 +7,7 @@ import { serializePermanenceSummary } from "@/lib/permanence";
 import { ensureActivePreliquidacion, getActivePreliquidacion } from "@/lib/services/preliquidaciones";
 import { isPreApprovalStatus } from "@/lib/preliquidacion-guards";
 import { hasPermission } from "@/lib/permissions";
-import { serializeCancellationForClient } from "@/lib/serialize-cancellation";
+import { serializeCancellationByRole } from "@/lib/serialize-cancellation-by-role";
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -49,7 +49,7 @@ export default async function GestionarBajaPage({ params }: Props) {
     }
   }
 
-  const detail = serializeCancellationForClient(row);
+  const detail = serializeCancellationByRole(row, session.role);
 
   const permanenceRaw = await getPermanencePreviewForCustomer(row.customerId, row.requestDate);
   const permanenceSummary = serializePermanenceSummary(permanenceRaw);

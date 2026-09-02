@@ -4,7 +4,9 @@
  *
  * No utiliza producción. Crea datos de prueba y los elimina al finalizar.
  */
+import "./load-test-env";
 import { PrismaClient } from "@prisma/client";
+import { assertTestDatabaseAllowed } from "../src/lib/test-database-guard";
 import { generatePreliquidacion } from "../src/lib/services/preliquidaciones";
 import {
   approvePreliquidacionViaToken,
@@ -18,6 +20,23 @@ async function main() {
   if (!process.env.DATABASE_URL) {
     console.log("SKIP: DATABASE_URL no configurada. Configure en .env local para ejecutar esta prueba.");
     process.exit(0);
+  }
+  try {
+    assertTestDatabaseAllowed();
+  } catch (e) {
+    console.log(`BLOCKED: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  }
+
+  try {
+    await prisma.$queryRaw`SELECT 1`;
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (/authentication failed|password authentication failed/i.test(msg)) {
+      console.log("BLOCKED — PostgreSQL authentication failed");
+      process.exit(1);
+    }
+    throw error;
   }
 
   const admin = await prisma.user.findFirst({

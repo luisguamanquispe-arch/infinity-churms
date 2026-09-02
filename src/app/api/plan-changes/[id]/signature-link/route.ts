@@ -12,7 +12,6 @@ import {
   regenerateSignatureLink,
 } from "@/lib/services/plan-change-remote-signature";
 import { getPlanChange, getTariffConfig } from "@/lib/services/plan-changes";
-import { prisma } from "@/lib/prisma";
 
 export async function GET(
   _req: NextRequest,

@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requirePermission, requireSession } from "@/lib/auth";
+import { requireSession } from "@/lib/auth";
 import { hasPermission } from "@/lib/permissions";
 import { addCancellationEquipment, updateEquipmentItem } from "@/lib/services/cancellations";
+import { isEquipmentSerialConflict } from "@/lib/equipment-serial";
 import { audit } from "@/lib/audit";
 import type { EquipmentCondition, EquipmentType } from "@prisma/client";
 
@@ -55,6 +56,12 @@ export async function POST(
 
     return NextResponse.json(item);
   } catch (e) {
+    if (isEquipmentSerialConflict(e)) {
+      return NextResponse.json(
+        { error: "Ya existe un equipo registrado con esa serie" },
+        { status: 409 }
+      );
+    }
     if (e instanceof Error && e.message === "CLOSED") {
       return NextResponse.json({ error: "La baja ya no admite equipos" }, { status: 400 });
     }
@@ -67,7 +74,7 @@ export async function POST(
 
 export async function PATCH(
   request: NextRequest,
-  _ctx: { params: Promise<{ id: string }> }
+  ctx: { params: Promise<{ id: string }> }
 ) {
   try {
     const session = await requireSession();
@@ -78,6 +85,7 @@ export async function PATCH(
     ) {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }
+    const { id: cancellationId } = await ctx.params;
     const { equipmentId, delivered, condition, notes, brand, model, serial } = await request.json();
 
     if (!equipmentId || typeof equipmentId !== "string") {
@@ -91,7 +99,7 @@ export async function PATCH(
       brand,
       model,
       serial,
-    });
+    }, cancellationId);
 
     await audit({
       userId: session.userId,
@@ -102,8 +110,20 @@ export async function PATCH(
 
     return NextResponse.json(item);
   } catch (e) {
+    if (isEquipmentSerialConflict(e)) {
+      return NextResponse.json(
+        { error: "Ya existe un equipo registrado con esa serie" },
+        { status: 409 }
+      );
+    }
     if (e instanceof Error && e.message === "NOT_FOUND") {
       return NextResponse.json({ error: "Equipo no encontrado" }, { status: 404 });
+    }
+    if (e instanceof Error && e.message === "CLOSED") {
+      return NextResponse.json({ error: "La baja ya no admite cambios de equipo" }, { status: 400 });
+    }
+    if (e instanceof Error && e.message === "WRONG_CANCELLATION") {
+      return NextResponse.json({ error: "El equipo no pertenece a esta baja" }, { status: 403 });
     }
     return NextResponse.json({ error: "Error" }, { status: 500 });
   }

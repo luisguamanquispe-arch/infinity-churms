@@ -365,6 +365,14 @@ export async function computeFinalLiquidation(cancellationId: string) {
   const row = await getCancellation(cancellationId);
   if (!row) throw new Error("NOT_FOUND");
 
+  const existingFinal = await prisma.cancellationFinalLiquidation.findFirst({
+    where: { cancellationId },
+    orderBy: { version: "desc" },
+  });
+  if (existingFinal && ["LIQUIDACION_FINAL", "BAJA_COMPLETADA"].includes(row.status)) {
+    return existingFinal;
+  }
+
   const approved = await prisma.cancellationPreliquidacion.findFirst({
     where: { cancellationId, status: "APROBADA" },
     orderBy: { version: "desc" },
@@ -396,6 +404,23 @@ export async function computeFinalLiquidation(cancellationId: string) {
 
   equipmentAdjustment = Math.round(equipmentAdjustment * 100) / 100;
   const totalAmount = Math.round((preTotal + equipmentAdjustment) * 100) / 100;
+
+  const duplicate = await prisma.cancellationFinalLiquidation.findFirst({
+    where: { cancellationId, preliquidacionId: approved.id },
+  });
+  if (duplicate) {
+    if (row.status !== "LIQUIDACION_FINAL" && row.status !== "BAJA_COMPLETADA") {
+      await prisma.cancellation.update({
+        where: { id: cancellationId },
+        data: {
+          status: "LIQUIDACION_FINAL",
+          totalAmount: duplicate.totalAmount,
+          equipmentAmount: Math.max(0, Number(row.equipmentAmount) + Number(duplicate.equipmentAdjustment)),
+        },
+      });
+    }
+    return duplicate;
+  }
 
   const existingCount = await prisma.cancellationFinalLiquidation.count({
     where: { cancellationId },

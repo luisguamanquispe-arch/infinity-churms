@@ -60,6 +60,17 @@ interface PreliquidacionPanelProps {
 
 const CATEGORY_ORDER = ["PERMANENCIA", "MENSUALIDAD", "EQUIPO", "DANOS", "TV", "OTRO", "CREDITO"];
 
+function formatVeDateTime(iso: string) {
+  return new Date(iso).toLocaleString("es-VE", {
+    timeZone: "America/Caracas",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
   const [active, setActive] = useState<Preliquidacion | null>(props.activePreliquidacion ?? null);
   const [versions, setVersions] = useState<Preliquidacion[]>([]);
@@ -87,9 +98,11 @@ export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
     ? PRELIQUIDACION_STATUS_LABELS[active.status] ?? active.status
     : "Sin generar";
 
+  const activePreliquidacionId = props.activePreliquidacion?.id ?? null;
+
   useEffect(() => {
     setActive(props.activePreliquidacion ?? null);
-  }, [props.activePreliquidacion]);
+  }, [activePreliquidacionId, props.activePreliquidacion?.status, props.activePreliquidacion?.version]);
 
   const loadPreliquidacion = useCallback(async () => {
     setFetchError(null);
@@ -115,7 +128,7 @@ export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
     loadPreliquidacion().catch((e) => {
       setFetchError(e instanceof Error ? e.message : "No se pudo cargar la preliquidación");
     });
-  }, [loadPreliquidacion, props.activePreliquidacion]);
+  }, [loadPreliquidacion]);
 
   async function generateInitial() {
     setLoading(true);
@@ -377,15 +390,14 @@ export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
 
             {approved && active.approvedAt && (
               <div className="rounded-lg border border-teal-200 bg-teal-50 p-3 text-sm font-semibold text-teal-900">
-                ✓ PRELIQUIDACIÓN APROBADA —{" "}
-                {new Date(active.approvedAt).toLocaleString("es-VE")}
+                ✓ PRELIQUIDACIÓN APROBADA — {formatVeDateTime(active.approvedAt)}
               </div>
             )}
 
             {token && (
               <p className="text-xs text-slate-500">
                 Enlace: {SIGNATURE_LINK_STATUS_LABELS[token.status] ?? token.status}
-                {token.expiresAt && ` · Expira ${new Date(token.expiresAt).toLocaleString("es-VE")}`}
+                {token.expiresAt && ` · Expira ${formatVeDateTime(token.expiresAt)}`}
               </p>
             )}
 

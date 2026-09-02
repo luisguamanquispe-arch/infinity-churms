@@ -2,7 +2,9 @@
  * AUD-005: solo una baja activa por cliente ante solicitudes concurrentes.
  * Requiere DATABASE_URL. Se omite si no hay conexión.
  */
+import "./load-test-env";
 import { PrismaClient } from "@prisma/client";
+import { assertTestDatabaseAllowed } from "../src/lib/test-database-guard";
 import {
   CancellationConflictError,
   createCancellationRecord,
@@ -18,10 +20,21 @@ async function main() {
     console.log("SKIP: DATABASE_URL no configurada — prueba de concurrencia omitida");
     process.exit(0);
   }
+  try {
+    assertTestDatabaseAllowed();
+  } catch (e) {
+    console.log(`BLOCKED: ${e instanceof Error ? e.message : e}`);
+    process.exit(1);
+  }
 
   try {
     await prisma.$queryRaw`SELECT "permanenceMonthsSnapshot" FROM "Cancellation" LIMIT 0`;
-  } catch {
+  } catch (error) {
+    const msg = error instanceof Error ? error.message : String(error);
+    if (/authentication failed|password authentication failed/i.test(msg)) {
+      console.log("BLOCKED — PostgreSQL authentication failed");
+      process.exit(1);
+    }
     console.log(
       "SKIP: columnas AUD-003/005 no aplicadas aún en BD local — ejecute db:migrate en entorno de prueba"
     );

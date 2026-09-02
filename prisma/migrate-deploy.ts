@@ -1,3 +1,4 @@
+import "dotenv/config";
 import { PrismaClient } from "@prisma/client";
 import { clearBusinessData } from "./clear-business-data";
 import { databaseHostLabel, getDatabaseUrl } from "../src/lib/database-url";
@@ -703,13 +704,8 @@ async function main() {
   `);
 
   await run(`
-    DO $$ BEGIN
-      IF NOT EXISTS (
-        SELECT 1 FROM pg_constraint WHERE conname = 'PlanChange_addendumNumber_key'
-      ) THEN
-        CREATE UNIQUE INDEX IF NOT EXISTS "PlanChange_addendumNumber_key" ON "PlanChange"("addendumNumber");
-      END IF;
-    END $$;
+    CREATE UNIQUE INDEX IF NOT EXISTS "PlanChange_addendumNumber_key"
+      ON "PlanChange"("addendumNumber");
   `);
 
   await run(`
@@ -817,11 +813,12 @@ async function main() {
   `);
 
   await run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "PlanChangeSignatureToken_tokenHash_key"
+      ON "PlanChangeSignatureToken"("tokenHash");
+  `);
+
+  await run(`
     DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PlanChangeSignatureToken_tokenHash_key') THEN
-        CREATE UNIQUE INDEX IF NOT EXISTS "PlanChangeSignatureToken_tokenHash_key"
-          ON "PlanChangeSignatureToken"("tokenHash");
-      END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PlanChangeSignatureToken_planChangeId_fkey') THEN
         ALTER TABLE "PlanChangeSignatureToken"
           ADD CONSTRAINT "PlanChangeSignatureToken_planChangeId_fkey"
@@ -1097,18 +1094,19 @@ async function main() {
     );
   `);
 
+  // Prisma db push creates @unique as indexes (pg_indexes), not pg_constraint entries.
+  // CREATE UNIQUE INDEX IF NOT EXISTS is idempotent for both constraint- and index-backed uniques.
   await run(`
-    DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationPreliquidacion_cancellationId_version_key') THEN
-        ALTER TABLE "CancellationPreliquidacion" ADD CONSTRAINT "CancellationPreliquidacion_cancellationId_version_key" UNIQUE ("cancellationId", "version");
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'PreliquidacionApprovalToken_tokenHash_key') THEN
-        ALTER TABLE "PreliquidacionApprovalToken" ADD CONSTRAINT "PreliquidacionApprovalToken_tokenHash_key" UNIQUE ("tokenHash");
-      END IF;
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'Cancellation_activePreliquidacionId_key') THEN
-        ALTER TABLE "Cancellation" ADD CONSTRAINT "Cancellation_activePreliquidacionId_key" UNIQUE ("activePreliquidacionId");
-      END IF;
-    END $$;
+    CREATE UNIQUE INDEX IF NOT EXISTS "CancellationPreliquidacion_cancellationId_version_key"
+      ON "CancellationPreliquidacion"("cancellationId", "version");
+  `);
+  await run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "PreliquidacionApprovalToken_tokenHash_key"
+      ON "PreliquidacionApprovalToken"("tokenHash");
+  `);
+  await run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "Cancellation_activePreliquidacionId_key"
+      ON "Cancellation"("activePreliquidacionId");
   `);
 
   await run(`
@@ -1230,10 +1228,12 @@ async function main() {
   `);
 
   await run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS "CancellationActaSignatureToken_tokenHash_key"
+      ON "CancellationActaSignatureToken"("tokenHash");
+  `);
+
+  await run(`
     DO $$ BEGIN
-      IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationActaSignatureToken_tokenHash_key') THEN
-        ALTER TABLE "CancellationActaSignatureToken" ADD CONSTRAINT "CancellationActaSignatureToken_tokenHash_key" UNIQUE ("tokenHash");
-      END IF;
       IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'CancellationActaSignatureToken_cancellationId_fkey') THEN
         ALTER TABLE "CancellationActaSignatureToken" ADD CONSTRAINT "CancellationActaSignatureToken_cancellationId_fkey"
           FOREIGN KEY ("cancellationId") REFERENCES "Cancellation"("id") ON DELETE CASCADE ON UPDATE CASCADE;

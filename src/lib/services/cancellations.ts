@@ -8,7 +8,19 @@ import {
 } from "@/lib/permanence-config-resolver";
 import type { CancellationReason, CancellationStatus, EquipmentCondition, EquipmentType } from "@prisma/client";
 import { deliveryStateForEquipment, isEquipmentReceptionComplete } from "@/lib/equipment-reception";
+import { syncCustomerStatusAfterCancellationCompleted } from "@/lib/customer-status-sync";
+import {
+  PENDING_REQUEST_STATUSES,
+  PRELIQUIDACION_PIPELINE_STATUSES,
+  EQUIPMENT_RECOVERY_CANCELLATION_FILTER,
+} from "@/lib/cancellation-flow-statuses";
+import { PENDING_EQUIPMENT_RECOVERY_WHERE } from "@/lib/dashboard-kpi-definitions";
 import { assertPreliquidacionApproved } from "@/lib/preliquidacion-guards";
+import {
+  assertUniqueEquipmentSerial,
+  mapEquipmentSerialWriteError,
+  normalizeEquipmentSerial,
+} from "@/lib/equipment-serial";
 
 export const TERMINAL_CANCELLATION_STATUSES: CancellationStatus[] = ["BAJA_COMPLETADA", "CANCELADA"];
 
@@ -112,21 +124,21 @@ export async function getDashboardKpis() {
     notRecovered,
   ] = await Promise.all([
     prisma.cancellation.count({
-      where: { status: { in: ["SOLICITADA", "PRELIQUIDACION_EN_PROCESO", "PRELIQUIDACION_GENERADA", "PRELIQUIDACION_ENVIADA", "PRELIQUIDACION_PENDIENTE", "EN_REVISION"] } },
+      where: { status: { in: PENDING_REQUEST_STATUSES } },
     }),
     prisma.cancellation.count({
-      where: { status: { in: ["PRELIQUIDACION_GENERADA", "PRELIQUIDACION_ENVIADA", "PRELIQUIDACION_PENDIENTE"] } },
+      where: { status: { in: PRELIQUIDACION_PIPELINE_STATUSES } },
     }),
     prisma.cancellation.count({
-      where: { status: { in: ["PRELIQUIDACION_APROBADA", "BAJA_AUTORIZADA"] } },
+      where: { status: "BAJA_AUTORIZADA" },
     }),
     prisma.cancellation.count({ where: { status: "PRELIQUIDACION_RECHAZADA" } }),
     prisma.cancellation.count({ where: { status: "BAJA_AUTORIZADA" } }),
     prisma.cancellationEquipment.count({
-      where: { delivered: false, cancellation: { status: { not: "BAJA_COMPLETADA" } } },
+      where: { delivered: false, cancellation: EQUIPMENT_RECOVERY_CANCELLATION_FILTER },
     }),
     prisma.cancellation.aggregate({
-      where: { status: { in: ["PENDIENTE_DE_PAGO", "BAJA_AUTORIZADA", "EN_REVISION"] } },
+      where: { status: { in: ["PENDIENTE_DE_PAGO", "BAJA_AUTORIZADA"] } },
       _sum: { totalAmount: true },
     }),
     prisma.cancellation.count({ where: { status: "LIQUIDACION_FINAL" } }),
@@ -134,13 +146,10 @@ export async function getDashboardKpis() {
       where: { status: "BAJA_COMPLETADA", closeDate: { gte: monthStart } },
     }),
     prisma.cancellation.count({
-      where: { permanenceAmount: { gt: 0 }, status: { not: "BAJA_COMPLETADA" } },
+      where: { permanenceAmount: { gt: 0 }, status: { notIn: ["BAJA_COMPLETADA", "CANCELADA"] } },
     }),
     prisma.cancellationEquipment.count({
-      where: {
-        OR: [{ delivered: false }, { condition: "NO_ENTREGADO" }],
-        cancellation: { status: { not: "BAJA_COMPLETADA" } },
-      },
+      where: PENDING_EQUIPMENT_RECOVERY_WHERE,
     }),
   ]);
 
@@ -280,6 +289,18 @@ export async function recalculateCancellation(
     monthsCompletedOverride: charge.monthsInFiber,
   });
 
+  const equipmentFromItems = row.equipment.reduce(
+    (sum, e) => sum + Number(e.chargeAmount ?? 0),
+    0
+  );
+  const equipmentAmount =
+    equipmentFromItems > 0 ? equipmentFromItems : Number(row.equipmentAmount ?? 0);
+  const totalAmount =
+    Math.round(
+      (liq.permanenceAmount + liq.tvAmount + liq.monthlyAmount + liq.otherAmount + equipmentAmount) *
+        100
+    ) / 100;
+
   return prisma.cancellation.update({
     where: { id: cancellationId },
     data: {
@@ -287,9 +308,9 @@ export async function recalculateCancellation(
       permanenceAmount: liq.permanenceAmount,
       tvAmount: liq.tvAmount,
       monthlyAmount: liq.monthlyAmount,
-      equipmentAmount: 0,
+      equipmentAmount,
       otherAmount: liq.otherAmount,
-      totalAmount: liq.totalAmount,
+      totalAmount,
       permanenceStartDate: permanenceStart,
       originTechnology: permanence.originTechnology,
       currentTechnology: permanence.currentTechnology,
@@ -374,34 +395,39 @@ export async function addCancellationEquipment(
 
   const brand = data.brand?.trim() || null;
   const model = data.model?.trim() || null;
-  const serial = data.serial?.trim() || null;
+  const serial = normalizeEquipmentSerial(data.serial);
   const delivery = deliveryStateForEquipment(brand, model, serial);
 
-  const customerEq = await prisma.customerEquipment.create({
-    data: {
-      customerId: cancellation.customerId,
-      type: data.type,
-      serial,
-      brand,
-      model,
-    },
-  });
+  try {
+    await assertUniqueEquipmentSerial(serial);
+    const customerEq = await prisma.customerEquipment.create({
+      data: {
+        customerId: cancellation.customerId,
+        type: data.type,
+        serial,
+        brand,
+        model,
+      },
+    });
 
-  const item = await prisma.cancellationEquipment.create({
-    data: {
-      cancellationId,
-      equipmentId: customerEq.id,
-      type: data.type,
-      serial,
-      brand,
-      model,
-      delivered: delivery.delivered,
-      condition: delivery.condition,
-      chargeAmount: 0,
-    },
-  });
+    const item = await prisma.cancellationEquipment.create({
+      data: {
+        cancellationId,
+        equipmentId: customerEq.id,
+        type: data.type,
+        serial,
+        brand,
+        model,
+        delivered: delivery.delivered,
+        condition: delivery.condition,
+        chargeAmount: 0,
+      },
+    });
 
-  return item;
+    return item;
+  } catch (error) {
+    mapEquipmentSerialWriteError(error);
+  }
 }
 
 export async function updateEquipmentItem(
@@ -413,14 +439,27 @@ export async function updateEquipmentItem(
     brand?: string;
     model?: string;
     serial?: string;
-  }
+  },
+  cancellationId?: string
 ) {
   const current = await prisma.cancellationEquipment.findUnique({ where: { id } });
   if (!current) throw new Error("NOT_FOUND");
+  if (cancellationId && current.cancellationId !== cancellationId) {
+    throw new Error("WRONG_CANCELLATION");
+  }
+
+  const parent = await prisma.cancellation.findUnique({
+    where: { id: current.cancellationId },
+    select: { status: true },
+  });
+  if (parent && ["EQUIPOS_RECUPERADOS", "BAJA_COMPLETADA"].includes(parent.status)) {
+    throw new Error("CLOSED");
+  }
 
   const brand = data.brand !== undefined ? data.brand?.trim() || null : current.brand;
   const model = data.model !== undefined ? data.model?.trim() || null : current.model;
-  const serial = data.serial !== undefined ? data.serial?.trim() || null : current.serial;
+  const serial =
+    data.serial !== undefined ? normalizeEquipmentSerial(data.serial) : normalizeEquipmentSerial(current.serial);
 
   let delivered = data.delivered !== undefined ? data.delivered : current.delivered;
   let condition = data.condition !== undefined ? data.condition : current.condition;
@@ -457,34 +496,42 @@ export async function updateEquipmentItem(
     ...(data.notes !== undefined ? { notes: data.notes?.trim() || null } : {}),
   };
 
-  const item = await prisma.cancellationEquipment.update({
-    where: { id },
-    data: updateData,
-    include: { cancellation: true },
-  });
+  try {
+    if (current.equipmentId && data.serial !== undefined) {
+      await assertUniqueEquipmentSerial(serial, current.equipmentId);
+    }
 
-  if (item.equipmentId) {
-    await prisma.customerEquipment.update({
-      where: { id: item.equipmentId },
-      data: { brand, model, serial },
+    const updatedItem = await prisma.cancellationEquipment.update({
+      where: { id },
+      data: updateData,
+      include: { cancellation: true },
     });
+
+    if (updatedItem.equipmentId) {
+      await prisma.customerEquipment.update({
+        where: { id: updatedItem.equipmentId },
+        data: { brand, model, serial },
+      });
+    }
+
+    const tariffs = await prisma.equipmentTariff.findMany();
+    const tariff = tariffs.find((t) => t.type === updatedItem.type);
+    let charge = 0;
+    if (!updatedItem.delivered || updatedItem.condition === "NO_ENTREGADO") {
+      charge = Number(tariff?.notReturnedUsd ?? 0);
+    } else if (updatedItem.condition === "DANADO") {
+      charge = Number(tariff?.damagedUsd ?? 0);
+    }
+
+    await prisma.cancellationEquipment.update({
+      where: { id },
+      data: { chargeAmount: charge },
+    });
+
+    return updatedItem;
+  } catch (error) {
+    mapEquipmentSerialWriteError(error);
   }
-
-  const tariffs = await prisma.equipmentTariff.findMany();
-  const tariff = tariffs.find((t) => t.type === item.type);
-  let charge = 0;
-  if (!item.delivered || item.condition === "NO_ENTREGADO") {
-    charge = Number(tariff?.notReturnedUsd ?? 0);
-  } else if (item.condition === "DANADO") {
-    charge = Number(tariff?.damagedUsd ?? 0);
-  }
-
-  await prisma.cancellationEquipment.update({
-    where: { id },
-    data: { chargeAmount: charge },
-  });
-
-  return item;
 }
 
 const VALID_REASONS: CancellationReason[] = [
@@ -609,26 +656,16 @@ export async function updateCancellationAdmin(id: string, data: AdminCancellatio
   if (data.currentTechnology !== undefined) scalarData.currentTechnology = data.currentTechnology;
   if (data.fiberInstallPending !== undefined) scalarData.fiberInstallPending = data.fiberInstallPending;
 
-  if (!data.recalculate) {
-    if (data.permanenceAmount !== undefined) scalarData.permanenceAmount = data.permanenceAmount;
-    if (data.tvAmount !== undefined) scalarData.tvAmount = data.tvAmount;
-    if (data.monthlyAmount !== undefined) scalarData.monthlyAmount = data.monthlyAmount;
-    if (data.equipmentAmount !== undefined) scalarData.equipmentAmount = data.equipmentAmount;
-    if (data.otherAmount !== undefined) scalarData.otherAmount = data.otherAmount;
-    if (data.totalAmount !== undefined) {
-      scalarData.totalAmount = data.totalAmount;
-    } else if (
-      data.permanenceAmount !== undefined ||
-      data.tvAmount !== undefined ||
-      data.monthlyAmount !== undefined ||
-      data.otherAmount !== undefined
-    ) {
-      const permanence = data.permanenceAmount ?? Number(current.permanenceAmount);
-      const tv = data.tvAmount ?? Number(current.tvAmount);
-      const monthly = data.monthlyAmount ?? Number(current.monthlyAmount);
-      const other = data.otherAmount ?? Number(current.otherAmount);
-      scalarData.totalAmount = Math.round((permanence + tv + monthly + other) * 100) / 100;
-    }
+  const clientSentFinancial =
+    data.permanenceAmount !== undefined ||
+    data.tvAmount !== undefined ||
+    data.monthlyAmount !== undefined ||
+    data.equipmentAmount !== undefined ||
+    data.otherAmount !== undefined ||
+    data.totalAmount !== undefined;
+
+  if (!data.recalculate && clientSentFinancial) {
+    throw new Error("FINANCIAL_OVERRIDE_REQUIRES_RECALCULATE");
   }
 
   if (Object.keys(scalarData).length > 0) {
@@ -716,25 +753,14 @@ export async function updateCancellationAdmin(id: string, data: AdminCancellatio
       permanenceStartOverride: permanenceStartChanged ? data.permanenceStartDate : undefined,
     });
   } else if (data.charges?.length || data.deletedChargeIds?.length) {
-    const row = await getCancellation(id);
-    if (row) {
-      const extraTotal = row.charges.reduce((sum, c) => sum + Number(c.amount), 0);
-      const base =
-        Number(row.permanenceAmount) +
-        Number(row.tvAmount) +
-        Number(row.monthlyAmount) +
-        Number(row.otherAmount);
-      await prisma.cancellation.update({
-        where: { id },
-        data: {
-          otherAmount: extraTotal,
-          totalAmount: Math.round((base + extraTotal) * 100) / 100,
-        },
-      });
-    }
+    await recalculateCancellation(id);
   }
 
-  return getCancellation(id);
+  const result = await getCancellation(id);
+  if (result?.status === "BAJA_COMPLETADA") {
+    await syncCustomerStatusAfterCancellationCompleted(result.customerId);
+  }
+  return result;
 }
 
 export async function deleteCancellationCharge(cancellationId: string, chargeId: string) {

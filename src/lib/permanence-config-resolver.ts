@@ -65,12 +65,20 @@ export async function resolvePermanenceTariffForCancellation(
 ): Promise<PermanenceTariffSnapshot & { source: ResolvedPermanenceTariff["source"]; planChangeAddendum: string | null }> {
   const snapshot = tariffFromCancellationSnapshot(cancellation);
   if (snapshot) {
-    const resolved = await resolvePermanenceConfigForCustomer(cancellation.customerId, tx);
-    return {
-      ...snapshot,
-      source: resolved.source,
-      planChangeAddendum: resolved.planChangeAddendum,
-    };
+    try {
+      const resolved = await resolvePermanenceConfigForCustomer(cancellation.customerId, tx);
+      return {
+        ...snapshot,
+        source: resolved.source,
+        planChangeAddendum: resolved.planChangeAddendum,
+      };
+    } catch {
+      return {
+        ...snapshot,
+        source: "TARIFF_DEFAULT",
+        planChangeAddendum: null,
+      };
+    }
   }
 
   const resolved = await resolvePermanenceConfigForCustomer(cancellation.customerId, tx);

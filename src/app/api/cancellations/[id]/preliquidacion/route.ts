@@ -24,6 +24,10 @@ export async function GET(
     const { id } = await params;
     const format = _request.nextUrl.searchParams.get("format");
 
+    if (!hasPermission(session.role, "cancellations:preliquidate_view")) {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
+
     if (format === "pdf") {
       const row = await getCancellation(id);
       if (!row) return NextResponse.json({ error: "No encontrado" }, { status: 404 });

@@ -12,6 +12,7 @@ import {
   toUpperInput,
 } from "@/lib/constants";
 import { normalizeCedula, validateEcuadorianCedula } from "@/lib/cedula";
+import { formatBusinessDateFromApi } from "@/lib/business-date";
 import { PlanOfferFields } from "@/components/clientes/plan-offer-fields";
 
 type FormEquipmentRow = {
@@ -230,22 +231,22 @@ export function CustomerEditForm({
       offeredPlanSpeedMbps: json.offeredPlanSpeedMbps != null ? String(json.offeredPlanSpeedMbps) : null,
       offeredPlanMonthlyUsd: json.offeredPlanMonthlyUsd != null ? String(json.offeredPlanMonthlyUsd) : null,
       status: json.status,
-      serviceStartDate: new Date(json.serviceStartDate).toISOString(),
+      serviceStartDate: formatBusinessDateFromApi(json.serviceStartDate),
       originTechnology: json.originTechnology,
       currentTechnology: json.currentTechnology,
       fiberInstallDate: json.fiberInstallDate
-        ? new Date(json.fiberInstallDate).toISOString()
+        ? formatBusinessDateFromApi(json.fiberInstallDate)
         : null,
       fiberMigrationDate: json.fiberMigrationDate
-        ? new Date(json.fiberMigrationDate).toISOString()
+        ? formatBusinessDateFromApi(json.fiberMigrationDate)
         : null,
       migrationReviewRequired: json.migrationReviewRequired,
       hasTvStreaming: json.hasTvStreaming,
       tvStreamingSince: json.tvStreamingSince
-        ? new Date(json.tvStreamingSince).toISOString()
+        ? formatBusinessDateFromApi(json.tvStreamingSince)
         : null,
       pendingBalance: String(json.pendingBalance),
-      overdueSince: json.overdueSince ? new Date(json.overdueSince).toISOString() : null,
+      overdueSince: json.overdueSince ? formatBusinessDateFromApi(json.overdueSince) : null,
       openTechnicalClaim: json.openTechnicalClaim,
       inCollectionWhitelist: json.inCollectionWhitelist,
       assignedAgentUserId: json.assignedAgentUserId,

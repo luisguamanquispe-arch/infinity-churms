@@ -22,6 +22,8 @@ import {
   sanitizePdfFileName,
   validateWithdrawalRequestPdf,
 } from "@/lib/cancellation-withdrawal-document";
+import { parseBusinessDateInput, BusinessDateError } from "@/lib/business-date";
+import { serializeCancellationListItemByRole } from "@/lib/serialize-cancellation-by-role";
 import type { CancellationReason } from "@prisma/client";
 
 const VALID_REASONS: CancellationReason[] = [
@@ -35,7 +37,7 @@ const VALID_REASONS: CancellationReason[] = [
 
 export async function GET(request: NextRequest) {
   try {
-    await requireSession();
+    const session = await requireSession();
     const sp = request.nextUrl.searchParams;
     const rows = await listCancellations({
       status: sp.get("status") ?? undefined,
@@ -43,7 +45,7 @@ export async function GET(request: NextRequest) {
       dateTo: sp.get("dateTo") ?? undefined,
       q: sp.get("q") ?? undefined,
     });
-    return NextResponse.json(rows);
+    return NextResponse.json(rows.map((r) => serializeCancellationListItemByRole(r, session.role)));
   } catch {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -66,10 +68,9 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Motivo de baja obligatorio" }, { status: 400 });
     }
 
-    const requestDate = requestDateBody ? new Date(requestDateBody) : new Date();
-    if (Number.isNaN(requestDate.getTime())) {
-      return NextResponse.json({ error: "Fecha de solicitud inválida" }, { status: 400 });
-    }
+    const requestDate = requestDateBody
+      ? parseBusinessDateInput(String(requestDateBody))
+      : new Date();
 
     const customer = await prisma.customer.findUnique({ where: { id: customerId } });
     if (!customer) {
@@ -179,6 +180,9 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json({ id: cancellation.id });
   } catch (e) {
+    if (e instanceof BusinessDateError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
+    }
     if (e instanceof Error && e.message === "FORBIDDEN") {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }

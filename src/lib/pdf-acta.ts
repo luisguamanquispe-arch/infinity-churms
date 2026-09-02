@@ -2,7 +2,7 @@ import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, getEquipmentReportStatus, COMPANY_NAME } from "@/lib/constants";
 import { drawPdfBrandFooter, drawPdfBrandHeader } from "@/lib/pdf-branding";
-import { getCustomerTypeLabel, technologyLabel } from "@/lib/permanence";
+import { technologyLabel } from "@/lib/permanence";
 import type {
   Cancellation,
   CancellationEquipment,

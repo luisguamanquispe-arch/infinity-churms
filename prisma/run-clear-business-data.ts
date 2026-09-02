@@ -1,9 +1,11 @@
 import { PrismaClient } from "@prisma/client";
 import { clearBusinessData } from "./clear-business-data";
+import { assertTestDatabaseAllowed } from "../src/lib/test-database-guard";
 
 const prisma = new PrismaClient();
 
 async function main() {
+  assertTestDatabaseAllowed();
   console.log("Eliminando datos de negocio (clientes, bajas, equipos, pagos, auditoría)...");
   const deleted = await clearBusinessData(prisma);
   console.log("Datos eliminados:", deleted);

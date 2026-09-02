@@ -91,7 +91,7 @@ export default function GestionContractualPage() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b bg-slate-50 text-left text-slate-500">
-              <th className="px-4 py-3">Fecha</th>
+              <th className="px-4 py-3">Fecha firma / solicitud</th>
               <th className="px-4 py-3">Tipo</th>
               <th className="px-4 py-3">Cliente</th>
               <th className="px-4 py-3">Plan anterior</th>

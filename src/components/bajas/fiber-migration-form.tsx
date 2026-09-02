@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { COLORS } from "@/lib/constants";
+import { formatBusinessDateFromApi } from "@/lib/business-date";
 
 export interface FiberMigrationResult {
   originTechnology: string;
@@ -46,10 +47,10 @@ export function FiberMigrationForm({
       originTechnology: json.originTechnology,
       currentTechnology: json.currentTechnology,
       fiberMigrationDate: json.fiberMigrationDate
-        ? new Date(json.fiberMigrationDate).toISOString()
+        ? formatBusinessDateFromApi(json.fiberMigrationDate)
         : null,
       fiberInstallDate: json.fiberInstallDate
-        ? new Date(json.fiberInstallDate).toISOString()
+        ? formatBusinessDateFromApi(json.fiberInstallDate)
         : null,
       migrationReviewRequired: json.migrationReviewRequired,
     });

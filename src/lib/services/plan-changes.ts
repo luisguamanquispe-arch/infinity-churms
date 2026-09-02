@@ -1,6 +1,7 @@
 import { addMonths, differenceInMonths } from "date-fns";
 import type { PlanChangeStatus, Prisma, ContractOperationType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { parseBusinessDateOnly, endOfBusinessDateOnly } from "@/lib/business-date";
 import { nextContractDocumentNumber } from "@/lib/acta-number";
 import { generateContractDocumentPdf } from "@/lib/pdf-contract-document";
 import { isIdentitySelfieRecorded } from "@/lib/pdf-plan-change-identity";
@@ -674,15 +675,36 @@ function buildPlanChangeReportWhere(filters?: {
   if (filters?.previousPlanId) where.previousPlanId = filters.previousPlanId;
   if (filters?.newPlanId) where.newPlanId = filters.newPlanId;
   if (filters?.dateFrom || filters?.dateTo) {
-    where.requestDate = {
-      ...(filters.dateFrom ? { gte: new Date(filters.dateFrom) } : {}),
-      ...(filters.dateTo ? { lte: new Date(filters.dateTo) } : {}),
-    };
+    const from = filters.dateFrom ? parseBusinessDateOnly(filters.dateFrom) : undefined;
+    const to = filters.dateTo ? endOfBusinessDateOnly(filters.dateTo) : undefined;
+    where.OR = [
+      {
+        signedAt: {
+          not: null,
+          ...(from ? { gte: from } : {}),
+          ...(to ? { lte: to } : {}),
+        },
+      },
+      {
+        signedAt: null,
+        requestDate: {
+          ...(from ? { gte: from } : {}),
+          ...(to ? { lte: to } : {}),
+        },
+      },
+    ];
   }
   if (filters?.signed === "true") where.signedAt = { not: null };
   if (filters?.signed === "false") where.signedAt = null;
 
   return where;
+}
+
+export function planChangeEffectiveDate(row: {
+  signedAt: Date | null;
+  requestDate: Date;
+}): Date {
+  return row.signedAt ?? row.requestDate;
 }
 
 export function serializePlanChangeReportRow<

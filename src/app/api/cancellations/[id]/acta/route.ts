@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import QRCode from "qrcode";
-import { requireSession } from "@/lib/auth";
+import { requirePermission } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import { nextActaNumber, nextActaPhysicalCode } from "@/lib/acta-number";
@@ -15,7 +15,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireSession();
+    await requirePermission("cancellations:acta_send");
     const { id } = await params;
     const row = await getCancellation(id);
     if (!row) return NextResponse.json({ error: "No encontrado" }, { status: 404 });

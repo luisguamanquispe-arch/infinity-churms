@@ -25,7 +25,20 @@
     "test:permanence-months": "tsx scripts/test-permanence-months-validation.ts",
     "test:cancellation-concurrency": "tsx scripts/test-cancellation-concurrency.ts",
     "test:preliquidacion": "tsx scripts/test-preliquidacion-flow.ts",
-    "test:baja-paths": "tsx scripts/test-baja-client-path.ts"
+    "test:baja-paths": "tsx scripts/test-baja-client-path.ts",
+    "test:audit-closure": "tsx scripts/test-audit-closure-fixes.ts",
+    "test:business-date": "tsx scripts/test-business-date.ts",
+    "test:p1-closure": "tsx scripts/test-p1-closure.ts",
+    "test:p16-integration": "tsx scripts/test-p16-integration.ts",
+    "test:database-guard": "tsx scripts/test-database-guard.ts",
+    "test:env-load": "tsx scripts/test-env-load.ts",
+    "test:equipment-serial": "tsx scripts/test-equipment-serial.ts",
+    "test:aud-021": "tsx scripts/test-aud-021-orphan-statuses.ts",
+    "test:e2e-baja-flow": "tsx scripts/test-e2e-baja-flow.ts",
+    "test:ui-baja-flow": "tsx scripts/test-ui-baja-flow.ts",
+    "test:authorization-roles": "tsx scripts/test-authorization-roles.ts",
+    "audit:equipment-serial": "tsx scripts/audit-equipment-serial-duplicates.ts",
+    "db:bootstrap-test": "tsx scripts/bootstrap-test-database.ts"
   },
   "engines": {
     "node": ">=20"

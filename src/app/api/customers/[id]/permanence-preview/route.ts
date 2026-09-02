@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { requirePermission } from "@/lib/auth";
 import { getPermanencePreviewForCustomer } from "@/lib/services/cancellations";
 import { serializePermanenceSummary } from "@/lib/permanence";
+import { businessDateToday, parseBusinessDateInput } from "@/lib/business-date";
 
 export async function GET(
   request: NextRequest,
@@ -11,7 +12,7 @@ export async function GET(
     await requirePermission("cancellations:create");
     const { id } = await params;
     const dateParam = request.nextUrl.searchParams.get("requestDate");
-    const requestDate = dateParam ? new Date(dateParam) : new Date();
+    const requestDate = dateParam ? parseBusinessDateInput(dateParam) : businessDateToday();
     const summary = await getPermanencePreviewForCustomer(id, requestDate);
     return NextResponse.json(serializePermanenceSummary(summary));
   } catch (e) {

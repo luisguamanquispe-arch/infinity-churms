@@ -2,8 +2,14 @@ import { NextRequest, NextResponse } from "next/server";
 import { requireAnyPermission, requireSession } from "@/lib/auth";
 import { audit } from "@/lib/audit";
 import { formatCustomerPayload, validateCustomerInput, extractPlanFields } from "@/lib/customer-form";
+import {
+  assertNoDuplicateSerialsInPayload,
+  assertUniqueEquipmentSerial,
+  isEquipmentSerialConflict,
+} from "@/lib/equipment-serial";
 import { searchCustomers } from "@/lib/services/customer-search";
 import { prisma } from "@/lib/prisma";
+import { businessDateToday, parseBusinessDateInput } from "@/lib/business-date";
 import type { EquipmentType } from "@prisma/client";
 
 export async function GET(request: NextRequest) {
@@ -49,21 +55,37 @@ export async function POST(request: NextRequest) {
     const pendingBalance = body.pendingBalance ?? 0;
     const overdueSince =
       body.overdueSince && pendingBalance > 0
-        ? new Date(body.overdueSince)
+        ? parseBusinessDateInput(body.overdueSince)
         : pendingBalance > 0
-          ? new Date()
+          ? businessDateToday()
           : null;
 
     const originTechnology = body.originTechnology === "RADIOENLACE" ? "RADIOENLACE" : "FIBRA";
     const currentTechnology =
       body.currentTechnology === "RADIOENLACE" ? "RADIOENLACE" : originTechnology;
-    const serviceStart = new Date(body.serviceStartDate);
+    const serviceStart = parseBusinessDateInput(body.serviceStartDate);
     const fiberInstallDate =
       body.fiberInstallDate
-        ? new Date(body.fiberInstallDate)
+        ? parseBusinessDateInput(body.fiberInstallDate)
         : originTechnology === "FIBRA"
           ? serviceStart
           : null;
+
+    const equipmentRows = (body.equipment ?? []).map(
+      (eq: { type: EquipmentType; serial?: string; brand?: string; model?: string }, i: number) => ({
+        type: eq.type,
+        serial: formatted.equipment[i]?.serial ?? null,
+        brand: formatted.equipment[i]?.brand ?? null,
+        model: formatted.equipment[i]?.model ?? null,
+      })
+    );
+
+    assertNoDuplicateSerialsInPayload(
+      equipmentRows.map((eq: { serial: string | null }) => eq.serial)
+    );
+    for (const eq of equipmentRows) {
+      await assertUniqueEquipmentSerial(eq.serial);
+    }
 
     const customer = await prisma.customer.create({
       data: {
@@ -80,7 +102,7 @@ export async function POST(request: NextRequest) {
         currentTechnology,
         fiberInstallDate,
         fiberMigrationDate: body.fiberMigrationDate
-          ? new Date(body.fiberMigrationDate)
+          ? parseBusinessDateInput(body.fiberMigrationDate)
           : null,
         migrationReviewRequired:
           originTechnology === "RADIOENLACE" &&
@@ -89,19 +111,12 @@ export async function POST(request: NextRequest) {
         hasTvStreaming: Boolean(body.hasTvStreaming),
         tvStreamingSince:
           body.hasTvStreaming && body.tvStreamingSince
-            ? new Date(body.tvStreamingSince)
+            ? parseBusinessDateInput(body.tvStreamingSince)
             : null,
         pendingBalance,
         overdueSince,
         equipment: {
-          create: (body.equipment ?? []).map(
-            (eq: { type: EquipmentType; serial?: string; brand?: string; model?: string }, i: number) => ({
-              type: eq.type,
-              serial: formatted.equipment[i]?.serial ?? null,
-              brand: formatted.equipment[i]?.brand ?? null,
-              model: formatted.equipment[i]?.model ?? null,
-            })
-          ),
+          create: equipmentRows,
         },
       },
       include: { equipment: true },
@@ -119,6 +134,12 @@ export async function POST(request: NextRequest) {
   } catch (e) {
     if (e instanceof Error && e.message === "FORBIDDEN") {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
+    if (isEquipmentSerialConflict(e)) {
+      return NextResponse.json(
+        { error: "Ya existe un equipo registrado con esa serie" },
+        { status: 409 }
+      );
     }
     return NextResponse.json({ error: "Error al crear cliente" }, { status: 500 });
   }

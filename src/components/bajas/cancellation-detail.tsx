@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, SUSPENSION_POLICIES, EQUIPMENT_TYPES, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL, getEquipmentReportStatus, WITHDRAWAL_REQUEST_PDF_LABEL } from "@/lib/constants";
+import { STATUS_LABELS, PAYMENT_METHODS, EQUIPMENT_CONDITIONS, COLORS, REASON_LABELS, EQUIPMENT_TYPES, INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL, STREAMS_SUPPORT_SINCE_LABEL, getEquipmentReportStatus, WITHDRAWAL_REQUEST_PDF_LABEL } from "@/lib/constants";
 import { isEquipmentReceptionComplete } from "@/lib/equipment-reception";
 import { formatUsd } from "@/lib/liquidation";
 import { PermanenceSummaryPanel } from "@/components/bajas/permanence-summary-panel";
@@ -17,6 +17,7 @@ import { technologyLabel } from "@/lib/permanence";
 interface Detail {
   id: string;
   status: string;
+  updatedAt?: string;
   reason: string;
   notes: string | null;
   actaNumber: string | null;
@@ -184,17 +185,23 @@ export function CancellationDetail({
     }
   }, [data.id]);
 
-  async function refresh() {
+  const refresh = useCallback(async () => {
     const res = await fetch(`/api/cancellations/${data.id}`);
     if (res.ok) {
       const json = await res.json();
       setData(json);
       setSignature(json.clientSignature ?? "");
+      if (["BAJA_AUTORIZADA", "PENDIENTE_DE_PAGO"].includes(json.status)) {
+        setPayment((prev) => ({
+          ...prev,
+          amountPaid: String(json.totalAmount ?? prev.amountPaid),
+        }));
+      }
     }
     router.refresh();
     const auditRes = await fetch(`/api/cancellations/${data.id}/audit`);
     if (auditRes.ok) setAudit(await auditRes.json());
-  }
+  }, [data.id, router]);
 
   async function saveSignature() {
     await fetch(`/api/cancellations/${data.id}`, {
@@ -286,6 +293,7 @@ export function CancellationDetail({
     ["BAJA_AUTORIZADA", "PENDIENTE_DE_PAGO", "PAGADA", "LIQUIDACION_FINAL", "EQUIPOS_RECUPERADOS"].includes(data.status);
   const equipmentPhaseOpen = !["EQUIPOS_RECUPERADOS", "BAJA_COMPLETADA"].includes(data.status);
   const canAddEquipment = permissions.manageEquipment && !closed && equipmentPhaseOpen && preliqApproved;
+  const showFinancialDetail = permissions.preliquidateView || permissions.payment || permissions.charges;
   const canEditEquipmentDetails = canAddEquipment && ["PENDIENTE_DE_PAGO", "BAJA_AUTORIZADA"].includes(data.status);
   const canReceiveEquipment = permissions.equipment && !closed && data.status === "PAGADA";
   const canPay =
@@ -318,7 +326,7 @@ export function CancellationDetail({
         </p>
       )}
 
-      {permissions.canViewPreliquidacion ? (
+      {permissions.canViewPreliquidacion && permissions.preliquidateView ? (
         <PreliquidacionPanel
           cancellationId={data.id}
           status={data.status}
@@ -346,8 +354,8 @@ export function CancellationDetail({
         >
           <h2 className="text-lg font-bold text-[#0B1F3A]">PRELIQUIDACIÓN DE BAJA</h2>
           <p className="mt-2 text-sm text-amber-900">
-            Sin permisos para visualizar la preliquidación. Se requiere el permiso{" "}
-            <strong>cancellations:list</strong>.
+            Sin permisos para visualizar la preliquidación financiera. Contacte a cobranzas o
+            supervisión.
           </p>
         </section>
       )}
@@ -395,12 +403,13 @@ export function CancellationDetail({
               value={data.fiberInstallPending ? "PENDIENTE" : "NO PENDIENTE"}
             />
           )}
-          <Info label="Saldo pendiente" value={formatUsd(Number(data.customer.pendingBalance))} />
+          <Info label="Saldo pendiente" value={showFinancialDetail ? formatUsd(Number(data.customer.pendingBalance)) : "—"} />
           {data.customer.hasTvStreaming && data.customer.tvStreamingSince && (
             <Info label={STREAMS_SUPPORT_SINCE_LABEL} value={new Date(data.customer.tvStreamingSince).toLocaleDateString("es-VE")} />
           )}
         </Card>
 
+        {showFinancialDetail && (
         <Card title="Resumen de liquidación">
           <Line label={INSTALLATION_PRORATION_LABEL} value={formatUsd(Number(data.permanenceAmount))} />
           <Line label={STREAMS_SUPPORT_LABEL} value={formatUsd(Number(data.tvAmount))} />
@@ -411,10 +420,20 @@ export function CancellationDetail({
             TOTAL {formatUsd(Number(data.totalAmount))}
           </div>
         </Card>
+        )}
       </div>
 
-      {permanenceSummary && (
+      {showFinancialDetail && permanenceSummary && (
         <PermanenceSummaryPanel summary={permanenceSummary} compact />
+      )}
+
+      {!showFinancialDetail && permanenceSummary && (
+        <Card title="Permanencia">
+          <p className="text-sm text-slate-600">
+            Estado: {permanenceSummary.canCalculate ? "Información disponible" : "Requiere revisión"} ·{" "}
+            {permanenceSummary.monthsInFiber} mes(es) en servicio
+          </p>
+        </Card>
       )}
 
       <Card title="Documento archivado — solicitud de retiro">
@@ -455,7 +474,7 @@ export function CancellationDetail({
         )}
       </Card>
 
-      {data.finalLiquidations && data.finalLiquidations.length > 0 && (
+      {showFinancialDetail && data.finalLiquidations && data.finalLiquidations.length > 0 && (
         <Card title="Liquidación final">
           {data.finalLiquidations.map((fl) => (
             <div key={fl.id} className="text-sm">
@@ -601,7 +620,7 @@ export function CancellationDetail({
             </p>
           )}
         </div>
-        {data.status === "PAGADA" && permissions.advanceEquipment && (
+        {data.status === "PAGADA" && (permissions.advanceEquipment || permissions.liquidate) && (
           <button onClick={advance} className="mt-4 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: COLORS.brand }}>
             Confirmar equipos recuperados
           </button>
@@ -645,7 +664,7 @@ export function CancellationDetail({
             Descargar acta PDF + QR
           </a>
         </div>
-        {data.status === "LIQUIDACION_FINAL" && permissions.close && (
+        {data.status === "LIQUIDACION_FINAL" && (permissions.close || permissions.liquidate) && (
           <>
             {!data.finalLiquidations?.[0]?.signedAt && (
               <p className="mt-3 text-sm text-amber-800">
@@ -679,7 +698,7 @@ export function CancellationDetail({
             <Field label="N° Factura *" value={payment.invoiceNumber} onChange={(v) => setPayment({ ...payment, invoiceNumber: v })} />
             <Field label="Valor pagado" type="number" value={payment.amountPaid} onChange={(v) => setPayment({ ...payment, amountPaid: v })} />
           </div>
-          <button onClick={registerPayment} className="mt-4 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: COLORS.brand }}>
+          <button type="button" onClick={registerPayment} className="mt-4 rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: COLORS.brand }}>
             Registrar pago
           </button>
         </Card>
@@ -694,7 +713,7 @@ export function CancellationDetail({
       )}
 
       <div className="flex flex-wrap gap-2">
-        {data.status === "EQUIPOS_RECUPERADOS" && permissions.close && (
+        {data.status === "EQUIPOS_RECUPERADOS" && (permissions.close || permissions.liquidate) && (
           <button onClick={advance} className="rounded-lg px-4 py-2 text-sm font-semibold text-white" style={{ backgroundColor: COLORS.navy }}>
             Cerrar baja (requiere factura)
           </button>

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { requireAdmin, requirePermission, requireSession } from "@/lib/auth";
+import { requireAdmin, requireAnyPermission, requirePermission, requireSession } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { audit } from "@/lib/audit";
 import {
@@ -14,7 +14,9 @@ import { assertPreliquidacionApproved } from "@/lib/preliquidacion-guards";
 import { assertActaSigned, recordPresencialActaSignature } from "@/lib/services/cancellation-acta-remote-signature";
 import type { CancellationReason, CancellationStatus } from "@prisma/client";
 import { getClientIp } from "@/lib/request-ip";
-import { serializeCancellationForClient } from "@/lib/serialize-cancellation";
+import { serializeCancellationByRole } from "@/lib/serialize-cancellation-by-role";
+import { syncCustomerStatusAfterCancellationCompleted } from "@/lib/customer-status-sync";
+import { parseBusinessDateInput, BusinessDateError } from "@/lib/business-date";
 
 const FLOW: Partial<Record<CancellationStatus, CancellationStatus>> = {
   BAJA_AUTORIZADA: "PENDIENTE_DE_PAGO",
@@ -28,11 +30,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireSession();
+    const session = await requireSession();
     const { id } = await params;
     const row = await getCancellation(id);
     if (!row) return NextResponse.json({ error: "No encontrado" }, { status: 404 });
-    return NextResponse.json(serializeCancellationForClient(row));
+    return NextResponse.json(serializeCancellationByRole(row, session.role));
   } catch {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
@@ -77,7 +79,7 @@ export async function PATCH(
     const body = await request.json();
 
     if (body.action === "save_signature") {
-      const session = await requireSession();
+      const session = await requirePermission("cancellations:acta_send");
       const name = body.clientSignature?.trim() || null;
       await prisma.cancellation.update({
         where: { id },
@@ -130,14 +132,16 @@ export async function PATCH(
       if (body.reason !== undefined) updateData.reason = body.reason as CancellationReason;
       if (body.notes !== undefined) updateData.notes = body.notes;
       if (body.requestDate !== undefined) {
-        const parsed = new Date(body.requestDate);
-        if (Number.isNaN(parsed.getTime())) {
+        try {
+          updateData.requestDate = parseBusinessDateInput(body.requestDate);
+        } catch {
           return NextResponse.json({ error: "Fecha de solicitud inválida" }, { status: 400 });
         }
-        updateData.requestDate = parsed;
       }
       if (body.closeDate !== undefined) {
-        updateData.closeDate = body.closeDate ? new Date(body.closeDate) : null;
+        updateData.closeDate = body.closeDate
+          ? parseBusinessDateInput(body.closeDate)
+          : null;
       }
       if (body.status !== undefined) updateData.status = body.status as CancellationStatus;
       if (body.invoiceNumber !== undefined) updateData.invoiceNumber = body.invoiceNumber;
@@ -147,7 +151,7 @@ export async function PATCH(
       if (body.monthsCompleted !== undefined) updateData.monthsCompleted = Number(body.monthsCompleted);
       if (body.permanenceStartDate !== undefined) {
         updateData.permanenceStartDate = body.permanenceStartDate
-          ? new Date(body.permanenceStartDate)
+          ? parseBusinessDateInput(body.permanenceStartDate)
           : null;
       }
       if (body.originTechnology !== undefined) updateData.originTechnology = body.originTechnology;
@@ -229,13 +233,12 @@ export async function PATCH(
         }
       }
 
-      const perm =
+      const session =
         next === "EQUIPOS_RECUPERADOS"
-          ? "cancellations:advance_equipment"
+          ? await requireAnyPermission("cancellations:advance_equipment", "cancellations:liquidate")
           : next === "PENDIENTE_DE_PAGO"
-            ? "cancellations:preliquidate"
-            : "cancellations:close";
-      const session = await requirePermission(perm);
+            ? await requirePermission("cancellations:preliquidate")
+            : await requireAnyPermission("cancellations:close", "cancellations:liquidate");
 
       if (next === "EQUIPOS_RECUPERADOS") {
         const pending = await prisma.cancellationEquipment.count({
@@ -278,16 +281,28 @@ export async function PATCH(
         }
       }
 
-      const updated = await prisma.cancellation.update({
-        where: { id },
+      const updated = await prisma.cancellation.updateMany({
+        where: { id, status: current.status },
         data: {
           status: next,
           ...(next === "BAJA_COMPLETADA" ? { closeDate: new Date() } : {}),
         },
       });
+      if (updated.count === 0) {
+        return NextResponse.json(
+          { error: "El estado de la baja cambió. Recargue e intente de nuevo." },
+          { status: 409 }
+        );
+      }
+
+      if (next === "BAJA_COMPLETADA") {
+        await syncCustomerStatusAfterCancellationCompleted(current.customerId);
+      }
+
+      const afterUpdate = await prisma.cancellation.findUnique({ where: { id } });
 
       await audit({ userId: session.userId, action: "STATUS", entity: "Cancellation", entityId: id, detail: next, ipAddress: getClientIp(request) });
-      return NextResponse.json(updated);
+      return NextResponse.json(afterUpdate);
     }
 
     return NextResponse.json({ error: "Acción inválida" }, { status: 400 });
@@ -303,6 +318,18 @@ export async function PATCH(
         { error: "No se puede recalcular: falta información de permanencia de fibra del cliente" },
         { status: 400 }
       );
+    }
+    if (e instanceof Error && e.message === "FINANCIAL_OVERRIDE_REQUIRES_RECALCULATE") {
+      return NextResponse.json(
+        {
+          error:
+            "Los montos financieros solo pueden actualizarse mediante recálculo automático en el servidor.",
+        },
+        { status: 400 }
+      );
+    }
+    if (e instanceof BusinessDateError) {
+      return NextResponse.json({ error: e.message }, { status: 400 });
     }
     return NextResponse.json({ error: "Error" }, { status: 500 });
   }

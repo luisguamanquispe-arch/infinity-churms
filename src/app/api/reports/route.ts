@@ -9,6 +9,7 @@ import {
 } from "@/lib/services/collection-reports";
 import { collectionReportPdfBuffer } from "@/lib/pdf-reporte-cobranzas";
 import { REASON_LABELS, getEquipmentReportStatus } from "@/lib/constants";
+import { PENDING_EQUIPMENT_RECOVERY_WHERE } from "@/lib/dashboard-kpi-definitions";
 
 export async function GET(request: NextRequest) {
   try {
@@ -77,6 +78,7 @@ export async function GET(request: NextRequest) {
 
     if (type === "equipos") {
       const items = await prisma.cancellationEquipment.findMany({
+        where: PENDING_EQUIPMENT_RECOVERY_WHERE,
         include: {
           cancellation: {
             include: {
@@ -87,16 +89,11 @@ export async function GET(request: NextRequest) {
         orderBy: { cancellation: { requestDate: "desc" } },
       });
 
-      const entregados = items.filter((i) => i.delivered && i.condition !== "NO_ENTREGADO").length;
-      const recuperados = items.filter((i) => i.delivered && (i.condition === "BUENO" || !i.condition)).length;
-      const damaged = items.filter((i) => i.delivered && i.condition === "DANADO").length;
-      const lost = items.filter((i) => !i.delivered || i.condition === "NO_ENTREGADO").length;
-
       return NextResponse.json({
-        entregados,
-        recovered: recuperados,
-        damaged,
-        lost,
+        definition:
+          "Equipos pendientes de recuperación en bajas abiertas (no completadas ni canceladas). Alineado con KPI notRecovered del dashboard.",
+        pendingRecovery: items.length,
+        lost: items.length,
         items: items.map((i) => ({
           id: i.id,
           contract: i.cancellation.customer.contract,

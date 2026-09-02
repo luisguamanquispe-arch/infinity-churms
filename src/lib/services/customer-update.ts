@@ -1,7 +1,14 @@
 import { prisma } from "@/lib/prisma";
+import {
+  assertNoDuplicateSerialsInPayload,
+  assertUniqueEquipmentSerial,
+  mapEquipmentSerialWriteError,
+  normalizeEquipmentSerial,
+} from "@/lib/equipment-serial";
 import { formatCustomerPayload, validateCustomerInput, extractPlanFields } from "@/lib/customer-form";
 import { resolveOverdueSinceOnBalanceChange } from "@/lib/services/overdue";
 import { resolveCollectionAgent } from "@/lib/services/collections";
+import { parseBusinessDateInput } from "@/lib/business-date";
 import type { Customer, EquipmentType, Prisma, ServiceTechnology } from "@prisma/client";
 
 export type CustomerEquipmentInput = {
@@ -126,7 +133,7 @@ export async function prepareCustomerUpdate(
     data.status = patch.status.trim().toUpperCase() || "ACTIVO";
   }
   if (patch.serviceStartDate !== undefined) {
-    data.serviceStartDate = new Date(patch.serviceStartDate);
+    data.serviceStartDate = parseBusinessDateInput(patch.serviceStartDate);
   }
   if (patch.originTechnology !== undefined) {
     data.originTechnology = originTechnology;
@@ -135,10 +142,10 @@ export async function prepareCustomerUpdate(
     data.currentTechnology = currentTechnology;
   }
   if (patch.fiberInstallDate !== undefined) {
-    data.fiberInstallDate = patch.fiberInstallDate ? new Date(patch.fiberInstallDate) : null;
+    data.fiberInstallDate = patch.fiberInstallDate ? parseBusinessDateInput(patch.fiberInstallDate) : null;
   }
   if (patch.fiberMigrationDate !== undefined) {
-    const migrationDate = patch.fiberMigrationDate ? new Date(patch.fiberMigrationDate) : null;
+    const migrationDate = patch.fiberMigrationDate ? parseBusinessDateInput(patch.fiberMigrationDate) : null;
     data.fiberMigrationDate = migrationDate;
     if (migrationDate && originTechnology === "RADIOENLACE") {
       data.currentTechnology = "FIBRA";
@@ -165,7 +172,7 @@ export async function prepareCustomerUpdate(
   if (patch.tvStreamingSince !== undefined) {
     const hasTv = patch.hasTvStreaming ?? existing.hasTvStreaming;
     data.tvStreamingSince =
-      hasTv && patch.tvStreamingSince ? new Date(patch.tvStreamingSince) : null;
+      hasTv && patch.tvStreamingSince ? parseBusinessDateInput(patch.tvStreamingSince) : null;
   }
 
   if (patch.pendingBalance !== undefined) {
@@ -184,7 +191,7 @@ export async function prepareCustomerUpdate(
     }
   }
   if (patch.overdueSince !== undefined) {
-    data.overdueSince = patch.overdueSince ? new Date(patch.overdueSince) : null;
+    data.overdueSince = patch.overdueSince ? parseBusinessDateInput(patch.overdueSince) : null;
   }
   if (patch.inCollectionWhitelist !== undefined) {
     data.inCollectionWhitelist = Boolean(patch.inCollectionWhitelist);
@@ -218,40 +225,53 @@ export async function syncCustomerEquipment(
 ) {
   if (!equipment) return;
 
-  const existing = await prisma.customerEquipment.findMany({ where: { customerId } });
-  const existingIds = new Set(existing.map((e) => e.id));
-  const keptIds = new Set<string>();
+  const payloads = equipment
+    .map((row, i) => {
+      const fmt = formattedEquipment[i];
+      if (!row.type) return null;
+      return {
+        row,
+        data: {
+          type: row.type as EquipmentType,
+          serial: normalizeEquipmentSerial(fmt?.serial),
+          brand: fmt?.brand?.trim() || null,
+          model: fmt?.model?.trim() || null,
+        },
+      };
+    })
+    .filter((p): p is NonNullable<typeof p> => p !== null);
 
-  for (let i = 0; i < equipment.length; i++) {
-    const row = equipment[i];
-    const fmt = formattedEquipment[i];
-    if (!row.type) continue;
+  assertNoDuplicateSerialsInPayload(payloads.map((p) => p.data.serial));
 
-    const payload = {
-      type: row.type as EquipmentType,
-      serial: fmt?.serial?.trim() || null,
-      brand: fmt?.brand?.trim() || null,
-      model: fmt?.model?.trim() || null,
-    };
+  try {
+    const existing = await prisma.customerEquipment.findMany({ where: { customerId } });
+    const existingIds = new Set(existing.map((e) => e.id));
+    const keptIds = new Set<string>();
 
-    if (row.id && existingIds.has(row.id)) {
-      await prisma.customerEquipment.update({ where: { id: row.id }, data: payload });
-      keptIds.add(row.id);
-    } else {
-      const created = await prisma.customerEquipment.create({
-        data: { customerId, ...payload },
+    for (const { row, data } of payloads) {
+      if (row.id && existingIds.has(row.id)) {
+        await assertUniqueEquipmentSerial(data.serial, row.id);
+        await prisma.customerEquipment.update({ where: { id: row.id }, data });
+        keptIds.add(row.id);
+      } else {
+        await assertUniqueEquipmentSerial(data.serial);
+        const created = await prisma.customerEquipment.create({
+          data: { customerId, ...data },
+        });
+        keptIds.add(created.id);
+      }
+    }
+
+    const toRemove = existing.filter((e) => !keptIds.has(e.id));
+    for (const item of toRemove) {
+      const inUse = await prisma.cancellationEquipment.findFirst({
+        where: { equipmentId: item.id },
       });
-      keptIds.add(created.id);
+      if (!inUse) {
+        await prisma.customerEquipment.delete({ where: { id: item.id } });
+      }
     }
-  }
-
-  const toRemove = existing.filter((e) => !keptIds.has(e.id));
-  for (const item of toRemove) {
-    const inUse = await prisma.cancellationEquipment.findFirst({
-      where: { equipmentId: item.id },
-    });
-    if (!inUse) {
-      await prisma.customerEquipment.delete({ where: { id: item.id } });
-    }
+  } catch (error) {
+    mapEquipmentSerialWriteError(error);
   }
 }

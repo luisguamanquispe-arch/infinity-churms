@@ -6,7 +6,6 @@ import Link from "next/link";
 import {
   COLORS,
   CANCELLATION_REASONS,
-  STREAMS_SUPPORT_SINCE_LABEL,
   STREAMS_SUPPORT_LABEL,
   WITHDRAWAL_REQUEST_PDF_LABEL,
 } from "@/lib/constants";
@@ -219,12 +218,14 @@ function NuevaBajaForm() {
   const showBajaForm =
     selected && clientPath && !showMigrationStep;
 
+  const [nowMs] = useState(() => Date.now());
+
   const tvMonths =
     selected?.hasTvStreaming && selected.tvStreamingSince
       ? Math.max(
           1,
           Math.floor(
-            (Date.now() - new Date(selected.tvStreamingSince).getTime()) /
+            (nowMs - new Date(selected.tvStreamingSince).getTime()) /
               (1000 * 60 * 60 * 24 * 30)
           )
         )

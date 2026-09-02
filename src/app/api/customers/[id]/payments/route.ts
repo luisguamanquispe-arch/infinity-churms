@@ -5,6 +5,7 @@ import { getClientIp } from "@/lib/request-ip";
 import {
   listCollectionPayments,
   registerCollectionPayment,
+  CollectionPaymentError,
 } from "@/lib/services/collection-payments";
 
 export async function GET(
@@ -75,17 +76,25 @@ export async function POST(
     if (e instanceof Error && e.message === "FORBIDDEN") {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }
-    if (e instanceof Error && e.message === "FENIX_REQUIRED") {
-      return NextResponse.json({ error: "Indique N° recibo o factura Fenix" }, { status: 400 });
-    }
-    if (e instanceof Error && e.message === "AMOUNT_REQUIRED") {
-      return NextResponse.json({ error: "Indique un valor de pago válido" }, { status: 400 });
-    }
-    if (e instanceof Error && e.message === "ALREADY_PAID") {
-      return NextResponse.json({ error: "El cliente ya está al día (lista blanca)" }, { status: 400 });
-    }
-    if (e instanceof Error && e.message === "NOT_FOUND") {
-      return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+    if (e instanceof CollectionPaymentError) {
+      if (e.message === "FENIX_REQUIRED") {
+        return NextResponse.json({ error: "Indique N° recibo o factura Fenix" }, { status: 400 });
+      }
+      if (e.message === "AMOUNT_REQUIRED" || e.message === "AMOUNT_INVALID") {
+        return NextResponse.json({ error: "Indique un valor de pago válido" }, { status: 400 });
+      }
+      if (e.message === "ALREADY_PAID") {
+        return NextResponse.json({ error: "El cliente ya está al día (lista blanca)" }, { status: 400 });
+      }
+      if (e.message === "NOT_FOUND") {
+        return NextResponse.json({ error: "Cliente no encontrado" }, { status: 404 });
+      }
+      if (e.message === "CONCURRENT_BALANCE_UPDATE") {
+        return NextResponse.json(
+          { error: "El saldo cambió mientras registraba el pago. Recargue e intente de nuevo." },
+          { status: 409 }
+        );
+      }
     }
     return NextResponse.json({ error: "Error al registrar pago" }, { status: 500 });
   }

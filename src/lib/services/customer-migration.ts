@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { parseBusinessDateInput } from "@/lib/business-date";
 import type { ServiceTechnology } from "@prisma/client";
 
 export const MIGRATION_EVENT_TYPE = "MIGRACION_TECNOLOGICA";
@@ -22,8 +23,7 @@ export async function registerFiberMigration(
   const customer = await prisma.customer.findUnique({ where: { id: customerId } });
   if (!customer) throw new Error("NOT_FOUND");
 
-  const migrationDate = new Date(data.fiberMigrationDate);
-  if (Number.isNaN(migrationDate.getTime())) throw new Error("DATE_INVALID");
+  const migrationDate = parseBusinessDateInput(data.fiberMigrationDate);
 
   const fromTechnology = customer.currentTechnology;
   if (fromTechnology === "FIBRA" && customer.originTechnology === "FIBRA") {
@@ -84,14 +84,14 @@ export async function updateCustomerTechnologyFields(
       ...(data.fiberInstallDate !== undefined
         ? {
             fiberInstallDate: data.fiberInstallDate
-              ? new Date(data.fiberInstallDate)
+              ? parseBusinessDateInput(data.fiberInstallDate)
               : null,
           }
         : {}),
       ...(data.fiberMigrationDate !== undefined
         ? {
             fiberMigrationDate: data.fiberMigrationDate
-              ? new Date(data.fiberMigrationDate)
+              ? parseBusinessDateInput(data.fiberMigrationDate)
               : null,
           }
         : {}),

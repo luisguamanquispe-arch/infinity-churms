@@ -11,6 +11,7 @@ import {
   syncCustomerEquipment,
   type CustomerPatchBody,
 } from "@/lib/services/customer-update";
+import { isEquipmentSerialConflict } from "@/lib/equipment-serial";
 import { formatCustomerPayload } from "@/lib/customer-form";
 
 export async function GET(
@@ -92,6 +93,12 @@ export async function PATCH(
 
     return NextResponse.json(refreshed);
   } catch (e) {
+    if (isEquipmentSerialConflict(e)) {
+      return NextResponse.json(
+        { error: "Ya existe un equipo registrado con esa serie" },
+        { status: 409 }
+      );
+    }
     if (e instanceof Error && e.message === "FORBIDDEN") {
       return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
     }

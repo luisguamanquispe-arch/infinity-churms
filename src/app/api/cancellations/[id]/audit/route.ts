@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { requireSession } from "@/lib/auth";
+import { hasPermission } from "@/lib/permissions";
 import { prisma } from "@/lib/prisma";
 
 export async function GET(
@@ -7,7 +8,13 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    await requireSession();
+    const session = await requireSession();
+    if (
+      !hasPermission(session.role, "cancellations:preliquidate_view") &&
+      !hasPermission(session.role, "cancellations:close")
+    ) {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
     const { id } = await params;
 
     const logs = await prisma.auditLog.findMany({

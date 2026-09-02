@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
 import type { jsPDF } from "jspdf";
-import { APP_SHORT_NAME, COLORS, COMPANY_NAME } from "@/lib/constants";
+import { APP_SHORT_NAME, COMPANY_NAME } from "@/lib/constants";
 
 let cachedLogoBase64: string | null = null;
 

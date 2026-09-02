@@ -17,6 +17,7 @@ import {
   calculatePermanenceFromStartDate,
   type PermanenceConfig,
 } from "@/lib/permanence";
+import { parseBusinessDateOnly } from "@/lib/business-date";
 
 type ChargeRow = { id?: string; concept: string; amount: string; _deleted?: boolean };
 type PaymentRow = {
@@ -46,6 +47,7 @@ export interface CancellationAdminData {
   status: string;
   requestDate: string;
   closeDate: string | null;
+  updatedAt?: string;
   invoiceNumber: string | null;
   clientSignature: string | null;
   actaNumber: string | null;
@@ -61,6 +63,8 @@ export interface CancellationAdminData {
   equipmentAmount: string;
   otherAmount: string;
   totalAmount: string;
+  permanenceMonthsSnapshot?: number | null;
+  installCostUsdSnapshot?: string | number | null;
   customer: { contract: string; name: string };
   charges: { id: string; concept: string; amount: string }[];
   payments: {
@@ -144,49 +148,66 @@ export function CancellationAdminPanel({
   const [form, setForm] = useState(() => buildForm(data));
   const [saving, setSaving] = useState(false);
   const [recalculating, setRecalculating] = useState(false);
-  const [tariff, setTariff] = useState<PermanenceConfig | null>(null);
+
+  const tariff: PermanenceConfig | null =
+    data.permanenceMonthsSnapshot != null && data.installCostUsdSnapshot != null
+      ? {
+          permanenceMonths: data.permanenceMonthsSnapshot,
+          installCostUsd: Number(data.installCostUsdSnapshot),
+        }
+      : null;
 
   useEffect(() => {
     setForm(buildForm(data));
-  }, [data]);
-
-  useEffect(() => {
-    fetch("/api/config/tariffs/summary")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((t) => {
-        if (t) setTariff({ permanenceMonths: t.permanenceMonths, installCostUsd: t.installCostUsd });
-      });
-  }, []);
+  }, [data.id, data.updatedAt ?? "", data.status]);
 
   const applyPermanenceCalc = useCallback(
     (requestDate: string, permanenceStartDate: string, prev: AdminForm) => {
       if (!tariff || !permanenceStartDate || !requestDate) return prev;
-      const charge = calculatePermanenceFromStartDate(
-        new Date(permanenceStartDate),
-        new Date(requestDate),
-        tariff
-      );
-      const chargeSum = prev.charges
-        .filter((c) => !c._deleted)
-        .reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
-      const tv = parseFloat(prev.tvAmount) || 0;
-      const monthly = parseFloat(prev.monthlyAmount) || 0;
-      const total = Math.round((charge.installAmount + tv + monthly + chargeSum) * 100) / 100;
-      return {
-        ...prev,
-        monthsCompleted: String(charge.monthsInFiber),
-        permanenceAmount: String(charge.installAmount),
-        fiberInstallPending: charge.fiberInstallPending,
-        otherAmount: String(chargeSum),
-        totalAmount: String(total),
-      };
+      try {
+        const charge = calculatePermanenceFromStartDate(
+          parseBusinessDateOnly(permanenceStartDate),
+          parseBusinessDateOnly(requestDate),
+          tariff
+        );
+        const chargeSum = prev.charges
+          .filter((c) => !c._deleted)
+          .reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
+        const tv = parseFloat(prev.tvAmount) || 0;
+        const monthly = parseFloat(prev.monthlyAmount) || 0;
+        const equipment = parseFloat(prev.equipmentAmount) || 0;
+        const total =
+          Math.round((charge.installAmount + tv + monthly + chargeSum + equipment) * 100) / 100;
+        return {
+          ...prev,
+          monthsCompleted: String(charge.monthsInFiber),
+          permanenceAmount: String(charge.installAmount),
+          fiberInstallPending: charge.fiberInstallPending,
+          otherAmount: String(chargeSum),
+          totalAmount: String(total),
+        };
+      } catch {
+        return prev;
+      }
     },
     [tariff]
   );
 
   useEffect(() => {
     if (!tariff || !form.permanenceStartDate || !form.requestDate) return;
-    setForm((prev) => applyPermanenceCalc(prev.requestDate, prev.permanenceStartDate, prev));
+    setForm((prev) => {
+      const next = applyPermanenceCalc(prev.requestDate, prev.permanenceStartDate, prev);
+      if (
+        next.totalAmount === prev.totalAmount &&
+        next.permanenceAmount === prev.permanenceAmount &&
+        next.monthsCompleted === prev.monthsCompleted &&
+        next.otherAmount === prev.otherAmount &&
+        next.fiberInstallPending === prev.fiberInstallPending
+      ) {
+        return prev;
+      }
+      return next;
+    });
   }, [form.requestDate, form.permanenceStartDate, tariff, applyPermanenceCalc]);
 
   function updateLineAmounts(next: Partial<AdminForm>) {
@@ -197,7 +218,8 @@ export function CancellationAdminPanel({
     const permanence = parseFloat(merged.permanenceAmount) || 0;
     const tv = parseFloat(merged.tvAmount) || 0;
     const monthly = parseFloat(merged.monthlyAmount) || 0;
-    const total = Math.round((permanence + tv + monthly + chargeSum) * 100) / 100;
+    const equipment = parseFloat(merged.equipmentAmount) || 0;
+    const total = Math.round((permanence + tv + monthly + chargeSum + equipment) * 100) / 100;
     setForm({ ...merged, otherAmount: String(chargeSum), totalAmount: String(total) });
   }
 
@@ -221,12 +243,6 @@ export function CancellationAdminPanel({
       originTechnology: form.originTechnology,
       currentTechnology: form.currentTechnology,
       fiberInstallPending: form.fiberInstallPending,
-      permanenceAmount: parseFloat(form.permanenceAmount) || 0,
-      tvAmount: parseFloat(form.tvAmount) || 0,
-      monthlyAmount: parseFloat(form.monthlyAmount) || 0,
-      equipmentAmount: parseFloat(form.equipmentAmount) || 0,
-      otherAmount: parseFloat(form.otherAmount) || 0,
-      totalAmount: parseFloat(form.totalAmount) || 0,
       charges: form.charges
         .filter((c) => !c._deleted && c.concept.trim())
         .map((c) => ({
@@ -297,8 +313,8 @@ export function CancellationAdminPanel({
     <section className="rounded-xl border-2 border-amber-200 bg-amber-50/30 p-5 shadow-sm">
       <h2 className="font-semibold text-[#0B1F3A]">Administración completa (solo ADMIN)</h2>
       <p className="mt-1 text-sm text-slate-600">
-        Edite cualquier campo de la baja. Use &quot;Recalcular liquidación&quot; para aplicar tarifas
-        automáticas según la fecha de solicitud.
+        Edite campos operativos de la baja. Los montos financieros solo se actualizan con
+        &quot;Recalcular liquidación&quot; (usa el snapshot contractual almacenado, no la tarifa viva).
       </p>
 
       {canEdit && (
@@ -319,9 +335,9 @@ export function CancellationAdminPanel({
 
           <AdminSection title="Permanencia e instalación fibra">
             <p className="mb-3 text-xs text-slate-600">
-              Los meses y el cobro de instalación se calculan automáticamente: plazo mínimo{" "}
-              {tariff?.permanenceMonths ?? 18} meses desde la fecha de inicio de permanencia fibra
-              hasta la fecha de solicitud de baja.
+              Los meses y el cobro de instalación usan el snapshot contractual (
+              {tariff?.permanenceMonths ?? "—"} meses, $
+              {tariff?.installCostUsd ?? "—"} instalación), no la configuración viva del sistema.
             </p>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Inicio permanencia fibra" type="date" value={form.permanenceStartDate} onChange={(v) => setForm((prev) => ({ ...prev, permanenceStartDate: v }))} />
@@ -332,8 +348,8 @@ export function CancellationAdminPanel({
                   tariff && form.permanenceStartDate && form.requestDate
                     ? String(
                         calculatePermanenceFromStartDate(
-                          new Date(form.permanenceStartDate),
-                          new Date(form.requestDate),
+                          parseBusinessDateOnly(form.permanenceStartDate),
+                          parseBusinessDateOnly(form.requestDate),
                           tariff
                         ).monthsRemaining
                       )
@@ -351,12 +367,12 @@ export function CancellationAdminPanel({
 
           <AdminSection title="Liquidación">
             <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <ReadOnlyField label={`${INSTALLATION_PRORATION_LABEL} (auto)`} value={form.permanenceAmount} />
-              <Field label={STREAMS_SUPPORT_LABEL} type="number" value={form.tvAmount} onChange={(v) => updateLineAmounts({ tvAmount: v })} />
-              <Field label="Mensualidades" type="number" value={form.monthlyAmount} onChange={(v) => updateLineAmounts({ monthlyAmount: v })} />
+              <ReadOnlyField label={`${INSTALLATION_PRORATION_LABEL} (snapshot)`} value={form.permanenceAmount} />
+              <ReadOnlyField label={STREAMS_SUPPORT_LABEL} value={form.tvAmount} />
+              <ReadOnlyField label="Mensualidades" value={form.monthlyAmount} />
               <ReadOnlyField label="Otros cargos" value={form.otherAmount} />
-              <Field label="Equipos (informativo)" type="number" value={form.equipmentAmount} onChange={(v) => setForm({ ...form, equipmentAmount: v })} />
-              <ReadOnlyField label="TOTAL (auto)" value={form.totalAmount} />
+              <ReadOnlyField label="Equipos" value={form.equipmentAmount} />
+              <ReadOnlyField label="TOTAL (servidor)" value={form.totalAmount} />
             </div>
             <button
               type="button"
