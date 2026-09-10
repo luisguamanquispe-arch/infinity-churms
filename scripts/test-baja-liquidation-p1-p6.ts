@@ -361,6 +361,45 @@ function baseInput(overrides: Partial<BajaLiquidationInput> = {}): BajaLiquidati
   );
 }
 
+// OTRO-A/B/C — CollectionCharge(OTRO) vs CancellationCharge
+{
+  function otroBreakdown(
+    collectionOtro: number,
+    cancellationCharge: number,
+    cancellationConcept = "Cargo manual baja"
+  ) {
+    const collectionCharges =
+      collectionOtro > 0
+        ? [charge("o1", "OTRO", collectionOtro, "2025-03-01", { description: "Cargo cobranza" })]
+        : [];
+    const cancellationCharges =
+      cancellationCharge !== 0 ? [{ concept: cancellationConcept, amount: cancellationCharge }] : [];
+    return buildLiquidationBreakdownFromInputs(
+      baseInput({
+        tariff: { permanenceMonths: 12, installCostUsd: 0, tvMonthlyUsd: 0 },
+        collectionCharges,
+        cancellationCharges,
+      })
+    );
+  }
+
+  const otroA = otroBreakdown(15, 0);
+  assert("OTRO-A total=15", approx(otroA.total, 15), `got ${otroA.total}`);
+  assert("OTRO-A una línea OTRO", otroA.lines.filter((l) => l.category === "OTRO").length === 1);
+
+  const otroB = otroBreakdown(0, 15);
+  assert("OTRO-B total=15", approx(otroB.total, 15), `got ${otroB.total}`);
+  assert("OTRO-B una línea OTRO", otroB.lines.filter((l) => l.category === "OTRO").length === 1);
+
+  const otroC = otroBreakdown(15, 15);
+  assert(
+    "OTRO-C total=30 (dos obligaciones independientes sin vínculo)",
+    approx(otroC.total, 30),
+    `got ${otroC.total}`
+  );
+  assert("OTRO-C dos líneas OTRO", otroC.lines.filter((l) => l.category === "OTRO").length === 2);
+}
+
 // P5: una línea MENSUALIDAD por cargo CONSUMO_MENSUAL
 {
   const b = buildLiquidationBreakdownFromInputs(

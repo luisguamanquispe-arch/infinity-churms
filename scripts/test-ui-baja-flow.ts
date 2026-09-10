@@ -19,6 +19,7 @@ import {
   generateActaSignatureLink,
 } from "../src/lib/services/cancellation-acta-remote-signature";
 import { createCancellationRecord, initEquipmentChecklist, recalculateCancellation } from "../src/lib/services/cancellations";
+import { createCollectionCharge } from "../src/lib/services/collection-charges";
 
 const BASE = process.env.UI_TEST_BASE_URL ?? "http://localhost:3000";
 const prisma = new PrismaClient();
@@ -125,7 +126,7 @@ async function main() {
         originTechnology: "FIBRA",
         currentTechnology: "FIBRA",
         fiberInstallDate: parseBusinessDateOnly("2024-06-01"),
-        pendingBalance: 30,
+        pendingBalance: 0,
         status: "ACTIVO",
         equipment: {
           create: {
@@ -142,6 +143,13 @@ async function main() {
 
     const admin = await prisma.user.findFirst({ where: { email: "admin@infinity.net" } });
     if (!admin) throw new Error("admin seed requerido");
+
+    await createCollectionCharge(customer.id, admin.id, {
+      chargeType: "CONSUMO_MENSUAL",
+      amount: 30,
+      periodFrom: "2025-06",
+      periodTo: "2025-06",
+    });
 
     const cancellation = await createCancellationRecord({
       customerId: customer.id,
@@ -264,6 +272,8 @@ async function main() {
       await prisma.cancellation.delete({ where: { id: cancellationId } }).catch(() => undefined);
     }
     if (customerId) {
+      await prisma.collectionPayment.deleteMany({ where: { customerId } }).catch(() => undefined);
+      await prisma.collectionCharge.deleteMany({ where: { customerId } }).catch(() => undefined);
       await prisma.customerEquipment.deleteMany({ where: { customerId } }).catch(() => undefined);
       await prisma.customer.delete({ where: { id: customerId } }).catch(() => undefined);
     }
