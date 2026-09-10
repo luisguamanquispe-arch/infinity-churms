@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { buildCustomerSearchWhere } from "@/lib/services/customer-search";
-import { calculateLiquidation } from "@/lib/liquidation";
-import { buildPermanenceSummary, validatePermanenceForCancellation, calculatePermanenceFromStartDate } from "@/lib/permanence";
+import { buildPermanenceSummary, validatePermanenceForCancellation } from "@/lib/permanence";
+import { computeBajaLiquidation } from "@/lib/services/baja-liquidation";
 import {
   resolvePermanenceConfigForCustomer,
   resolvePermanenceTariffForCancellation,
@@ -253,68 +253,49 @@ export async function recalculateCancellation(
   const row = await getCancellation(cancellationId);
   if (!row) throw new Error("NOT_FOUND");
 
-  const resolvedTariff = await resolvePermanenceTariffForCancellation(row);
-  const tariff = {
-    permanenceMonths: resolvedTariff.permanenceMonths,
-    installCostUsd: resolvedTariff.installCostUsd,
-    tvMonthlyUsd: resolvedTariff.tvMonthlyUsd,
-  };
-
-  const permanence = buildPermanenceSummary(customerTechnologyInput(row.customer), row.requestDate, {
-    permanenceMonths: tariff.permanenceMonths,
-    installCostUsd: tariff.installCostUsd,
-  }, { planChangeAddendum: resolvedTariff.planChangeAddendum });
-
-  if (!permanence.canCalculate || !permanence.permanenceStartDate) {
-    throw new Error("PERMANENCE_INCOMPLETE");
+  if (options?.permanenceStartOverride !== undefined) {
+    await prisma.cancellation.update({
+      where: { id: cancellationId },
+      data: { permanenceStartDate: options.permanenceStartOverride },
+    });
   }
 
-  const computedStart = new Date(permanence.permanenceStartDate);
-  const permanenceStart = options?.permanenceStartOverride ?? computedStart;
-  const charge = calculatePermanenceFromStartDate(
-    permanenceStart,
+  const breakdown = await computeBajaLiquidation(cancellationId);
+
+  const resolvedTariff = await resolvePermanenceTariffForCancellation(row);
+  const permanence = buildPermanenceSummary(
+    customerTechnologyInput(row.customer),
     row.requestDate,
-    { permanenceMonths: tariff.permanenceMonths, installCostUsd: tariff.installCostUsd }
+    {
+      permanenceMonths: resolvedTariff.permanenceMonths,
+      installCostUsd: resolvedTariff.installCostUsd,
+    },
+    { planChangeAddendum: resolvedTariff.planChangeAddendum }
   );
 
-  const liq = calculateLiquidation({
-    permanenceStartDate: permanenceStart,
-    requestDate: row.requestDate,
-    hasTvStreaming: row.customer.hasTvStreaming,
-    tvStreamingSince: row.customer.tvStreamingSince,
-    pendingBalance: Number(row.customer.pendingBalance),
-    config: tariff,
-    extraCharges: row.charges.map((c) => ({ concept: c.concept, amount: Number(c.amount) })),
-    permanenceAmountOverride: charge.installAmount,
-    monthsCompletedOverride: charge.monthsInFiber,
-  });
+  const refreshed = await getCancellation(cancellationId);
+  const permanenceStart =
+    refreshed?.permanenceStartDate ??
+    (permanence.permanenceStartDate ? new Date(permanence.permanenceStartDate) : null);
 
-  const equipmentFromItems = row.equipment.reduce(
-    (sum, e) => sum + Number(e.chargeAmount ?? 0),
-    0
-  );
-  const equipmentAmount =
-    equipmentFromItems > 0 ? equipmentFromItems : Number(row.equipmentAmount ?? 0);
-  const totalAmount =
-    Math.round(
-      (liq.permanenceAmount + liq.tvAmount + liq.monthlyAmount + liq.otherAmount + equipmentAmount) *
-        100
-    ) / 100;
+  if (!permanenceStart) {
+    throw new Error("PERMANENCE_INCOMPLETE");
+  }
 
   return prisma.cancellation.update({
     where: { id: cancellationId },
     data: {
-      monthsCompleted: liq.monthsCompleted,
-      permanenceAmount: liq.permanenceAmount,
-      tvAmount: liq.tvAmount,
-      monthlyAmount: liq.monthlyAmount,
-      equipmentAmount,
-      otherAmount: liq.otherAmount,
-      totalAmount,
+      monthsCompleted: breakdown.monthsCompleted,
+      permanenceAmount: breakdown.permanenceAmount,
+      tvAmount: breakdown.tvAmount,
+      monthlyAmount: breakdown.monthlyAmount,
+      equipmentAmount: breakdown.equipmentAmount,
+      otherAmount: breakdown.otherAmount,
+      totalAmount: breakdown.total,
       permanenceStartDate: permanenceStart,
       originTechnology: permanence.originTechnology,
       currentTechnology: permanence.currentTechnology,
-      fiberInstallPending: liq.fiberInstallPending,
+      fiberInstallPending: breakdown.fiberInstallPending,
     },
   });
 }

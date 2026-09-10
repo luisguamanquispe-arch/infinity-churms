@@ -157,12 +157,14 @@ export default function PreliquidacionClientePage() {
         <div className="mt-6 rounded-lg border bg-slate-50 p-4">
           <p className="text-xs font-semibold uppercase text-slate-500">Detalle</p>
           <ul className="mt-2 space-y-2 text-sm">
-            {data.lineItems.map((l, i) => (
-              <li key={i} className="flex justify-between gap-2">
-                <span>{l.concept}</span>
-                <span className="font-medium">{formatUsd(l.amount)}</span>
-              </li>
-            ))}
+            {data.lineItems
+              .filter((l) => l.category !== "CREDITO")
+              .map((l, i) => (
+                <li key={i} className="flex justify-between gap-2">
+                  <span>{l.concept}</span>
+                  <span className="font-medium">{formatUsd(l.amount)}</span>
+                </li>
+              ))}
           </ul>
           {data.creditsAmount > 0 && (
             <div className="mt-2 flex justify-between border-t pt-2 text-sm text-teal-700">

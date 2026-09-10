@@ -411,14 +411,39 @@ export function CancellationDetail({
 
         {showFinancialDetail && (
         <Card title="Resumen de liquidación">
-          <Line label={INSTALLATION_PRORATION_LABEL} value={formatUsd(Number(data.permanenceAmount))} />
-          <Line label={STREAMS_SUPPORT_LABEL} value={formatUsd(Number(data.tvAmount))} />
-          <Line label="Mensualidades" value={formatUsd(Number(data.monthlyAmount))} />
-          <Line label="Otros" value={formatUsd(Number(data.otherAmount))} />
-          <p className="text-xs text-slate-500">Equipos no incluidos en liquidación</p>
-          <div className="mt-3 border-t pt-3 text-lg font-bold">
-            TOTAL {formatUsd(Number(data.totalAmount))}
-          </div>
+          {data.activePreliquidacion ? (
+            <>
+              <p className="mb-3 text-xs text-slate-500">
+                Valores de preliquidación V{data.activePreliquidacion.version}
+                {data.activePreliquidacion.status === "APROBADA" ? " (aprobada)" : ""}
+              </p>
+              {data.activePreliquidacion.lineItems
+                .filter((l) => l.category !== "CREDITO")
+                .map((l) => (
+                  <Line key={l.id} label={l.concept} value={formatUsd(Number(l.amount))} />
+                ))}
+              {Number(data.activePreliquidacion.creditsAmount) > 0 && (
+                <Line
+                  label="Créditos a favor"
+                  value={`-${formatUsd(Number(data.activePreliquidacion.creditsAmount))}`}
+                />
+              )}
+              <div className="mt-3 border-t pt-3 text-lg font-bold">
+                TOTAL {formatUsd(Number(data.activePreliquidacion.totalAmount))}
+              </div>
+            </>
+          ) : (
+            <>
+              <Line label={INSTALLATION_PRORATION_LABEL} value={formatUsd(Number(data.permanenceAmount))} />
+              <Line label={STREAMS_SUPPORT_LABEL} value={formatUsd(Number(data.tvAmount))} />
+              <Line label="Mensualidades" value={formatUsd(Number(data.monthlyAmount))} />
+              <Line label="Otros" value={formatUsd(Number(data.otherAmount))} />
+              <p className="text-xs text-slate-500">Equipos no incluidos en liquidación</p>
+              <div className="mt-3 border-t pt-3 text-lg font-bold">
+                TOTAL {formatUsd(Number(data.totalAmount))}
+              </div>
+            </>
+          )}
         </Card>
         )}
       </div>

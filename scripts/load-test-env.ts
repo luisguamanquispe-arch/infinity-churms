@@ -45,6 +45,15 @@ export function loadTestEnv(): { loadedFrom: string[] } {
     }
   }
 
+  // Prefer project .env DATABASE_URL over stale shell env pointing at wrong host/port.
+  if (merged.DATABASE_URL?.includes("_test") && process.env.DATABASE_URL !== merged.DATABASE_URL) {
+    const shellUrl = process.env.DATABASE_URL ?? "";
+    const shellIsTest = shellUrl.includes("_test") || shellUrl.includes("test");
+    if (shellUrl && shellIsTest && shellUrl !== merged.DATABASE_URL) {
+      process.env.DATABASE_URL = merged.DATABASE_URL;
+    }
+  }
+
   return { loadedFrom };
 }
 

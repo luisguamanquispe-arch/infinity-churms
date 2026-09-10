@@ -18,6 +18,11 @@ import {
   type PermanenceConfig,
 } from "@/lib/permanence";
 import { parseBusinessDateOnly } from "@/lib/business-date";
+import { formatUsd } from "@/lib/liquidation";
+import {
+  PRELIQUIDACION_CATEGORY_LABELS,
+  summarizePreliquidacionByCategory,
+} from "@/lib/preliquidacion-display";
 
 type ChargeRow = { id?: string; concept: string; amount: string; _deleted?: boolean };
 type PaymentRow = {
@@ -65,7 +70,20 @@ export interface CancellationAdminData {
   totalAmount: string;
   permanenceMonthsSnapshot?: number | null;
   installCostUsdSnapshot?: string | number | null;
-  customer: { contract: string; name: string };
+  customer: {
+    contract: string;
+    name: string;
+    pendingBalance?: string;
+    planMonthlyUsd?: string | null;
+  };
+  activePreliquidacion?: {
+    version: number;
+    status: string;
+    totalAmount: string;
+    creditsAmount: string;
+    subtotal: string;
+    lineItems: { id: string; category: string; concept: string; amount: string }[];
+  } | null;
   charges: { id: string; concept: string; amount: string }[];
   payments: {
     id: string;
@@ -170,21 +188,10 @@ export function CancellationAdminPanel({
           parseBusinessDateOnly(requestDate),
           tariff
         );
-        const chargeSum = prev.charges
-          .filter((c) => !c._deleted)
-          .reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
-        const tv = parseFloat(prev.tvAmount) || 0;
-        const monthly = parseFloat(prev.monthlyAmount) || 0;
-        const equipment = parseFloat(prev.equipmentAmount) || 0;
-        const total =
-          Math.round((charge.installAmount + tv + monthly + chargeSum + equipment) * 100) / 100;
         return {
           ...prev,
           monthsCompleted: String(charge.monthsInFiber),
-          permanenceAmount: String(charge.installAmount),
           fiberInstallPending: charge.fiberInstallPending,
-          otherAmount: String(chargeSum),
-          totalAmount: String(total),
         };
       } catch {
         return prev;
@@ -198,10 +205,7 @@ export function CancellationAdminPanel({
     setForm((prev) => {
       const next = applyPermanenceCalc(prev.requestDate, prev.permanenceStartDate, prev);
       if (
-        next.totalAmount === prev.totalAmount &&
-        next.permanenceAmount === prev.permanenceAmount &&
         next.monthsCompleted === prev.monthsCompleted &&
-        next.otherAmount === prev.otherAmount &&
         next.fiberInstallPending === prev.fiberInstallPending
       ) {
         return prev;
@@ -210,17 +214,13 @@ export function CancellationAdminPanel({
     });
   }, [form.requestDate, form.permanenceStartDate, tariff, applyPermanenceCalc]);
 
+  const snapshot = data.activePreliquidacion;
+  const snapshotCategories = snapshot
+    ? summarizePreliquidacionByCategory(snapshot.lineItems)
+    : null;
+
   function updateLineAmounts(next: Partial<AdminForm>) {
-    const merged = { ...form, ...next };
-    const chargeSum = merged.charges
-      .filter((c) => !c._deleted)
-      .reduce((s, c) => s + (parseFloat(c.amount) || 0), 0);
-    const permanence = parseFloat(merged.permanenceAmount) || 0;
-    const tv = parseFloat(merged.tvAmount) || 0;
-    const monthly = parseFloat(merged.monthlyAmount) || 0;
-    const equipment = parseFloat(merged.equipmentAmount) || 0;
-    const total = Math.round((permanence + tv + monthly + chargeSum + equipment) * 100) / 100;
-    setForm({ ...merged, otherAmount: String(chargeSum), totalAmount: String(total) });
+    setForm({ ...form, ...next });
   }
 
   async function save(recalculate = false) {
@@ -365,15 +365,109 @@ export function CancellationAdminPanel({
             </div>
           </AdminSection>
 
-          <AdminSection title="Liquidación">
-            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              <ReadOnlyField label={`${INSTALLATION_PRORATION_LABEL} (snapshot)`} value={form.permanenceAmount} />
-              <ReadOnlyField label={STREAMS_SUPPORT_LABEL} value={form.tvAmount} />
-              <ReadOnlyField label="Mensualidades" value={form.monthlyAmount} />
-              <ReadOnlyField label="Otros cargos" value={form.otherAmount} />
-              <ReadOnlyField label="Equipos" value={form.equipmentAmount} />
-              <ReadOnlyField label="TOTAL (servidor)" value={form.totalAmount} />
-            </div>
+          {(data.customer.pendingBalance != null || data.customer.planMonthlyUsd != null) && (
+            <AdminSection title="Referencia Cobranzas (no contractual)">
+              <p className="mb-3 text-xs text-slate-500">
+                Información operativa de Cobranzas. No se utiliza para calcular la preliquidación.
+              </p>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {data.customer.pendingBalance != null && (
+                  <ReadOnlyField
+                    label="Saldo pendiente (Cobranzas)"
+                    value={formatUsd(Number(data.customer.pendingBalance))}
+                  />
+                )}
+                {data.customer.planMonthlyUsd != null && data.customer.planMonthlyUsd !== "" && (
+                  <ReadOnlyField
+                    label="Precio mensual contractual (referencia)"
+                    value={formatUsd(Number(data.customer.planMonthlyUsd))}
+                  />
+                )}
+              </div>
+            </AdminSection>
+          )}
+
+          <AdminSection title="Liquidación contractual">
+            {snapshot ? (
+              <>
+                <p className="mb-3 text-xs text-slate-600">
+                  Fuente: preliquidación V{snapshot.version} ({snapshot.status}). Misma base que
+                  API pública y móvil.
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <ReadOnlyField
+                    label={PRELIQUIDACION_CATEGORY_LABELS.PERMANENCIA}
+                    value={formatUsd(snapshotCategories?.PERMANENCIA ?? 0)}
+                  />
+                  <ReadOnlyField
+                    label={PRELIQUIDACION_CATEGORY_LABELS.MENSUALIDAD}
+                    value={formatUsd(snapshotCategories?.MENSUALIDAD ?? 0)}
+                  />
+                  <ReadOnlyField
+                    label={PRELIQUIDACION_CATEGORY_LABELS.TV}
+                    value={formatUsd(snapshotCategories?.TV ?? 0)}
+                  />
+                  <ReadOnlyField
+                    label={PRELIQUIDACION_CATEGORY_LABELS.EQUIPO}
+                    value={formatUsd(snapshotCategories?.EQUIPO ?? 0)}
+                  />
+                  <ReadOnlyField
+                    label={PRELIQUIDACION_CATEGORY_LABELS.OTRO}
+                    value={formatUsd(
+                      (snapshotCategories?.OTRO ?? 0) + (snapshotCategories?.DANOS ?? 0)
+                    )}
+                  />
+                  <ReadOnlyField
+                    label={PRELIQUIDACION_CATEGORY_LABELS.CREDITO}
+                    value={
+                      Number(snapshot.creditsAmount) > 0
+                        ? `-${formatUsd(Number(snapshot.creditsAmount))}`
+                        : formatUsd(0)
+                    }
+                  />
+                  <ReadOnlyField label="Subtotal" value={formatUsd(Number(snapshot.subtotal))} />
+                  <ReadOnlyField
+                    label="TOTAL preliquidación"
+                    value={formatUsd(Number(snapshot.totalAmount))}
+                  />
+                </div>
+                {snapshot.lineItems.length > 0 && (
+                  <details className="mt-3 text-sm">
+                    <summary className="cursor-pointer text-slate-600 hover:text-slate-900">
+                      Ver líneas del snapshot (paridad API/móvil)
+                    </summary>
+                    <ul className="mt-2 space-y-1 rounded-lg border bg-slate-50 p-3">
+                      {snapshot.lineItems.map((l) => (
+                        <li key={l.id} className="flex justify-between gap-2">
+                          <span>
+                            [{l.category}] {l.concept}
+                          </span>
+                          <span className="font-medium">{formatUsd(Number(l.amount))}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </>
+            ) : (
+              <>
+                <p className="mb-3 text-xs text-amber-800">
+                  Sin preliquidación activa. Valores del último recálculo en servidor (generar
+                  preliquidación para fijar snapshot contractual).
+                </p>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                  <ReadOnlyField
+                    label={`${INSTALLATION_PRORATION_LABEL} (servidor)`}
+                    value={form.permanenceAmount}
+                  />
+                  <ReadOnlyField label={STREAMS_SUPPORT_LABEL} value={form.tvAmount} />
+                  <ReadOnlyField label="Mensualidades" value={form.monthlyAmount} />
+                  <ReadOnlyField label="Otros cargos" value={form.otherAmount} />
+                  <ReadOnlyField label="Equipos" value={form.equipmentAmount} />
+                  <ReadOnlyField label="TOTAL (servidor)" value={form.totalAmount} />
+                </div>
+              </>
+            )}
             <button
               type="button"
               disabled={recalculating || saving}

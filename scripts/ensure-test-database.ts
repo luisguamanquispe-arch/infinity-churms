@@ -35,7 +35,7 @@ async function main() {
     console.log(JSON.stringify({ created: true, database }));
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    if (msg.includes("already exists")) {
+    if (msg.includes("already exists") || msg.includes("ya existe")) {
       console.log(JSON.stringify({ created: false, database, note: "already_exists" }));
     } else {
       throw e;

@@ -6,6 +6,7 @@ import "./load-test-env";
 import { PrismaClient } from "@prisma/client";
 import { assertTestDatabaseAllowed } from "../src/lib/test-database-guard";
 import { createCancellationRecord, initEquipmentChecklist, recalculateCancellation } from "../src/lib/services/cancellations";
+import { createCollectionCharge } from "../src/lib/services/collection-charges";
 import { generatePreliquidacion } from "../src/lib/services/preliquidaciones";
 import {
   approvePreliquidacionViaToken,
@@ -70,7 +71,8 @@ async function main() {
         originTechnology: "FIBRA",
         currentTechnology: "FIBRA",
         fiberInstallDate: parseBusinessDateOnly("2024-06-01"),
-        pendingBalance: 30,
+        pendingBalance: 0,
+        planMonthlyUsd: 22.4,
         status: "ACTIVO",
         equipment: {
           create: {
@@ -85,6 +87,13 @@ async function main() {
     });
     customerId = customer.id;
     step("CLIENTE", Boolean(customer.id), `creado ${customer.contract}`);
+
+    await createCollectionCharge(customer.id, admin.id, {
+      chargeType: "CONSUMO_MENSUAL",
+      amount: 30,
+      periodFrom: "2025-06",
+      periodTo: "2025-06",
+    });
 
     // SOLICITUD DE BAJA
     const cancellation = await createCancellationRecord({
@@ -234,6 +243,8 @@ async function main() {
       await prisma.cancellation.delete({ where: { id: cancellationId } }).catch(() => undefined);
     }
     if (customerId) {
+      await prisma.collectionPayment.deleteMany({ where: { customerId } }).catch(() => undefined);
+      await prisma.collectionCharge.deleteMany({ where: { customerId } }).catch(() => undefined);
       await prisma.customerEquipment.deleteMany({ where: { customerId } }).catch(() => undefined);
       await prisma.customer.delete({ where: { id: customerId } }).catch(() => undefined);
     }

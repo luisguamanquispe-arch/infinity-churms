@@ -1,15 +1,11 @@
 import type { PreliquidacionLineCategory, PreliquidacionStatus } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { nextPreliquidacionNumber } from "@/lib/acta-number";
+import { getCancellation, recalculateCancellation } from "@/lib/services/cancellations";
 import {
-  customerTechnologyInput,
-  getCancellation,
-  recalculateCancellation,
-} from "@/lib/services/cancellations";
-import { buildPermanenceSummary, calculatePermanenceFromStartDate } from "@/lib/permanence";
-import { calculateLiquidation } from "@/lib/liquidation";
-import { INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL } from "@/lib/constants";
-import { resolvePermanenceTariffForCancellation } from "@/lib/permanence-config-resolver";
+  buildPreliquidacionLines,
+  summarizeLiquidationLines,
+} from "@/lib/services/baja-liquidation";
 
 export interface PreliquidacionLineInput {
   category: PreliquidacionLineCategory;
@@ -104,148 +100,20 @@ export async function ensureActivePreliquidacion(cancellationId: string, userId:
 }
 
 async function buildLineItems(cancellationId: string): Promise<PreliquidacionLineInput[]> {
-  const row = await getCancellation(cancellationId);
-  if (!row) throw new Error("NOT_FOUND");
-
-  const resolvedTariff = await resolvePermanenceTariffForCancellation(row);
-  const tariff = {
-    permanenceMonths: resolvedTariff.permanenceMonths,
-    installCostUsd: resolvedTariff.installCostUsd,
-    tvMonthlyUsd: resolvedTariff.tvMonthlyUsd,
-  };
-
-  const permanence = buildPermanenceSummary(
-    customerTechnologyInput(row.customer),
-    row.requestDate,
-    tariff,
-    { planChangeAddendum: resolvedTariff.planChangeAddendum }
-  );
-
-  if (!permanence.canCalculate || !permanence.permanenceStartDate) {
-    throw new Error("PERMANENCE_INCOMPLETE");
-  }
-
-  const permanenceStart = new Date(permanence.permanenceStartDate);
-  const charge = calculatePermanenceFromStartDate(permanenceStart, row.requestDate, tariff);
-
-  const liq = calculateLiquidation({
-    permanenceStartDate: permanenceStart,
-    requestDate: row.requestDate,
-    hasTvStreaming: row.customer.hasTvStreaming,
-    tvStreamingSince: row.customer.tvStreamingSince,
-    pendingBalance: Number(row.customer.pendingBalance),
-    config: tariff,
-    extraCharges: row.charges.map((c) => ({ concept: c.concept, amount: Number(c.amount) })),
-    permanenceAmountOverride: charge.installAmount,
-    monthsCompletedOverride: charge.monthsInFiber,
-  });
-
-  const lines: PreliquidacionLineInput[] = [];
-  let order = 0;
-
-  if (liq.permanenceAmount > 0) {
-    lines.push({
-      category: "PERMANENCIA",
-      concept: INSTALLATION_PRORATION_LABEL,
-      amount: liq.permanenceAmount,
-      sortOrder: order++,
-    });
-  }
-
-  if (liq.monthlyAmount > 0) {
-    lines.push({
-      category: "MENSUALIDAD",
-      concept: "Saldo pendiente / mensualidades",
-      amount: liq.monthlyAmount,
-      sortOrder: order++,
-    });
-  }
-
-  if (liq.tvAmount > 0) {
-    lines.push({
-      category: "TV",
-      concept: STREAMS_SUPPORT_LABEL,
-      amount: liq.tvAmount,
-      sortOrder: order++,
-    });
-  }
-
-  for (const c of row.charges) {
-    const amt = Number(c.amount);
-    if (amt === 0) continue;
-    lines.push({
-      category: amt < 0 ? "CREDITO" : "OTRO",
-      concept: c.concept,
-      amount: amt,
-      sortOrder: order++,
-    });
-  }
-
-  const tariffs = await prisma.equipmentTariff.findMany();
-  for (const eq of row.equipment) {
-    const t = tariffs.find((x) => x.type === eq.type);
-    const notReturned = Number(t?.notReturnedUsd ?? 0);
-    const damaged = Number(t?.damagedUsd ?? 0);
-    const label = eq.brand || eq.model ? `${eq.type} ${eq.brand ?? ""} ${eq.model ?? ""}`.trim() : eq.type;
-    const eqCharge = Number(eq.chargeAmount ?? 0);
-
-    if (!eq.delivered || eq.condition === "NO_ENTREGADO") {
-      const value = notReturned > 0 ? notReturned : eqCharge;
-      if (value <= 0) continue;
-      lines.push({
-        category: "EQUIPO",
-        concept: `${label} (pendiente de devolución)`,
-        amount: value,
-        sortOrder: order++,
-        metadata: JSON.stringify({ serial: eq.serial, equipmentId: eq.id }),
-      });
-    } else if (eq.condition === "DANADO") {
-      const value = damaged > 0 ? damaged : eqCharge;
-      if (value <= 0) continue;
-      lines.push({
-        category: "OTRO",
-        concept: `Daño — ${label}`,
-        amount: value,
-        sortOrder: order++,
-        metadata: JSON.stringify({ serial: eq.serial, equipmentId: eq.id, damage: true }),
-      });
-    }
-  }
-
-  return lines;
+  return buildPreliquidacionLines(cancellationId);
 }
 
 function summarizeLines(lines: PreliquidacionLineInput[]) {
-  let permanenceAmount = 0;
-  let tvAmount = 0;
-  let monthlyAmount = 0;
-  let equipmentAmount = 0;
-  let otherAmount = 0;
-  let creditsAmount = 0;
-
-  for (const line of lines) {
-    if (line.category === "PERMANENCIA") permanenceAmount += line.amount;
-    else if (line.category === "TV") tvAmount += line.amount;
-    else if (line.category === "MENSUALIDAD") monthlyAmount += line.amount;
-    else if (line.category === "EQUIPO") equipmentAmount += line.amount;
-    else if (line.category === "CREDITO") creditsAmount += Math.abs(line.amount);
-    else otherAmount += line.amount;
-  }
-
-  const positiveSubtotal =
-    Math.round((permanenceAmount + tvAmount + monthlyAmount + equipmentAmount + otherAmount) * 100) /
-    100;
-  const totalAmount = Math.round((positiveSubtotal - creditsAmount) * 100) / 100;
-
+  const summary = summarizeLiquidationLines(lines);
   return {
-    permanenceAmount,
-    tvAmount,
-    monthlyAmount,
-    equipmentAmount,
-    otherAmount,
-    creditsAmount,
-    subtotal: positiveSubtotal,
-    totalAmount: Math.max(0, totalAmount),
+    permanenceAmount: summary.permanenceAmount,
+    tvAmount: summary.tvAmount,
+    monthlyAmount: summary.monthlyAmount,
+    equipmentAmount: summary.equipmentAmount,
+    otherAmount: summary.otherAmount,
+    creditsAmount: summary.creditsAmount,
+    subtotal: summary.subtotal,
+    totalAmount: summary.total,
   };
 }
 
@@ -402,8 +270,8 @@ export async function computeFinalLiquidation(cancellationId: string) {
     }
   }
 
-  equipmentAdjustment = Math.round(equipmentAdjustment * 100) / 100;
-  const totalAmount = Math.round((preTotal + equipmentAdjustment) * 100) / 100;
+  equipmentAdjustment = Math.round(Math.min(0, equipmentAdjustment) * 100) / 100;
+  const totalAmount = Math.max(0, Math.round((preTotal + equipmentAdjustment) * 100) / 100);
 
   const duplicate = await prisma.cancellationFinalLiquidation.findFirst({
     where: { cancellationId, preliquidacionId: approved.id },
