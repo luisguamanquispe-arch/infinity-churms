@@ -1,14 +1,17 @@
 /**
  * Pruebas matemáticas P1–P6 — computeBajaLiquidation / buildLiquidationBreakdownFromInputs
  */
+import { parseBusinessDateOnly } from "@/lib/business-date";
 import {
   allocateCollectionPayments,
   sumPendingByChargeType,
 } from "@/lib/services/collection-payment-allocation";
 import {
   buildLiquidationBreakdownFromInputs,
+  followingCalendarMonthStart,
   type BajaLiquidationInput,
 } from "@/lib/services/baja-liquidation";
+import { monthInputFromDate } from "@/lib/services/collection-charges";
 
 let failures = 0;
 
@@ -416,6 +419,188 @@ function baseInput(overrides: Partial<BajaLiquidationInput> = {}): BajaLiquidati
     "P5 suma líneas = monthlyTotal",
     approx(monthlyLines.reduce((s, l) => s + l.amount, 0), b.monthlyTotal)
   );
+}
+
+function nextMonthRuleInput(requestDateStr: string): BajaLiquidationInput {
+  return baseInput({
+    requestDate: parseBusinessDateOnly(requestDateStr),
+    tariff: { permanenceMonths: 12, installCostUsd: 0, tvMonthlyUsd: 0 },
+    monthlyContractUsd: 20,
+    collectionCharges: [],
+  });
+}
+
+// Regla día 1 — sin mensualidad siguiente
+{
+  const b = buildLiquidationBreakdownFromInputs(nextMonthRuleInput("2026-09-01"));
+  assert("Regla día 1 total=0", approx(b.total, 0), `got ${b.total}`);
+  assert("Regla día 1 sin MENSUALIDAD", !b.lines.some((l) => l.category === "MENSUALIDAD"));
+  assert(
+    "Regla día 1 sin NEXT_MONTH_RULE",
+    !b.lines.some((l) => l.metadata?.includes("NEXT_MONTH_RULE"))
+  );
+}
+
+// Regla día 15 — sin mensualidad siguiente
+{
+  const b = buildLiquidationBreakdownFromInputs(nextMonthRuleInput("2026-09-15"));
+  assert("Regla día 15 total=0", approx(b.total, 0), `got ${b.total}`);
+  assert("Regla día 15 sin MENSUALIDAD", !b.lines.some((l) => l.category === "MENSUALIDAD"));
+}
+
+// Regla día 16 — mensualidad siguiente contractual
+{
+  const requestDate = parseBusinessDateOnly("2026-09-16");
+  const b = buildLiquidationBreakdownFromInputs(nextMonthRuleInput("2026-09-16"));
+  assert("Regla día 16 total=20", approx(b.total, 20), `got ${b.total}`);
+  assert("Regla día 16 monthly=20", approx(b.monthlyTotal, 20), `got ${b.monthlyTotal}`);
+  assert(
+    "Regla día 16 mes siguiente 2026-10",
+    monthInputFromDate(followingCalendarMonthStart(requestDate)) === "2026-10"
+  );
+  assert(
+    "Regla día 16 línea NEXT_MONTH_RULE",
+    b.lines.some(
+      (l) =>
+        l.category === "MENSUALIDAD" &&
+        l.metadata?.includes("NEXT_MONTH_RULE") &&
+        l.amount === 20
+    )
+  );
+}
+
+// Regla último día del mes — mensualidad siguiente
+{
+  const b = buildLiquidationBreakdownFromInputs(nextMonthRuleInput("2026-09-30"));
+  assert("Regla último día total=20", approx(b.total, 20), `got ${b.total}`);
+}
+
+// Rollover enero → febrero
+{
+  const requestDate = parseBusinessDateOnly("2026-01-20");
+  const b = buildLiquidationBreakdownFromInputs(nextMonthRuleInput("2026-01-20"));
+  assert(
+    "Rollover ene→feb mes 2026-02",
+    monthInputFromDate(followingCalendarMonthStart(requestDate)) === "2026-02"
+  );
+  assert("Rollover ene→feb total=20", approx(b.total, 20), `got ${b.total}`);
+}
+
+// Rollover diciembre → enero (año siguiente)
+{
+  const requestDate = parseBusinessDateOnly("2026-12-20");
+  const b = buildLiquidationBreakdownFromInputs(nextMonthRuleInput("2026-12-20"));
+  assert(
+    "Rollover dic→ene mes 2027-01",
+    monthInputFromDate(followingCalendarMonthStart(requestDate)) === "2027-01"
+  );
+  assert("Rollover dic→ene total=20", approx(b.total, 20), `got ${b.total}`);
+}
+
+// Febrero normal
+{
+  const requestDate = parseBusinessDateOnly("2026-02-16");
+  const b = buildLiquidationBreakdownFromInputs(nextMonthRuleInput("2026-02-16"));
+  assert(
+    "Feb 2026→mar mes 2026-03",
+    monthInputFromDate(followingCalendarMonthStart(requestDate)) === "2026-03"
+  );
+  assert("Feb 2026→mar total=20", approx(b.total, 20), `got ${b.total}`);
+}
+
+// Año bisiesto — febrero 16
+{
+  const requestDate = parseBusinessDateOnly("2028-02-16");
+  const b = buildLiquidationBreakdownFromInputs(nextMonthRuleInput("2028-02-16"));
+  assert(
+    "Bisiesto 2028-02-16→mar mes 2028-03",
+    monthInputFromDate(followingCalendarMonthStart(requestDate)) === "2028-03"
+  );
+  assert("Bisiesto 2028-02-16 total=20", approx(b.total, 20), `got ${b.total}`);
+}
+
+// Año bisiesto — último día febrero (29)
+{
+  const requestDate = parseBusinessDateOnly("2028-02-29");
+  const b = buildLiquidationBreakdownFromInputs(nextMonthRuleInput("2028-02-29"));
+  assert(
+    "Bisiesto 2028-02-29→mar mes 2028-03",
+    monthInputFromDate(followingCalendarMonthStart(requestDate)) === "2028-03"
+  );
+  assert("Bisiesto 2028-02-29 total=20", approx(b.total, 20), `got ${b.total}`);
+}
+
+// Regla — cargo del mes siguiente ya existe → no duplicar
+{
+  const b = buildLiquidationBreakdownFromInputs(
+    baseInput({
+      requestDate: parseBusinessDateOnly("2026-09-20"),
+      tariff: { permanenceMonths: 12, installCostUsd: 0, tvMonthlyUsd: 0 },
+      monthlyContractUsd: 20,
+      collectionCharges: [
+        charge("m-oct", "CONSUMO_MENSUAL", 20, "2026-09-01", {
+          periodFrom: "2026-10",
+          periodTo: "2026-10",
+        }),
+      ],
+    })
+  );
+  assert("Regla no duplicar total=20", approx(b.total, 20), `got ${b.total}`);
+  assert(
+    "Regla no duplicar una sola MENSUALIDAD",
+    b.lines.filter((l) => l.category === "MENSUALIDAD").length === 1
+  );
+  assert(
+    "Regla no duplicar usa chargeId",
+    b.lines.some((l) => l.metadata?.includes("chargeId"))
+  );
+  assert(
+    "Regla no duplicar sin NEXT_MONTH_RULE",
+    !b.lines.some((l) => l.metadata?.includes("NEXT_MONTH_RULE"))
+  );
+}
+
+// Regla — cargo parcial (monto) del mes siguiente → P1 neto, sin synthetic
+{
+  const b = buildLiquidationBreakdownFromInputs(
+    baseInput({
+      requestDate: parseBusinessDateOnly("2026-09-20"),
+      tariff: { permanenceMonths: 12, installCostUsd: 0, tvMonthlyUsd: 0 },
+      monthlyContractUsd: 20,
+      collectionCharges: [
+        charge("m-oct-partial", "CONSUMO_MENSUAL", 10, "2026-09-01", {
+          periodFrom: "2026-10",
+          periodTo: "2026-10",
+        }),
+      ],
+    })
+  );
+  assert("Regla cargo parcial total=10", approx(b.total, 10), `got ${b.total}`);
+  assert("Regla cargo parcial monthly=10", approx(b.monthlyTotal, 10), `got ${b.monthlyTotal}`);
+  assert(
+    "Regla cargo parcial sin NEXT_MONTH_RULE",
+    !b.lines.some((l) => l.metadata?.includes("NEXT_MONTH_RULE"))
+  );
+}
+
+// Regla — mes siguiente parcialmente pagado → solo saldo neto
+{
+  const b = buildLiquidationBreakdownFromInputs(
+    baseInput({
+      requestDate: parseBusinessDateOnly("2026-09-20"),
+      tariff: { permanenceMonths: 12, installCostUsd: 0, tvMonthlyUsd: 0 },
+      monthlyContractUsd: 20,
+      collectionCharges: [
+        charge("m-oct", "CONSUMO_MENSUAL", 20, "2026-09-01", {
+          periodFrom: "2026-10",
+          periodTo: "2026-10",
+        }),
+      ],
+      collectionPaymentsTotal: 10,
+    })
+  );
+  assert("Regla parcial total=10", approx(b.total, 10), `got ${b.total}`);
+  assert("Regla parcial monthly=10", approx(b.monthlyTotal, 10), `got ${b.monthlyTotal}`);
 }
 
 console.log(failures === 0 ? "\nP1–P6 liquidation tests OK" : `\n${failures} test(s) failed`);

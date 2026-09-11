@@ -5,6 +5,8 @@ import { INSTALLATION_PRORATION_LABEL, STREAMS_SUPPORT_LABEL } from "@/lib/const
 import {
   buildConsumptionPeriodLabel,
   formatChargeDetail,
+  formatMonthYear,
+  monthInputFromDate,
   type CollectionChargeView,
 } from "@/lib/services/collection-charges";
 import { listCollectionPayments } from "@/lib/services/collection-payments";
@@ -81,11 +83,72 @@ export interface BajaLiquidationInput {
   tvStreamingSince: Date | null;
   tariff: { permanenceMonths: number; installCostUsd: number; tvMonthlyUsd: number };
   monthsCompletedOverride?: number;
+  /** Precio mensual contractual; solo regla día 16–fin si no hay CollectionCharge del mes siguiente. */
+  monthlyContractUsd?: number | null;
   collectionCharges: BajaLiquidationCollectionChargeInput[];
   collectionPaymentsTotal: number;
   cancellationCharges: BajaLiquidationChargeInput[];
   equipment: BajaLiquidationEquipmentInput[];
   equipmentTariffs: { type: string; notReturnedUsd: unknown; damagedUsd: unknown }[];
+}
+
+/** Día 16 o posterior → incluir mensualidad del mes calendario siguiente. */
+export function shouldBillFollowingMonth(requestDate: Date): boolean {
+  return requestDate.getUTCDate() >= 16;
+}
+
+/** Primer día del mes calendario inmediatamente posterior a requestDate (mediodía UTC). */
+export function followingCalendarMonthStart(requestDate: Date): Date {
+  return new Date(Date.UTC(requestDate.getUTCFullYear(), requestDate.getUTCMonth() + 1, 1, 12, 0, 0, 0));
+}
+
+function chargePeriodMonthKey(value: Date | string | null | undefined): string {
+  if (value == null) return "";
+  if (typeof value === "string" && /^\d{4}-\d{2}$/.test(value.trim())) return value.trim();
+  return monthInputFromDate(value);
+}
+
+export function consumptionChargeCoversMonth(
+  charge: BajaLiquidationCollectionChargeInput,
+  monthStart: Date
+): boolean {
+  if (charge.chargeType !== "CONSUMO_MENSUAL") return false;
+  const targetKey = monthInputFromDate(monthStart);
+  if (!targetKey) return false;
+  const fromKey = chargePeriodMonthKey(charge.periodFrom ?? null);
+  if (!fromKey) return false;
+  const toKey = chargePeriodMonthKey(charge.periodTo ?? charge.periodFrom ?? null) || fromKey;
+  return targetKey >= fromKey && targetKey <= toKey;
+}
+
+async function resolveContractualMonthlyUsd(customer: {
+  planMonthlyUsd: unknown;
+  planName: string;
+  activeServicePlanId: string | null;
+}): Promise<number | null> {
+  if (customer.planMonthlyUsd != null) {
+    const fromCustomer = roundUsd(Number(customer.planMonthlyUsd));
+    if (fromCustomer > 0) return fromCustomer;
+  }
+  if (customer.activeServicePlanId) {
+    const linked = await prisma.servicePlan.findUnique({
+      where: { id: customer.activeServicePlanId },
+      select: { monthlyUsd: true },
+    });
+    if (linked) {
+      const fromPlan = roundUsd(Number(linked.monthlyUsd));
+      if (fromPlan > 0) return fromPlan;
+    }
+  }
+  const byName = await prisma.servicePlan.findFirst({
+    where: { name: { equals: customer.planName, mode: "insensitive" }, active: true },
+    select: { monthlyUsd: true },
+  });
+  if (byName) {
+    const fromName = roundUsd(Number(byName.monthlyUsd));
+    if (fromName > 0) return fromName;
+  }
+  return null;
 }
 
 function roundUsd(n: number): number {
@@ -255,6 +318,27 @@ export function buildLiquidationBreakdownFromInputs(input: BajaLiquidationInput)
     });
   }
 
+  const contractualMonthly = input.monthlyContractUsd ?? null;
+  if (contractualMonthly != null && contractualMonthly > 0 && shouldBillFollowingMonth(input.requestDate)) {
+    const nextMonthStart = followingCalendarMonthStart(input.requestDate);
+    const hasChargeForNextMonth = input.collectionCharges.some((c) =>
+      consumptionChargeCoversMonth(c, nextMonthStart)
+    );
+    if (!hasChargeForNextMonth) {
+      monthlyTotal = roundUsd(monthlyTotal + contractualMonthly);
+      lines.push({
+        category: "MENSUALIDAD",
+        concept: formatMonthYear(nextMonthStart),
+        amount: contractualMonthly,
+        sortOrder: order++,
+        metadata: JSON.stringify({
+          source: "NEXT_MONTH_RULE",
+          month: monthInputFromDate(nextMonthStart),
+        }),
+      });
+    }
+  }
+
   if (installationNet > 0) {
     lines.push({
       category: "PERMANENCIA",
@@ -371,6 +455,12 @@ export async function computeBajaLiquidation(cancellationId: string): Promise<Li
     payments.reduce((sum, p) => sum + Number(p.amount), 0)
   );
 
+  const monthlyContractUsd = await resolveContractualMonthlyUsd({
+    planMonthlyUsd: row.customer.planMonthlyUsd,
+    planName: row.customer.planName,
+    activeServicePlanId: row.customer.activeServicePlanId,
+  });
+
   return buildLiquidationBreakdownFromInputs({
     requestDate: row.requestDate,
     permanenceStartDate: permanenceStart,
@@ -378,6 +468,7 @@ export async function computeBajaLiquidation(cancellationId: string): Promise<Li
     tvStreamingSince: row.customer.tvStreamingSince,
     tariff,
     monthsCompletedOverride: permanence.monthsInFiber,
+    monthlyContractUsd,
     collectionCharges: collectionCharges.map((c) => ({
       id: c.id,
       chargeType: c.chargeType,
