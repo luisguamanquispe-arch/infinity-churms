@@ -19,7 +19,7 @@ export async function PATCH(
     const { id, chargeId } = await params;
     const body = await request.json();
 
-    const result = await updateCollectionCharge(id, chargeId, {
+    const result = await updateCollectionCharge(id, chargeId, session.userId, {
       chargeType: body.chargeType as CollectionChargeTypeValue | undefined,
       amount: body.amount !== undefined ? Number(body.amount) : undefined,
       description: body.description,
@@ -69,7 +69,7 @@ export async function DELETE(
     const session = await requirePermission("customers:manage");
     const { id, chargeId } = await params;
 
-    const result = await deleteCollectionCharge(id, chargeId);
+    const result = await deleteCollectionCharge(id, chargeId, session.userId);
 
     await audit({
       userId: session.userId,

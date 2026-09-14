@@ -354,3 +354,30 @@ export async function runCancellationChargeMutation(
   return syncResult.mode === "none" ? null : syncResult;
 }
 
+/**
+ * Tras cambios en cobranza del cliente (CollectionCharge / pagos), recalcula bajas abiertas
+ * y sincroniza snapshots de preliquidación activos (misma atomicidad que mutación de cargos).
+ */
+export async function syncPreliquidacionesAfterCustomerCollectionChange(
+  customerId: string,
+  actorUserId: string
+) {
+  const { recalculateCancellation } = await import("@/lib/services/cancellations");
+  const cancellations = await prisma.cancellation.findMany({
+    where: {
+      customerId,
+      status: { not: "BAJA_COMPLETADA" },
+    },
+    select: { id: true, activePreliquidacionId: true },
+  });
+
+  for (const row of cancellations) {
+    await recalculateCancellation(row.id);
+    try {
+      await runCancellationChargeMutation(row.id, actorUserId, async () => {});
+    } catch (e) {
+      if (e instanceof Error && e.message === "CHARGE_SYNC_APPROVED_SNAPSHOT") continue;
+      throw e;
+    }
+  }
+}

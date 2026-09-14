@@ -32,7 +32,7 @@ export async function registerCollectionPayment(
   if (!data.amount || data.amount <= 0) throw new CollectionPaymentError("AMOUNT_REQUIRED");
   if (!Number.isFinite(data.amount)) throw new CollectionPaymentError("AMOUNT_INVALID");
 
-  return prisma.$transaction(async (tx) => {
+  const result = await prisma.$transaction(async (tx) => {
     const existing = await tx.collectionPayment.findFirst({
       where: { customerId, fenixDocument },
       include: { user: { select: { name: true } } },
@@ -96,6 +96,15 @@ export async function registerCollectionPayment(
       idempotent: false as const,
     };
   });
+
+  if (!result.idempotent) {
+    const { syncPreliquidacionesAfterCustomerCollectionChange } = await import(
+      "@/lib/services/preliquidacion-charge-sync"
+    );
+    await syncPreliquidacionesAfterCustomerCollectionChange(customerId, userId);
+  }
+
+  return result;
 }
 
 export function totalPaid(payments: { amount: unknown }[]) {

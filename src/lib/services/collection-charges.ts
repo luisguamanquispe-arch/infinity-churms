@@ -20,7 +20,7 @@ const MONTHS_ES = [
 ] as const;
 
 export function formatMonthYear(date: Date): string {
-  return `${MONTHS_ES[date.getMonth()]} ${date.getFullYear()}`;
+  return `${MONTHS_ES[date.getUTCMonth()]} ${date.getUTCFullYear()}`;
 }
 
 export function buildConsumptionPeriodLabel(from: Date, to: Date): string {
@@ -33,14 +33,21 @@ export function buildConsumptionPeriodLabel(from: Date, to: Date): string {
 export function parseMonthInput(value: string): Date | null {
   if (!value || !/^\d{4}-\d{2}$/.test(value)) return null;
   const [year, month] = value.split("-").map(Number);
-  return new Date(year, month - 1, 1);
+  return new Date(Date.UTC(year, month - 1, 1, 12, 0, 0, 0));
 }
 
 export function monthInputFromDate(date: Date | string | null | undefined): string {
   if (!date) return "";
-  const d = new Date(date);
+  const d = typeof date === "string" ? new Date(date) : date;
   if (Number.isNaN(d.getTime())) return "";
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}`;
+}
+
+async function syncOpenBajasAfterCollectionChange(customerId: string, userId: string) {
+  const { syncPreliquidacionesAfterCustomerCollectionChange } = await import(
+    "@/lib/services/preliquidacion-charge-sync"
+  );
+  await syncPreliquidacionesAfterCustomerCollectionChange(customerId, userId);
 }
 
 export interface CollectionChargeView {
@@ -184,12 +191,14 @@ export async function createCollectionCharge(
   });
 
   const updatedCustomer = await syncCustomerBalanceFromCharges(customerId);
+  await syncOpenBajasAfterCollectionChange(customerId, userId);
   return { charge, customer: updatedCustomer };
 }
 
 export async function updateCollectionCharge(
   customerId: string,
   chargeId: string,
+  userId: string,
   data: {
     chargeType?: CollectionChargeTypeValue;
     amount?: number;
@@ -229,10 +238,15 @@ export async function updateCollectionCharge(
   });
 
   const updatedCustomer = await syncCustomerBalanceFromCharges(customerId);
+  await syncOpenBajasAfterCollectionChange(customerId, userId);
   return { charge, customer: updatedCustomer };
 }
 
-export async function deleteCollectionCharge(customerId: string, chargeId: string) {
+export async function deleteCollectionCharge(
+  customerId: string,
+  chargeId: string,
+  userId: string
+) {
   const existing = await prisma.collectionCharge.findFirst({
     where: { id: chargeId, customerId },
   });
@@ -240,5 +254,6 @@ export async function deleteCollectionCharge(customerId: string, chargeId: strin
 
   await prisma.collectionCharge.delete({ where: { id: chargeId } });
   const updatedCustomer = await syncCustomerBalanceFromCharges(customerId);
+  await syncOpenBajasAfterCollectionChange(customerId, userId);
   return { customer: updatedCustomer };
 }
