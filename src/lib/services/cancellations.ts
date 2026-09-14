@@ -865,7 +865,7 @@ export async function deleteCancellationCharge(
   const { runCancellationChargeMutation } = await import(
     "@/lib/services/preliquidacion-charge-sync"
   );
-  await runCancellationChargeMutation(cancellationId, userId, async (tx) => {
+  return runCancellationChargeMutation(cancellationId, userId, async (tx) => {
     await tx.cancellationCharge.delete({ where: { id: chargeId } });
   });
 }

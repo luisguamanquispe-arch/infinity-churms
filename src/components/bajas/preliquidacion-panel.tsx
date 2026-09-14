@@ -99,10 +99,22 @@ export function PreliquidacionPanel(props: PreliquidacionPanelProps) {
     : "Sin generar";
 
   const activePreliquidacionId = props.activePreliquidacion?.id ?? null;
+  const activePreliquidacionLineKey =
+    props.activePreliquidacion?.lineItems
+      ?.map((l) => `${l.id ?? ""}:${l.category}:${l.amount}`)
+      .join("|") ?? "";
 
   useEffect(() => {
     setActive(props.activePreliquidacion ?? null);
-  }, [activePreliquidacionId, props.activePreliquidacion?.status, props.activePreliquidacion?.version]);
+  }, [
+    activePreliquidacionId,
+    props.activePreliquidacion?.status,
+    props.activePreliquidacion?.version,
+    props.activePreliquidacion?.totalAmount,
+    props.activePreliquidacion?.creditsAmount,
+    props.activePreliquidacion?.subtotal,
+    activePreliquidacionLineKey,
+  ]);
 
   const loadPreliquidacion = useCallback(async () => {
     setFetchError(null);

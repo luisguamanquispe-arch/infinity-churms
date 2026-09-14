@@ -65,10 +65,13 @@ async function getActivePreliquidacionForSyncTx(
   activePreliquidacionId: string | null
 ) {
   if (activePreliquidacionId) {
-    return tx.cancellationPreliquidacion.findUnique({
+    const locked = await tx.cancellationPreliquidacion.findUnique({
       where: { id: activePreliquidacionId },
       include: { lineItems: { orderBy: { sortOrder: "asc" } } },
     });
+    if (locked && locked.status !== "SUPERSEDED") {
+      return locked;
+    }
   }
   return tx.cancellationPreliquidacion.findFirst({
     where: { cancellationId, status: { not: "SUPERSEDED" } },

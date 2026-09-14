@@ -136,8 +136,9 @@ export async function PATCH(
       if (!body.chargeId) {
         return NextResponse.json({ error: "Cargo no indicado" }, { status: 400 });
       }
+      let preliquidacionSync;
       try {
-        await deleteCancellationCharge(id, body.chargeId, session.userId);
+        preliquidacionSync = await deleteCancellationCharge(id, body.chargeId, session.userId);
       } catch (e) {
         if (e instanceof Error && e.message === "CHARGE_SYNC_APPROVED_SNAPSHOT") {
           await audit({
@@ -161,7 +162,7 @@ export async function PATCH(
         entityId: id,
         detail: body.chargeId,
       });
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, preliquidacionSync });
     }
 
     if (body.action === "update") {

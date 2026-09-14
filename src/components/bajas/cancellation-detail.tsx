@@ -213,6 +213,25 @@ export function CancellationDetail({
     await refresh();
   }
 
+  type ChargePreliqSync = {
+    mode?: string;
+    fromVersion?: number;
+    toVersion?: number;
+    linkRegenerated?: boolean;
+  };
+
+  function messageAfterChargeSync(sync: ChargePreliqSync | null | undefined, verb: "agregado" | "eliminado") {
+    if (sync?.mode === "new_version" && sync.toVersion != null) {
+      return sync.linkRegenerated
+        ? `Cargo ${verb}. Preliquidación actualizada a V${sync.toVersion}; se generó un nuevo enlace para el cliente.`
+        : `Cargo ${verb}. Preliquidación actualizada a V${sync.fromVersion}→V${sync.toVersion}.`;
+    }
+    if (sync?.mode === "in_place") {
+      return `Cargo ${verb} y preliquidación sincronizada.`;
+    }
+    return `Cargo ${verb}.`;
+  }
+
   async function addCharge() {
     const res = await fetch(`/api/cancellations/${data.id}`, {
       method: "PATCH",
@@ -224,20 +243,24 @@ export function CancellationDetail({
       setMsg((json as { error?: string }).error ?? "Error al agregar cargo");
       return;
     }
-    const sync = (json as { preliquidacionSync?: { mode?: string; fromVersion?: number; toVersion?: number; linkRegenerated?: boolean } })
-      .preliquidacionSync;
-    if (sync?.mode === "new_version" && sync.toVersion != null) {
-      setMsg(
-        sync.linkRegenerated
-          ? `Cargo registrado. Preliquidación actualizada a V${sync.toVersion}; se generó un nuevo enlace para el cliente.`
-          : `Cargo registrado. Preliquidación actualizada a V${sync.fromVersion}→V${sync.toVersion}.`
-      );
-    } else if (sync?.mode === "in_place") {
-      setMsg("Cargo registrado y preliquidación sincronizada.");
-    } else {
-      setMsg("Cargo registrado.");
-    }
+    setMsg(messageAfterChargeSync((json as { preliquidacionSync?: ChargePreliqSync }).preliquidacionSync, "agregado"));
     setCharge({ concept: "", amount: "" });
+    await refresh();
+  }
+
+  async function deleteCharge(chargeId: string) {
+    if (!confirm("¿Eliminar este cargo? Se actualizará el total de la preliquidación si aplica.")) return;
+    const res = await fetch(`/api/cancellations/${data.id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete_charge", chargeId }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg((json as { error?: string }).error ?? "Error al eliminar cargo");
+      return;
+    }
+    setMsg(messageAfterChargeSync((json as { preliquidacionSync?: ChargePreliqSync }).preliquidacionSync, "eliminado"));
     await refresh();
   }
 
@@ -539,9 +562,18 @@ export function CancellationDetail({
           </div>
           <ul className="mt-2 text-sm">
             {data.charges.map((c) => (
-              <li key={c.id} className="flex justify-between border-t py-1">
-                <span>{c.concept}</span>
-                <span>{formatUsd(Number(c.amount))}</span>
+              <li key={c.id} className="flex items-center justify-between gap-2 border-t py-1">
+                <span className="min-w-0 flex-1">{c.concept}</span>
+                <span className="shrink-0">{formatUsd(Number(c.amount))}</span>
+                {permissions.edit && (
+                  <button
+                    type="button"
+                    onClick={() => deleteCharge(c.id)}
+                    className="shrink-0 text-xs text-red-600 hover:underline"
+                  >
+                    Eliminar
+                  </button>
+                )}
               </li>
             ))}
           </ul>
