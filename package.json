@@ -25,6 +25,7 @@
     "test:permanence-months": "tsx scripts/test-permanence-months-validation.ts",
     "test:cancellation-concurrency": "tsx scripts/test-cancellation-concurrency.ts",
     "test:preliquidacion": "tsx scripts/test-preliquidacion-flow.ts",
+    "test:preliquidacion-charge-sync": "tsx scripts/test-preliquidacion-charge-sync.ts",
     "test:baja-paths": "tsx scripts/test-baja-client-path.ts",
     "test:audit-closure": "tsx scripts/test-audit-closure-fixes.ts",
     "test:business-date": "tsx scripts/test-business-date.ts",

@@ -214,11 +214,29 @@ export function CancellationDetail({
   }
 
   async function addCharge() {
-    await fetch(`/api/cancellations/${data.id}`, {
+    const res = await fetch(`/api/cancellations/${data.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "add_charge", concept: charge.concept, amount: parseFloat(charge.amount) }),
     });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      setMsg((json as { error?: string }).error ?? "Error al agregar cargo");
+      return;
+    }
+    const sync = (json as { preliquidacionSync?: { mode?: string; fromVersion?: number; toVersion?: number; linkRegenerated?: boolean } })
+      .preliquidacionSync;
+    if (sync?.mode === "new_version" && sync.toVersion != null) {
+      setMsg(
+        sync.linkRegenerated
+          ? `Cargo registrado. Preliquidación actualizada a V${sync.toVersion}; se generó un nuevo enlace para el cliente.`
+          : `Cargo registrado. Preliquidación actualizada a V${sync.fromVersion}→V${sync.toVersion}.`
+      );
+    } else if (sync?.mode === "in_place") {
+      setMsg("Cargo registrado y preliquidación sincronizada.");
+    } else {
+      setMsg("Cargo registrado.");
+    }
     setCharge({ concept: "", amount: "" });
     await refresh();
   }

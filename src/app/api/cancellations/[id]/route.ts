@@ -6,9 +6,9 @@ import {
   deleteCancellation,
   deleteCancellationCharge,
   getCancellation,
-  recalculateCancellation,
   updateCancellationAdmin,
 } from "@/lib/services/cancellations";
+import { runCancellationChargeMutation } from "@/lib/services/preliquidacion-charge-sync";
 import { computeFinalLiquidation } from "@/lib/services/preliquidaciones";
 import { assertPreliquidacionApproved } from "@/lib/preliquidacion-guards";
 import { assertActaSigned, recordPresencialActaSignature } from "@/lib/services/cancellation-acta-remote-signature";
@@ -101,12 +101,34 @@ export async function PATCH(
 
     if (body.action === "add_charge") {
       const session = await requirePermission("cancellations:charges");
-      await prisma.cancellationCharge.create({
-        data: { cancellationId: id, concept: body.concept, amount: body.amount },
-      });
-      await recalculateCancellation(id);
+      let preliquidacionSync;
+      try {
+        preliquidacionSync = await runCancellationChargeMutation(id, session.userId, async (tx) => {
+          await tx.cancellationCharge.create({
+            data: { cancellationId: id, concept: body.concept, amount: body.amount },
+          });
+        });
+      } catch (e) {
+        if (e instanceof Error && e.message === "CHARGE_SYNC_APPROVED_SNAPSHOT") {
+          await audit({
+            userId: session.userId,
+            action: "CHARGE_CHANGE_BLOCKED_APPROVED",
+            entity: "Cancellation",
+            entityId: id,
+            ipAddress: getClientIp(request),
+          });
+          return NextResponse.json(
+            {
+              error:
+                "No se puede agregar cargos: la preliquidación ya fue aprobada. Debe iniciar un nuevo trámite si aplica.",
+            },
+            { status: 409 }
+          );
+        }
+        throw e;
+      }
       await audit({ userId: session.userId, action: "ADD_CHARGE", entity: "Cancellation", entityId: id });
-      return NextResponse.json({ ok: true });
+      return NextResponse.json({ ok: true, preliquidacionSync });
     }
 
     if (body.action === "delete_charge") {
@@ -114,7 +136,24 @@ export async function PATCH(
       if (!body.chargeId) {
         return NextResponse.json({ error: "Cargo no indicado" }, { status: 400 });
       }
-      await deleteCancellationCharge(id, body.chargeId);
+      try {
+        await deleteCancellationCharge(id, body.chargeId, session.userId);
+      } catch (e) {
+        if (e instanceof Error && e.message === "CHARGE_SYNC_APPROVED_SNAPSHOT") {
+          await audit({
+            userId: session.userId,
+            action: "CHARGE_CHANGE_BLOCKED_APPROVED",
+            entity: "Cancellation",
+            entityId: id,
+            ipAddress: getClientIp(request),
+          });
+          return NextResponse.json(
+            { error: "No se puede eliminar cargos: la preliquidación ya fue aprobada." },
+            { status: 409 }
+          );
+        }
+        throw e;
+      }
       await audit({
         userId: session.userId,
         action: "DELETE_CHARGE",
@@ -186,7 +225,25 @@ export async function PATCH(
       if (Array.isArray(body.deletedPaymentIds)) updateData.deletedPaymentIds = body.deletedPaymentIds;
       if (Array.isArray(body.equipment)) updateData.equipment = body.equipment;
 
-      const updated = await updateCancellationAdmin(id, updateData);
+      let updated;
+      try {
+        updated = await updateCancellationAdmin(id, updateData, session.userId);
+      } catch (e) {
+        if (e instanceof Error && e.message === "CHARGE_SYNC_APPROVED_SNAPSHOT") {
+          await audit({
+            userId: session.userId,
+            action: "CHARGE_CHANGE_BLOCKED_APPROVED",
+            entity: "Cancellation",
+            entityId: id,
+            ipAddress: getClientIp(request),
+          });
+          return NextResponse.json(
+            { error: "No se pueden modificar cargos: la preliquidación ya fue aprobada." },
+            { status: 409 }
+          );
+        }
+        throw e;
+      }
       await audit({
         userId: session.userId,
         action: "UPDATE",
@@ -195,7 +252,13 @@ export async function PATCH(
         detail: body.recalculate ? "Recálculo automático" : "Edición administrativa completa",
         ipAddress: getClientIp(request),
       });
-      return NextResponse.json(updated);
+      if (!updated.cancellation) {
+        return NextResponse.json({ error: "No encontrado" }, { status: 404 });
+      }
+      return NextResponse.json({
+        ...serializeCancellationByRole(updated.cancellation, session.role),
+        preliquidacionSync: updated.preliquidacionSync ?? null,
+      });
     }
 
     if (body.action === "advance_status") {

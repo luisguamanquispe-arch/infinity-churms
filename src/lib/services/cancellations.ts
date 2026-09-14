@@ -300,6 +300,68 @@ export async function recalculateCancellation(
   });
 }
 
+export async function recalculateCancellationInTx(
+  tx: import("@prisma/client").Prisma.TransactionClient,
+  cancellationId: string,
+  options?: { permanenceStartOverride?: Date | null }
+) {
+  if (options?.permanenceStartOverride !== undefined) {
+    await tx.cancellation.update({
+      where: { id: cancellationId },
+      data: { permanenceStartDate: options.permanenceStartOverride },
+    });
+  }
+
+  const row = await tx.cancellation.findUnique({
+    where: { id: cancellationId },
+    include: {
+      customer: { include: { equipment: true } },
+      equipment: true,
+      charges: true,
+    },
+  });
+  if (!row) throw new Error("NOT_FOUND");
+
+  const breakdown = await computeBajaLiquidation(cancellationId, { db: tx });
+
+  const resolvedTariff = await resolvePermanenceTariffForCancellation(row, tx);
+  const permanence = buildPermanenceSummary(
+    customerTechnologyInput(row.customer),
+    row.requestDate,
+    {
+      permanenceMonths: resolvedTariff.permanenceMonths,
+      installCostUsd: resolvedTariff.installCostUsd,
+    },
+    { planChangeAddendum: resolvedTariff.planChangeAddendum }
+  );
+
+  const refreshed = await tx.cancellation.findUnique({ where: { id: cancellationId } });
+  const permanenceStart =
+    refreshed?.permanenceStartDate ??
+    (permanence.permanenceStartDate ? new Date(permanence.permanenceStartDate) : null);
+
+  if (!permanenceStart) {
+    throw new Error("PERMANENCE_INCOMPLETE");
+  }
+
+  return tx.cancellation.update({
+    where: { id: cancellationId },
+    data: {
+      monthsCompleted: breakdown.monthsCompleted,
+      permanenceAmount: breakdown.permanenceAmount,
+      tvAmount: breakdown.tvAmount,
+      monthlyAmount: breakdown.monthlyAmount,
+      equipmentAmount: breakdown.equipmentAmount,
+      otherAmount: breakdown.otherAmount,
+      totalAmount: breakdown.total,
+      permanenceStartDate: permanenceStart,
+      originTechnology: permanence.originTechnology,
+      currentTechnology: permanence.currentTechnology,
+      fiberInstallPending: breakdown.fiberInstallPending,
+    },
+  });
+}
+
 export function customerTechnologyInput(customer: {
   serviceStartDate: Date;
   originTechnology: string;
@@ -588,7 +650,11 @@ export interface AdminCancellationUpdate {
   }[];
 }
 
-export async function updateCancellationAdmin(id: string, data: AdminCancellationUpdate) {
+export async function updateCancellationAdmin(
+  id: string,
+  data: AdminCancellationUpdate,
+  actorUserId?: string
+) {
   const current = await prisma.cancellation.findUnique({ where: { id } });
   if (!current) throw new Error("NOT_FOUND");
 
@@ -649,27 +715,67 @@ export async function updateCancellationAdmin(id: string, data: AdminCancellatio
     throw new Error("FINANCIAL_OVERRIDE_REQUIRES_RECALCULATE");
   }
 
+  const chargeTouched =
+    (data.charges?.length ?? 0) > 0 || (data.deletedChargeIds?.length ?? 0) > 0;
+
+  if (chargeTouched && !actorUserId) {
+    const { assertCancellationChargeMutationAllowed } = await import(
+      "@/lib/services/preliquidacion-charge-sync"
+    );
+    await assertCancellationChargeMutationAllowed(id);
+  }
+
   if (Object.keys(scalarData).length > 0) {
     await prisma.cancellation.update({ where: { id }, data: scalarData });
   }
 
-  if (data.deletedChargeIds?.length) {
-    await prisma.cancellationCharge.deleteMany({
-      where: { id: { in: data.deletedChargeIds }, cancellationId: id },
-    });
-  }
+  let preliquidacionSync: import("@/lib/services/preliquidacion-charge-sync").PreliquidacionSyncResult | null =
+    null;
 
-  if (data.charges?.length) {
-    for (const charge of data.charges) {
-      if (charge.id) {
-        await prisma.cancellationCharge.update({
-          where: { id: charge.id },
-          data: { concept: charge.concept.trim(), amount: charge.amount },
+  if (chargeTouched && actorUserId) {
+    const { runCancellationChargeMutation } = await import(
+      "@/lib/services/preliquidacion-charge-sync"
+    );
+    preliquidacionSync = await runCancellationChargeMutation(id, actorUserId, async (tx) => {
+      if (data.deletedChargeIds?.length) {
+        await tx.cancellationCharge.deleteMany({
+          where: { id: { in: data.deletedChargeIds }, cancellationId: id },
         });
-      } else if (charge.concept.trim()) {
-        await prisma.cancellationCharge.create({
-          data: { cancellationId: id, concept: charge.concept.trim(), amount: charge.amount },
-        });
+      }
+      if (data.charges?.length) {
+        for (const charge of data.charges) {
+          if (charge.id) {
+            await tx.cancellationCharge.update({
+              where: { id: charge.id },
+              data: { concept: charge.concept.trim(), amount: charge.amount },
+            });
+          } else if (charge.concept.trim()) {
+            await tx.cancellationCharge.create({
+              data: { cancellationId: id, concept: charge.concept.trim(), amount: charge.amount },
+            });
+          }
+        }
+      }
+    });
+  } else {
+    if (data.deletedChargeIds?.length) {
+      await prisma.cancellationCharge.deleteMany({
+        where: { id: { in: data.deletedChargeIds }, cancellationId: id },
+      });
+    }
+
+    if (data.charges?.length) {
+      for (const charge of data.charges) {
+        if (charge.id) {
+          await prisma.cancellationCharge.update({
+            where: { id: charge.id },
+            data: { concept: charge.concept.trim(), amount: charge.amount },
+          });
+        } else if (charge.concept.trim()) {
+          await prisma.cancellationCharge.create({
+            data: { cancellationId: id, concept: charge.concept.trim(), amount: charge.amount },
+          });
+        }
       }
     }
   }
@@ -729,29 +835,39 @@ export async function updateCancellationAdmin(id: string, data: AdminCancellatio
     (data.permanenceStartDate?.getTime() ?? null) !==
       (current.permanenceStartDate?.getTime() ?? null);
 
-  if (data.recalculate || requestDateChanged || permanenceStartChanged) {
-    await recalculateCancellation(id, {
-      permanenceStartOverride: permanenceStartChanged ? data.permanenceStartDate : undefined,
-    });
-  } else if (data.charges?.length || data.deletedChargeIds?.length) {
-    await recalculateCancellation(id);
+  if (!(chargeTouched && actorUserId)) {
+    if (data.recalculate || requestDateChanged || permanenceStartChanged) {
+      await recalculateCancellation(id, {
+        permanenceStartOverride: permanenceStartChanged ? data.permanenceStartDate : undefined,
+      });
+    } else if (chargeTouched) {
+      await recalculateCancellation(id);
+    }
   }
 
   const result = await getCancellation(id);
   if (result?.status === "BAJA_COMPLETADA") {
     await syncCustomerStatusAfterCancellationCompleted(result.customerId);
   }
-  return result;
+  return { cancellation: result, preliquidacionSync };
 }
 
-export async function deleteCancellationCharge(cancellationId: string, chargeId: string) {
+export async function deleteCancellationCharge(
+  cancellationId: string,
+  chargeId: string,
+  userId: string
+) {
   const charge = await prisma.cancellationCharge.findFirst({
     where: { id: chargeId, cancellationId },
   });
   if (!charge) throw new Error("NOT_FOUND");
 
-  await prisma.cancellationCharge.delete({ where: { id: chargeId } });
-  await recalculateCancellation(cancellationId);
+  const { runCancellationChargeMutation } = await import(
+    "@/lib/services/preliquidacion-charge-sync"
+  );
+  await runCancellationChargeMutation(cancellationId, userId, async (tx) => {
+    await tx.cancellationCharge.delete({ where: { id: chargeId } });
+  });
 }
 
 export async function deleteCancellation(id: string) {

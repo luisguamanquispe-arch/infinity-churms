@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { calculateLiquidation } from "@/lib/liquidation";
 import { buildPermanenceSummary, calculatePermanenceFromStartDate } from "@/lib/permanence";
@@ -9,18 +10,15 @@ import {
   monthInputFromDate,
   type CollectionChargeView,
 } from "@/lib/services/collection-charges";
-import { listCollectionPayments } from "@/lib/services/collection-payments";
-import { listCollectionCharges } from "@/lib/services/collection-charges";
 import {
   allocateCollectionPayments,
   sumPendingByChargeType,
   pendingForCharge,
   type ChargeForAllocation,
 } from "@/lib/services/collection-payment-allocation";
-import {
-  customerTechnologyInput,
-  getCancellation,
-} from "@/lib/services/cancellations";
+import { customerTechnologyInput } from "@/lib/services/cancellations";
+
+export type BajaLiquidationDb = typeof prisma | Prisma.TransactionClient;
 import { resolvePermanenceTariffForCancellation } from "@/lib/permanence-config-resolver";
 import type { PreliquidacionLineInput } from "@/lib/services/preliquidaciones";
 
@@ -417,11 +415,22 @@ export function buildLiquidationBreakdownFromInputs(input: BajaLiquidationInput)
   };
 }
 
-export async function computeBajaLiquidation(cancellationId: string): Promise<LiquidationBreakdown> {
-  const row = await getCancellation(cancellationId);
+export async function computeBajaLiquidation(
+  cancellationId: string,
+  options?: { db?: BajaLiquidationDb }
+): Promise<LiquidationBreakdown> {
+  const db = options?.db ?? prisma;
+  const row = await db.cancellation.findUnique({
+    where: { id: cancellationId },
+    include: {
+      customer: { include: { equipment: true } },
+      equipment: true,
+      charges: true,
+    },
+  });
   if (!row) throw new Error("NOT_FOUND");
 
-  const resolvedTariff = await resolvePermanenceTariffForCancellation(row);
+  const resolvedTariff = await resolvePermanenceTariffForCancellation(row, db);
   const tariff = {
     permanenceMonths: resolvedTariff.permanenceMonths,
     installCostUsd: resolvedTariff.installCostUsd,
@@ -446,9 +455,15 @@ export async function computeBajaLiquidation(cancellationId: string): Promise<Li
     throw new Error("PERMANENCE_INCOMPLETE");
   }
   const [collectionCharges, payments, equipmentTariffs] = await Promise.all([
-    listCollectionCharges(row.customerId),
-    listCollectionPayments(row.customerId),
-    prisma.equipmentTariff.findMany(),
+    db.collectionCharge.findMany({
+      where: { customerId: row.customerId },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+    }),
+    db.collectionPayment.findMany({
+      where: { customerId: row.customerId },
+      orderBy: [{ paymentDate: "desc" }, { createdAt: "desc" }],
+    }),
+    db.equipmentTariff.findMany(),
   ]);
 
   const collectionPaymentsTotal = roundUsd(
@@ -498,7 +513,10 @@ export async function computeBajaLiquidation(cancellationId: string): Promise<Li
   });
 }
 
-export async function buildPreliquidacionLines(cancellationId: string): Promise<PreliquidacionLineInput[]> {
-  const breakdown = await computeBajaLiquidation(cancellationId);
+export async function buildPreliquidacionLines(
+  cancellationId: string,
+  options?: { db?: BajaLiquidationDb }
+): Promise<PreliquidacionLineInput[]> {
+  const breakdown = await computeBajaLiquidation(cancellationId, options);
   return breakdown.lines;
 }

@@ -285,7 +285,21 @@ export function CancellationAdminPanel({
       onMessage(json.error ?? "Error al guardar");
       return;
     }
-    onMessage(recalculate ? "Liquidación recalculada" : "Baja actualizada correctamente");
+    const sync = json.preliquidacionSync as
+      | { mode?: string; fromVersion?: number; toVersion?: number; linkRegenerated?: boolean }
+      | null
+      | undefined;
+    if (sync?.mode === "new_version" && sync.toVersion != null) {
+      onMessage(
+        sync.linkRegenerated
+          ? `Baja actualizada. Preliquidación V${sync.toVersion} (nuevo enlace generado).`
+          : `Baja actualizada. Preliquidación V${sync.fromVersion}→V${sync.toVersion}.`
+      );
+    } else if (sync?.mode === "in_place") {
+      onMessage(recalculate ? "Liquidación recalculada y preliquidación sincronizada" : "Baja actualizada (preliquidación sincronizada)");
+    } else {
+      onMessage(recalculate ? "Liquidación recalculada" : "Baja actualizada correctamente");
+    }
     router.refresh();
   }
 

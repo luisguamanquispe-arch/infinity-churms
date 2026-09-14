@@ -62,6 +62,57 @@ export async function resolvePreliquidacionToken(rawToken: string) {
   return { record };
 }
 
+export async function generatePreliquidacionLinkInTx(
+  tx: import("@prisma/client").Prisma.TransactionClient,
+  preliquidacionId: string,
+  userId: string,
+  cancellationId: string
+) {
+  const preliq = await tx.cancellationPreliquidacion.findUnique({
+    where: { id: preliquidacionId },
+    select: { status: true },
+  });
+  if (!preliq) throw new Error("NOT_FOUND");
+  if (preliq.status === "APROBADA") throw new Error("ALREADY_APPROVED");
+  if (preliq.status === "SUPERSEDED") throw new Error("VERSION_SUPERSEDED");
+
+  const config = await tx.tariffConfig.findFirst();
+  const hours = config?.signatureLinkExpiryHours ?? 24;
+  const { token, hash } = generateSignatureToken();
+  const expiresAt = addHours(new Date(), hours);
+
+  await tx.preliquidacionApprovalToken.updateMany({
+    where: {
+      preliquidacionId,
+      isActive: true,
+      status: { in: ["GENERADO", "ENVIADO", "ABIERTO"] },
+    },
+    data: { isActive: false, status: "CANCELADO", cancelledAt: new Date() },
+  });
+
+  await tx.preliquidacionApprovalToken.create({
+    data: {
+      preliquidacionId,
+      tokenHash: hash,
+      expiresAt,
+      generatedById: userId,
+      status: "GENERADO",
+    },
+  });
+
+  await tx.cancellationPreliquidacion.update({
+    where: { id: preliquidacionId },
+    data: { status: "PENDIENTE_APROBACION" },
+  });
+
+  await tx.cancellation.update({
+    where: { id: cancellationId },
+    data: { status: "PRELIQUIDACION_PENDIENTE" },
+  });
+
+  return { token, expiresAt };
+}
+
 export async function generatePreliquidacionLink(
   preliquidacionId: string,
   userId: string,
@@ -75,41 +126,21 @@ export async function generatePreliquidacionLink(
   if (preliq.status === "APROBADA") throw new Error("ALREADY_APPROVED");
   if (preliq.status === "SUPERSEDED") throw new Error("VERSION_SUPERSEDED");
 
-  const config = await prisma.tariffConfig.findFirst();
-  const hours = config?.signatureLinkExpiryHours ?? 24;
-  const { token, hash } = generateSignatureToken();
-  const expiresAt = addHours(new Date(), hours);
   const appBase = baseUrl ?? getAppBaseUrl();
 
-  await prisma.$transaction(async (tx) => {
-    await tx.preliquidacionApprovalToken.updateMany({
-      where: {
-        preliquidacionId,
-        isActive: true,
-        status: { in: ["GENERADO", "ENVIADO", "ABIERTO"] },
-      },
-      data: { isActive: false, status: "CANCELADO", cancelledAt: new Date() },
-    });
-
-    await tx.preliquidacionApprovalToken.create({
-      data: {
-        preliquidacionId,
-        tokenHash: hash,
-        expiresAt,
-        generatedById: userId,
-        status: "GENERADO",
-      },
-    });
-
-    await tx.cancellationPreliquidacion.update({
-      where: { id: preliquidacionId },
-      data: { status: "PENDIENTE_APROBACION" },
-    });
-
-    await tx.cancellation.update({
-      where: { id: preliq.cancellationId },
-      data: { status: "PRELIQUIDACION_PENDIENTE" },
-    });
+  const { token, expiresAt } = await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT id FROM "Cancellation" WHERE id = ${preliq.cancellationId} FOR UPDATE
+    `;
+    await tx.$queryRaw`
+      SELECT id FROM "CancellationPreliquidacion" WHERE id = ${preliquidacionId} FOR UPDATE
+    `;
+    return generatePreliquidacionLinkInTx(
+      tx,
+      preliquidacionId,
+      userId,
+      preliq.cancellationId
+    );
   });
 
   const url = `${appBase}/baja/preliquidacion/${token}`;
@@ -155,9 +186,42 @@ export async function approvePreliquidacionViaToken(
 
   const { record } = resolved;
   const now = new Date();
-  const total = Number(record.preliquidacion.totalAmount);
 
   await prisma.$transaction(async (tx) => {
+    await tx.$queryRaw`
+      SELECT id FROM "Cancellation" WHERE id = ${record.preliquidacion.cancellationId} FOR UPDATE
+    `;
+    await tx.$queryRaw`
+      SELECT id FROM "CancellationPreliquidacion" WHERE id = ${record.preliquidacionId} FOR UPDATE
+    `;
+
+    const { maybeConcurrencyBarrier } = await import("@/lib/test-only/maybe-concurrency-barrier");
+    await maybeConcurrencyBarrier("approve_locked");
+
+    const cancellationRow = await tx.cancellation.findUnique({
+      where: { id: record.preliquidacion.cancellationId },
+      select: { activePreliquidacionId: true },
+    });
+    if (
+      cancellationRow?.activePreliquidacionId &&
+      cancellationRow.activePreliquidacionId !== record.preliquidacionId
+    ) {
+      throw new Error("INVALID_STATE");
+    }
+
+    const preliqRow = await tx.cancellationPreliquidacion.findUnique({
+      where: { id: record.preliquidacionId },
+      select: { status: true, totalAmount: true },
+    });
+    if (!preliqRow || preliqRow.status === "SUPERSEDED") {
+      throw new Error("INVALID_STATE");
+    }
+    if (preliqRow.status === "APROBADA") {
+      throw new Error("COMPLETED");
+    }
+
+    const total = Number(preliqRow.totalAmount);
+
     await tx.preliquidacionApprovalToken.update({
       where: { id: record.id },
       data: {
@@ -202,7 +266,7 @@ export async function approvePreliquidacionViaToken(
     action: "PRELIQUIDACION_APPROVED",
     entity: "CancellationPreliquidacion",
     entityId: record.preliquidacionId,
-    detail: `Cliente aprobó preliquidación V${record.preliquidacion.version} · ${total} USD`,
+    detail: `Cliente aprobó preliquidación V${record.preliquidacion.version} · ${Number(record.preliquidacion.totalAmount)} USD`,
     ipAddress: ip ?? undefined,
   });
 
